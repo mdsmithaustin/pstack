@@ -771,7 +771,7 @@
   },
   "code-review-checks-design-and-calls-interrogate": {
    "check": "static",
-   "claim": "The Code review playbook checks vocabulary, boundaries, shared callers, and tests against the named principle leaves and calls interrogate for a large or contested change.",
+   "claim": "The Code review playbook checks unrequested behavior changes, vocabulary, boundaries, shared callers, and tests against the named principle leaves and calls interrogate for a large or contested change.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/code-review.md",
@@ -784,6 +784,10 @@
     {
      "file": "skills/poteto-mode/playbooks/code-review.md",
      "quote": "For a large or contested change, also use the **interrogate** skill for a multi-model pass."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/code-review.md",
+     "quote": "Flag each behavior change that no sentence in the description, issue, or spec asks for."
     }
    ],
    "harness_sensitive": false,
@@ -2915,6 +2919,25 @@
     "skills/recall/SKILL.md"
    ]
   },
+  "redesign-keeps-unchanged-behavior": {
+   "check": "static",
+   "claim": "When integrating a new requirement, the agent treats the current code's behavior as the spec for everything the requirement does not explicitly change, and keeps it.",
+   "evidence": [
+    {
+     "file": "skills/principle-redesign-from-first-principles/SKILL.md",
+     "quote": "Treat the current code's behavior as the spec for everything the requirement does not explicitly change. Redesign the structure, and keep that behavior"
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "The current code's behavior is the spec for everything the task does not explicitly change, per the **principle-redesign-from-first-principles** skill. Keep that behavior, and say so in the step 4 brief."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/principle-redesign-from-first-principles/SKILL.md",
+    "skills/poteto-mode/playbooks/feature.md"
+   ]
+  },
   "refactoring-prompt-routes-to-refactoring": {
    "check": "live",
    "claim": "A zero-behavior-change prompt opens the Refactoring playbook.",
@@ -3038,6 +3061,25 @@
    "owners": [
     "skills/setup-pstack/scripts/check-models-config.py",
     "skills/setup-pstack/references/models-config.md"
+   ]
+  },
+  "review-flags-unrequested-behavior-change": {
+   "check": "static",
+   "claim": "The Code review playbook flags each behavior change that no sentence in the description, issue, or spec asks for.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/code-review.md",
+     "quote": "Flag each behavior change that no sentence in the description, issue, or spec asks for."
+    },
+    {
+     "file": "skills/poteto-mode/references/review-lens.md",
+     "quote": "Match each one to a sentence in the task, spec, or issue. Flag a change with no such sentence."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/code-review.md",
+    "skills/poteto-mode/references/review-lens.md"
    ]
   },
   "review-prompt-routes-to-code-review": {
@@ -4400,6 +4442,18 @@
    ],
    "text": "A reviewer who must catch the same mistake on every PR is the problem this fixes."
   },
+  "09ddb27382e8": {
+   "also": [
+    "redesign-keeps-unchanged-behavior"
+   ],
+   "class": "promise",
+   "file": "08-principles.md",
+   "promise": "principle-leaf-summaries-match",
+   "sources": [
+    "port"
+   ],
+   "text": "[Redesign from First Principles](../../skills/principle-redesign-from-first-principles/SKILL.md) integrates a new requirement as if it had been there from day one, and keeps every behavior the requirement does not explicitly change."
+  },
   "0a5c1dcfa9ba": {
    "class": "promise",
    "file": "10-recipes-and-pitfalls.md",
@@ -4428,6 +4482,15 @@
     "port"
    ],
    "text": "For a live symptom, such as a leak, an idle CPU spin, or a visual glitch, the [Runtime forensics playbook](../../skills/poteto-mode/playbooks/runtime-forensics.md) instruments the running process."
+  },
+  "0be36a8b35de": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "redesign-keeps-unchanged-behavior",
+   "sources": [
+    "port"
+   ],
+   "text": "When the agent adds a requirement to existing code, it keeps every behavior that your prompt, or the spec or issue it points to, does not explicitly change."
   },
   "0c4fcaa38974": {
    "class": "promise",
@@ -6022,6 +6085,18 @@
    ],
    "text": "For decisions reserved by you or the playbook, the agent follows [Opening a PR's operator-reservation rule](../../skills/poteto-mode/playbooks/opening-a-pr.md)."
   },
+  "35b68e34a990": {
+   "also": [
+    "review-flags-unrequested-behavior-change"
+   ],
+   "class": "promise",
+   "file": "10-recipes-and-pitfalls.md",
+   "promise": "code-review-checks-design-and-calls-interrogate",
+   "sources": [
+    "port"
+   ],
+   "text": "It checks unrequested behavior changes, vocabulary, boundaries, shared callers, and tests against the principles, and it calls `/interrogate` for a large or contested change."
+  },
   "35cd3d035c39": {
    "class": "substituted",
    "file": "07-overnight.md",
@@ -6073,12 +6148,14 @@
    "text": "```text\n/technical-writing review the readme changes\n```"
   },
   "362c4ba1d378": {
-   "class": "promise",
+   "class": "substituted",
    "file": "08-principles.md",
+   "ported_as": [
+    "09ddb27382e8"
+   ],
    "promise": "principle-leaf-summaries-match",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "[Redesign from First Principles](../../skills/principle-redesign-from-first-principles/SKILL.md) integrates a new requirement as if it had been there from day one."
   },
@@ -10160,15 +10237,6 @@
     "upstream"
    ],
    "text": "A real finding gets a fix, and noise gets dismissed with the disproof posted on the thread."
-  },
-  "ab1193ffceae": {
-   "class": "promise",
-   "file": "10-recipes-and-pitfalls.md",
-   "promise": "code-review-checks-design-and-calls-interrogate",
-   "sources": [
-    "port"
-   ],
-   "text": "It checks vocabulary, boundaries, shared callers, and tests against the principles, and it calls `/interrogate` for a large or contested change."
   },
   "ab5c504e8bf4": {
    "class": "substituted",

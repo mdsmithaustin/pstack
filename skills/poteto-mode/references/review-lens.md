@@ -1,6 +1,6 @@
 # Review lens
 
-The Code review playbook opens this file at its design and deslop checks. Each question names the evidence to gather and when to leave the code alone. A question with no evidence behind it is not a finding. The governing leaf holds the rule. This file holds the review questions and a smells table.
+The Code review playbook opens this file at its intent, design, and deslop checks. Each question names the evidence to gather and when to leave the code alone. A question with no evidence behind it is not a finding. The governing leaf holds the rule. This file holds the review questions and a smells table.
 
 ## Vocabulary and concepts (**principle-model-the-domain**)
 
@@ -21,6 +21,10 @@ The Code review playbook opens this file at its design and deslop checks. Each q
 - **Does a wire, storage, or framework type cross the public surface?** Read the changed exports. Flag a re-exported transport type or a raw payload passed inward. Leave it when the module is the boundary parser that produces the domain type.
 - **Does the diff add validation deep inside typed code?** Find where the data entered the system. Flag a nil check or re-validation of data that a boundary already parsed. Leave it when the data crosses a system boundary at that point.
 - **Is business logic now tangled with framework wiring?** Flag a rule that can only run inside a handler, route, or component. Leave it when the logic is the wiring itself.
+
+## Unrequested behavior changes (**principle-redesign-from-first-principles**)
+
+- **Does the diff change behavior the task did not ask for?** List each behavior the diff changes, such as an input it now rejects or accepts, an output, an error, or a default. Match each one to a sentence in the task, spec, or issue. Flag a change with no such sentence. Leave it when the task explicitly changes that behavior. Leave it also when the diff reshapes an internal API, migrates every caller in the same diff, and leaves what users observe unchanged.
 
 ## Tests (**principle-test-behavior-not-implementation**)
 
