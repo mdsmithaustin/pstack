@@ -2289,7 +2289,11 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "In an unattended run, as defined in [unattended runs](../references/unattended.md), pass `--yes` to `axi run` and `axi respond`. List each `ask-user` finding that the run fixed, verbatim, in the final report."
+     "quote": "In an unattended run, as defined in [unattended runs](../references/unattended.md), pass `--yes` to `axi run` and `axi respond`, unless the matched playbook reserves a decision at that gate for the operator."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "List each `ask-user` finding that the run fixed, verbatim, in the final report."
     }
    ],
    "harness_sensitive": false,
@@ -2701,11 +2705,17 @@
     {
      "file": "skills/poteto-mode/references/unattended.md",
      "quote": "The **pstack-harness** skill's `question` action shows that this top-level session cannot reach a human."
+    },
+    {
+     "file": "skills/pstack-harness/references/questions.md",
+     "quote": "In the top-level session, no human can answer when the `claude` process that runs your shell was started with `-p` or `--print`."
     }
    ],
-   "harness_sensitive": false,
+   "harness_sensitive": true,
    "owners": [
-    "skills/poteto-mode/references/unattended.md"
+    "skills/poteto-mode/references/unattended.md",
+    "skills/pstack-harness/references/questions.md",
+    "skills/poteto-mode/references/task-triggers.md"
    ]
   },
   "poteto-runs-documentation-impact-before-completion": {
