@@ -210,7 +210,12 @@ def suite_main(root, out, names):
     os.chdir(root)
     loader = unittest.TestLoader()
     if names:
-        suite = loader.loadTestsFromNames(names)
+        suite = unittest.TestSuite()
+        for name in names:
+            try:
+                suite.addTests(loader.loadTestsFromName(name))
+            except unittest.SkipTest:
+                continue
     else:
         suite = loader.discover(str(root), pattern="test*.py", top_level_dir=str(root))
     result = Recorder()

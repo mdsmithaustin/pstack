@@ -3235,6 +3235,29 @@ class EmptyLogTest(unittest.TestCase):
         self.assertEqual(measures["delivered_catches"], want)
         self.assertEqual(measures["lead_catches"], want)
 
+    def test_a_lead_module_skipping_at_import_keeps_other_lead_test_catches(self):
+        root = self.project()
+        tests = root / "tests"
+        (tests / "support.py").write_text(self.CLI)
+        head = "import unittest\nfrom tests.support import streaks\n"
+        (tests / "test_empty.py").write_text(head + """\
+class Empty(unittest.TestCase):
+    def test_empty(self):
+        self.assertEqual(streaks(""), "no streaks\\n")
+""")
+        (tests / "test_optional.py").write_text(head + """\
+if not streaks(""):
+    raise unittest.SkipTest("empty-log output unavailable")
+class Optional(unittest.TestCase):
+    def test_empty(self):
+        self.assertEqual(streaks(""), "no streaks\\n")
+""")
+        run = subprocess.run([sys.executable, "-I", "-B", str(self.CASE / "held_out.py"), str(root),
+                              "--lead-tests", "tests/test_empty.py,tests/test_optional.py"],
+                             capture_output=True, text=True, check=True)
+        report = json.loads(run.stdout)
+        self.assertEqual(report["lead"]["caught"]["empty"], ["tests.test_empty.Empty.test_empty"])
+
     def test_tests_that_outlast_the_diagnostics_budget_leave_a_correct_delivery_passing(self):
         root = self.project()
         (root / "tests" / "test_slow.py").write_text(
