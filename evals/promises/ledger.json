@@ -2285,11 +2285,11 @@
   },
   "opening-a-pr-gated-unattended-passes-yes": {
    "check": "static",
-   "claim": "In an unattended run the agent passes `--yes` to the gate and lists each fixed ask-user finding in its final report, except at operator-reserved gates, where it omits `--yes` and reports the decision as blocked.",
+   "claim": "In an unattended run the agent checks for user or playbook reservations before each gate call, passes `--yes` when none applies, lists each fixed ask-user finding in its final report, and otherwise omits `--yes` and reports the reserved decision as blocked.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "In an unattended run, as defined in [unattended runs](../references/unattended.md), pass `--yes` to `axi run` and `axi respond`, unless the matched playbook reserves a decision at that gate for the operator."
+     "quote": "In an unattended run, as defined in [unattended runs](../references/unattended.md), check before each `axi run` or `axi respond` whether the user or the matched playbook reserves a decision for the operator that the run could reach."
     },
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
@@ -2297,7 +2297,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "Then do not pass `--yes`, and report that decision as blocked."
+     "quote": "If one does, do not pass `--yes`, and report that decision as blocked."
     }
    ],
    "harness_sensitive": false,
