@@ -21,9 +21,9 @@ The case is `feature-edges-run` on the new `strides` fixture, a running club's l
 | `same-day` | "A day counts once however many runs the member logged on it" |
 | `out-of-order` | "the log is not always in date order" |
 
-`cases/feature-edges-run/held_out.py` runs one CLI check per edge and six core checks: the worked example, the longest of two stretches, a month boundary, a non-empty log with nobody listed, `--min-days 1`, and unchanged `totals` output. It runs after the session, inside the grader. The candidate cannot read the case directory.
+`cases/feature-edges-run/held_out.py` runs one CLI check per edge and seven core checks: the worked example, the longest of two stretches, a month boundary, a non-empty log with nobody listed, `--min-days 1`, unchanged `totals` output, and a direct call of `longest_streaks`. The original grade of each run had only the first six core checks, and the [regrade](#regrade-with-the-fixed-grader) adds the seventh. The script runs after the session, inside the grader. The candidate cannot read the case directory.
 
-The script also runs the project's own unittest suite against `reference/strides` and against one mutant per edge. Each mutant fails exactly its own edge check, which `HeldOutEdges` in `test_oracles.py` asserts. A delivered test catches an edge when it passes on the reference and fails on that edge's mutant. The lead measure repeats this on the test files that the lead's own tool calls wrote. In every run, every delivered test passed on the reference, so no test fell outside the measure.
+The script also runs the project's own unittest suite against `reference/strides` and against one mutant per edge. Each mutant fails exactly its own edge check, which `HeldOutEdges` in `test_oracles.py` asserts. A delivered test catches an edge when it passes on the reference and fails or errors on that edge's mutant. The lead measure repeats this on the test files that the lead's own tool calls wrote. In every run, every delivered test passed on the reference, so no test fell outside the measure.
 
 ## Pins and arms
 
@@ -34,24 +34,24 @@ The script also runs the project's own unittest suite against `reference/strides
 - Claude Code used `claude-sonnet-5-5` at effort high, 3 runs per arm, with the TODO tools on.
 - Codex used `gpt-6.1-sol` at effort high on Codex 0.162.0, 2 runs per arm, inside the 2400 s cap. Codex runs of one fixture share a host lock, so its arms alternated rather than overlapped.
 - The grader copies `oracles.py` when it issues a run. Every run was graded with the oracle at `472f82bd`, except Codex `strides-nc1vz7fz`, which was issued after the change that `1061110a` commits. That change only adds Codex `FileChange` paths to the lead's test files. The held-out checks are the same in both versions.
-- Durable copy: `.audit/feature-edge-pass-20261101/`, with `make_arm.py` and `tally.py`. Every count below comes from the `measures` in each run's `verdict.json`, except where the table says "by hand".
+- Durable copy: `.audit/feature-edge-pass-20261101/`, with `make_arm.py` and `tally.py`. Every count below comes from the `measures` in each run's `verdict.json`, except where the table says "by hand" and except the core checks, which come from the [regrade](#regrade-with-the-fixed-grader).
 
 ## Results
 
-Each cell counts checks passed or edges caught, out of 6.
+Each cell counts checks passed or edges caught. Edge checks and caught edges are out of 6, and core checks are out of 7.
 
 | Harness | Arm | Run | Edge checks | Core checks | Delivered tests catch | Lead's tests catch | spec-probes loaded | Duration | Spawns |
 |---|---|---|---|---|---|---|---|---|---|
-| Claude Code | control | `strides-_6nftpfy` | 6 | 6 | 6 | 6 | no | 257 s | 2 |
-| Claude Code | control | `strides-6jvytztc` | 6 | 6 | 6 | 6 | no | 335 s | 3 |
-| Claude Code | control | `strides-ff7hcjdg` | 6 | 6 | 6 | 6 | no | 314 s | 2 |
-| Claude Code | edge pass | `strides-6wj0y2rb` | 6 | 6 | 6 | 6 | lead, seq 14 | 262 s | 2 |
-| Claude Code | edge pass | `strides-fvj82f1n` | 6 | 6 | 6 | 6 | lead, seq 15 | 658 s | 6 |
-| Claude Code | edge pass | `strides-vxd6p0s0` | 6 | 6 | 6 | 6 | lead, seq 50 | 430 s | 3 |
-| Codex | control | `strides-2467q412` | 6 | 6 | 6 | 6 (by hand) | no | 1029 s | 8 |
-| Codex | control | `strides-v8y735wc` | 6 | 6 | 6 | 6 (by hand) | no | 580 s | 9 |
-| Codex | edge pass | `strides-tbbozanb` | 6 | 6 | 6 | 6 (by hand) | lead, seq 60 | 745 s | 9 |
-| Codex | edge pass | `strides-nc1vz7fz` | 6 | 6 | 6 | 6 | lead, seq 65 | 859 s | 10 |
+| Claude Code | control | `strides-_6nftpfy` | 6 | 7 | 6 | 6 | no | 257 s | 2 |
+| Claude Code | control | `strides-6jvytztc` | 6 | 7 | 6 | 6 | no | 335 s | 3 |
+| Claude Code | control | `strides-ff7hcjdg` | 6 | 7 | 6 | 6 | no | 314 s | 2 |
+| Claude Code | edge pass | `strides-6wj0y2rb` | 6 | 7 | 6 | 6 | lead, seq 14 | 262 s | 2 |
+| Claude Code | edge pass | `strides-fvj82f1n` | 6 | 7 | 6 | 6 | lead, seq 15 | 658 s | 6 |
+| Claude Code | edge pass | `strides-vxd6p0s0` | 6 | 7 | 6 | 6 | lead, seq 50 | 430 s | 3 |
+| Codex | control | `strides-2467q412` | 6 | 7 | 6 | 6 (by hand) | no | 1029 s | 8 |
+| Codex | control | `strides-v8y735wc` | 6 | 7 | 6 | 6 (by hand) | no | 580 s | 9 |
+| Codex | edge pass | `strides-tbbozanb` | 6 | 7 | 6 | 6 (by hand) | lead, seq 60 | 745 s | 9 |
+| Codex | edge pass | `strides-nc1vz7fz` | 6 | 7 | 6 | 6 | lead, seq 65 | 859 s | 10 |
 
 At `472f82bd` the oracle missed the Codex lead's test file, because Codex code mode writes it inside an `exec` call. For the three Codex runs graded at `472f82bd`, I ran the same `held_out.py --lead-tests tests/test_streaks.py` on a copy of each project, outside the grader. Those copies are in `.audit/feature-edge-pass-20261101/codex/lead-measure-copies/`. `1061110a` fixes the lookup.
 
@@ -137,7 +137,7 @@ Each count adds up the arm's runs. Held-out and own-test counts are edges, 6 per
 | Grok Build | control | `strides-f7cdhp8g` | 0 | no tests | no | 1800 s, timed out | 5 |
 | Grok Build | edge pass | `strides-bciqqa7l` | 0 | no tests | lead, seq 73 | 1800 s, timed out | 5 |
 
-Every Claude Code and Codex run passed all six core checks. Each Grok run passed only `totals-unchanged`, because neither added a `streaks` command. In every Claude Code and Codex run, the delivered tests caught the same edges as the lead's own tests. Every delivered test passed on the reference except one in each of edge pass `strides-u0e8871f` and `strides-0idz5h1b`. Each of those two tests asserts that `Strauß` and `Strauss`, or `Straße` and `Strasse`, stay separate members, so it fails on the reference's `casefold()`.
+Every Claude Code and Codex run passed all seven core checks in the [regrade](#regrade-with-the-fixed-grader). Each Grok run passed only `totals-unchanged`, because neither added a `streaks` command or `strides/streaks.py`. In every Claude Code and Codex run, the delivered tests caught the same edges as the lead's own tests. Every delivered test passed on the reference except one in each of edge pass `strides-u0e8871f` and `strides-0idz5h1b`. Each of those two tests asserts that `Strauß` and `Strauss`, or `Straße` and `Strasse`, stay separate members, so it fails on the reference's `casefold()`.
 
 ### Classification
 
@@ -188,3 +188,31 @@ No reply named `boundary`, `empty`, `ties`, `same-day`, or `out-of-order` as ope
 On both specs, the edge pass did not improve delivered code on any harness that delivered code. On the implied spec it changed three things on Claude Code. The lead's tests covered the empty log in 3 of 3 runs, against 0 of 3. The replies listed more unsettled questions. A run took about 90 s longer. On Codex it changed only the reply, which named unsettled questions where the control said there were none. No lead's tests caught the `lower()` mutant without a sentence naming case folding, so the edge pass did not close the gap that the implied spec opened. These runs do not support promoting the change as a correctness gain. The next run that could show one needs a `casefold` check that rests only on `JÜRGEN WEISS` being `Jürgen Weiß` in capitals, more runs per arm, and a Grok cap long enough to reach the code.
 
 The user chose to ship the edge pass in a separate PR despite these results.
+
+## Regrade with the fixed grader
+
+A Copilot review of PR 387 found four gaps in the held-out grader after these runs. The PR fixes all four.
+
+- Both specs ask for `longest_streaks(runs, min_days=3)` in `strides/streaks.py`, but every check ran the CLI, so a delivery without that function could pass. A seventh core check, `api`, now calls it with its default threshold and with `min_days`.
+- A test package inside the delivered `strides/` package was missing from every mutation copy. The copies now keep each folder in the package that holds a test file.
+- A test was credited with a catch whenever its mutant outcome was not a pass, so a skip counted. Only a failure or an error on the mutant counts now.
+- The diagnostic suites could run past the grader's 1200 s limit and turn a correct delivery `INCONCLUSIVE`. They now stop at a 1080 s budget, and an edge whose suites did not finish reads null.
+
+I copied each saved project out of `.audit` and ran the `held_out.py` from `d82c108e` and the fixed one on each copy. Each run used the lead test files from its grade, or `tests/test_streaks.py` for the four by-hand runs. The old script reproduced every recorded per-edge result, and each by-hand lead measure above.
+
+Every Claude Code and Codex delivery passed `api`, so each passed seven of seven core checks and kept its verdict. Both Grok runs failed `api` with `No module named 'strides.streaks'` and passed one of seven. The other three fixes changed no count. No delivery held a test inside `strides/`. For every edge, the same test IDs caught the mutant under both scripts. The whole regrade of 22 runs under both scripts took 24 s, four runs at a time.
+
+| Spec | Harness | Arm | Held-out edges | Core checks, graded | Core checks, regraded | Own tests catch | Own tests catch the empty log |
+|---|---|---|---|---|---|---|---|
+| stated | Claude Code | control | 18 of 18 | 18 of 18 | 21 of 21 | 18 of 18 | 3 of 3 |
+| stated | Claude Code | edge pass | 18 of 18 | 18 of 18 | 21 of 21 | 18 of 18 | 3 of 3 |
+| stated | Codex | control | 12 of 12 | 12 of 12 | 14 of 14 | 12 of 12 | 2 of 2 |
+| stated | Codex | edge pass | 12 of 12 | 12 of 12 | 14 of 14 | 12 of 12 | 2 of 2 |
+| implied | Claude Code | control | 18 of 18 | 18 of 18 | 21 of 21 | 12 of 18 | 0 of 3 |
+| implied | Claude Code | edge pass | 16 of 18 | 18 of 18 | 21 of 21 | 15 of 18 | 3 of 3 |
+| implied | Codex | control | 12 of 12 | 12 of 12 | 14 of 14 | 10 of 12 | 2 of 2 |
+| implied | Codex | edge pass | 12 of 12 | 12 of 12 | 14 of 14 | 10 of 12 | 2 of 2 |
+| implied | Grok Build | control | 0 of 6 | 1 of 6 | 1 of 7 | no tests | no tests |
+| implied | Grok Build | edge pass | 0 of 6 | 1 of 6 | 1 of 7 | no tests | no tests |
+
+Held-out edges and own-test counts are the same graded and regraded. The regrade script, both `held_out.py` versions, and the full reports are in `.audit/feature-edge-implied-20261101/regrade-pr387/`.
