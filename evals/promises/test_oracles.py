@@ -3175,6 +3175,15 @@ class StreaksTest(unittest.TestCase):
         self.assertEqual(result["measures"]["edges_passed"], 5)
         self.assertIsNone(result["measures"]["lead_catches"])
 
+    def test_codex_file_changes_name_the_lead_test_files(self):
+        root = self.project()
+        (root / "tests" / "test_streaks.py").write_text(self.STREAKS_TEST)
+        change = {"seq": 2, "kind": "tool_call", "name": "FileChange",
+                  "input": {"changes": {str(root / "tests" / "test_streaks.py"): {"type": "add"}}, "status": "completed"}}
+        result = grade("feature-delivers-spec-edges", minimal(events=[change], harness="codex"), load_case("feature-edges-run"), root)
+        self.assertEqual(result["measures"]["lead_test_files"], ["tests/test_streaks.py"])
+        self.assertEqual(result["measures"]["lead_catches"]["ties"], True)
+
     def test_no_project_is_inconclusive(self):
         result = grade("feature-delivers-spec-edges", minimal(events=[edit(1, "x.py")]), load_case("feature-edges-run"), None)
         self.assertEqual(result["verdict"], INCONCLUSIVE)
