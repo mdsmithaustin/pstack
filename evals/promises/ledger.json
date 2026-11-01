@@ -6013,6 +6013,15 @@
    ],
    "text": "Read that section first, then the log rows it points at."
   },
+  "35b0cf1711d0": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-unattended-passes-yes",
+   "sources": [
+    "port"
+   ],
+   "text": "For decisions reserved by you or the playbook, the agent follows [Opening a PR's operator-reservation rule](../../skills/poteto-mode/playbooks/opening-a-pr.md)."
+  },
   "35cd3d035c39": {
    "class": "substituted",
    "file": "07-overnight.md",
@@ -9377,15 +9386,6 @@
     "port"
    ],
    "text": "Either way, the comment comes out."
-  },
-  "934eccea06a4": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "opening-a-pr-gated-unattended-passes-yes",
-   "sources": [
-    "port"
-   ],
-   "text": "If the playbook reserves a gate decision for the operator, the agent omits `--yes` and reports that decision as blocked, per [Opening a PR](../../skills/poteto-mode/playbooks/opening-a-pr.md)."
   },
   "951f7a84026f": {
    "class": "promise",
