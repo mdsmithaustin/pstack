@@ -16,6 +16,8 @@ A feature prompt states the behavior and what must not change:
 /poteto-mode add a --json flag. text output stays byte-identical. verify both forms.
 ```
 
+Before a Feature run delegates code, the agent settles acceptance tests from the spec's worked examples and from the edges each requirement raises, such as empty input or an exact boundary, and its reply lists each edge that neither the spec nor the current code settles. Every delegate brief names the original spec by path, not a summary of it, and no delegate writes the only test of its own code.
+
 A refactoring prompt pins behavior before structure moves:
 
 ```text

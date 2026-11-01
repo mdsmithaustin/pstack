@@ -966,6 +966,34 @@
     "skills/show-me-your-work/SKILL.md"
    ]
   },
+  "delegate-brief-passes-source": {
+   "check": "static",
+   "claim": "Every delegate brief names the original task text, spec, or issue by path instead of a summary.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/references/delegation.md",
+     "quote": "Every brief names the original task text, spec, or issue by path and tells the delegate to read it in full."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/references/delegation.md"
+   ]
+  },
+  "delegate-never-writes-only-test": {
+   "check": "static",
+   "claim": "In Feature, no delegate writes the only test of its own code.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "A delegate never writes the only test of its own code."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/feature.md"
+   ]
+  },
   "design-ladder-spares-small-changes": {
    "check": "live",
    "claim": "A change that stays inside one function and has one clear shape, sent through /poteto-mode, runs no architect or arena design fan-out.",
@@ -1292,6 +1320,33 @@
     "skills/poteto-mode/playbooks/feature.md"
    ],
    "scenario": "feature-run"
+  },
+  "feature-settles-acceptance-tests-and-edges": {
+   "check": "static",
+   "claim": "Before Feature delegates code, the lead settles acceptance tests from the spec's worked examples and runs the spec-probes edge probe on each new requirement, and its reply lists each edge that neither the spec nor the current code settles. Any task that writes acceptance tests or criteria for a new requirement from a spec triggers the same edge probe.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "When the spec gives worked examples or stated formats, write tests from them, yourself or through a test delegate on the `feature` role whose brief names the source spec by path and adds none of your reading of it."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "Then use the **spec-probes** skill's edge probe on each new requirement."
+    },
+    {
+     "file": "skills/poteto-mode/references/task-triggers.md",
+     "quote": "- Writing acceptance tests or criteria for a new requirement from a spec, issue, or plan → use the **spec-probes** skill's edge probe."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "Record each edge that neither settles as an open gap in the reply, not as a test."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/feature.md",
+    "skills/poteto-mode/references/task-triggers.md"
+   ]
   },
   "figure-it-out-keeps-decision-log": {
    "check": "static",
@@ -9492,6 +9547,15 @@
    ],
    "text": "Either way, the comment comes out."
   },
+  "938b4f1379ec": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "feature-settles-acceptance-tests-and-edges",
+   "sources": [
+    "port"
+   ],
+   "text": "Before a Feature run delegates code, the agent settles acceptance tests from the spec's worked examples and from the edges each requirement raises, such as empty input or an exact boundary, and its reply lists each edge that neither the spec nor the current code settles."
+  },
   "951f7a84026f": {
    "class": "promise",
    "file": "03-understand.md",
@@ -13284,6 +13348,18 @@
     "port"
    ],
    "text": "Say \"no PR\" or \"don't commit\" in the prompt to stop it earlier."
+  },
+  "f9980a66097c": {
+   "also": [
+    "delegate-never-writes-only-test"
+   ],
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "delegate-brief-passes-source",
+   "sources": [
+    "port"
+   ],
+   "text": "Every delegate brief names the original spec by path, not a summary of it, and no delegate writes the only test of its own code."
   },
   "f9b43d345e9f": {
    "class": "substituted",
