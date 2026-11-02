@@ -41,7 +41,7 @@ The oracle `triggered-principle-loads-before-code` grades the lead's load of `pr
 | D slash | 3/3 | Skill at 20, 44, 14 | 2, 2, 2 | 34, 72, 16 | none | 0/3 |
 | E path | 3/3 | Read at 10, 15, 52 | 2, 1, 2 | 60, 52, 65 | none | 1/3 |
 
-The `task-triggers.md` column counts a file read whose result returned, not a shell command such as `wc -l` that only names the file. Every first code write was an acceptance test, `tests/test_report.py` or `tests/test_cli.py`, which the Feature playbook has the lead write before it delegates.
+The load and `task-triggers.md` columns in both results tables show the sequence numbers of the calls, not their returned results. The oracle uses the return timing defined in the [suite guide](../README.md#run-live-cases). The `task-triggers.md` column counts a file read whose result returned, not a shell command such as `wc -l` that only names the file. Every first code write in the Claude Code runs was an acceptance test, `tests/test_report.py` or `tests/test_cli.py`, which the Feature playbook has the lead write before it delegates.
 
 ## Classification
 

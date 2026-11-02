@@ -3627,17 +3627,21 @@ def skill_lines(view, skill):
     return None if text is None else text.count("\n") + (0 if text.endswith("\n") else 1)
 
 
-def load_attempts(view, skill, turn=None):
+def load_attempts(view, skill, turn=None, *, by_return=False):
     """Every attempt by the lead to load skill, in trace order, as (seq, how, ok, detail). how is skill-tool, injection,
-    read (a file-read tool), read-whole, read-part, read-unknown, or search; ok is None when the call never returned."""
+    read (a file-read tool), read-whole, read-part, read-unknown, or search; ok is None when the call never returned.
+    With by_return, require recorded results and accumulate shell-read coverage in result order."""
     rel, total, covered, out = f"{skill}/SKILL.md", skill_lines(view, skill), [], []
-    for call in view.tool_calls:
+    calls = view.tool_calls
+    if by_return:
+        calls = sorted(calls, key=lambda call: (view.results_for(call) or {}).get("seq", float("inf")))
+    for call in calls:
         seq = call.get("seq")
         if turn is not None and view.turn_of(seq) != turn:
             continue
         name, given = call.get("name"), call.get("input") or {}
         result = view.results_for(call)
-        ok = (True if view.read_returned(call) else None) if result is None else result.get("ok") is not False
+        ok = result.get("ok") is not False if result is not None else (True if not by_return and view.read_returned(call) else None)
         head = (result or {}).get("output_head") or ""
         if name in SKILL_LOAD_TOOLS:
             if skill_load(str(given.get("skill") or given.get("name") or "")) == rel:
@@ -4041,7 +4045,7 @@ def triggered_principle_loads(view):
     skill, trigger = expect.get("principle"), expect.get("trigger")
     if not skill:
         return inconclusive("case names no expect.principle")
-    attempts = load_attempts(view, skill)
+    attempts = load_attempts(view, skill, by_return=True)
     loads = [(returned, a) for a in attempts if principle_loaded(view, a) and (returned := returned_at(view, a)) is not None]
     returned, loaded = min(loads, key=lambda load: load[0], default=(None, None))
     deadline = code_deadline(view)

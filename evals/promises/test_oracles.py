@@ -1998,6 +1998,20 @@ class TriggeredPrincipleLoads(unittest.TestCase):
                 result = self.grade(events, harness="codex", project=project)
                 self.assertEqual((result["verdict"], result["failures"]), (FAIL if failures else PASS, failures), result)
 
+    def test_parallel_shell_chunks_load_only_when_all_chunks_have_returned(self):
+        project = installed_skill(self, self.SKILL, 30)
+        path = project / ".agents" / "skills" / self.SKILL / "SKILL.md"
+        first = shell(1, f"sed -n '1,10p' {path}")
+        rest = shell(2, f"sed -n '11,$p' {path}")
+        rest[1]["seq"] = 3
+        for returned, verdict in ((None, FAIL), (8, FAIL), (4, PASS)):
+            with self.subTest(first_chunk_returned=returned):
+                events = [first[0], *rest, edit(5, str(project / "tests" / "test_report.py"))]
+                if returned is not None:
+                    events.append({**first[1], "seq": returned})
+                result = self.grade(events, harness="codex", project=project)
+                self.assertEqual(result["verdict"], verdict, result)
+
     def test_a_grok_search_replace_is_a_code_write(self):
         replace = {"seq": 1, "kind": "tool_call", "name": "search_replace", "id": "g1",
                    "input": {"file_path": self.TEST, "old_string": "a", "new_string": "b"}}
