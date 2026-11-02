@@ -1,0 +1,29 @@
+{
+ "promises": [
+  "triggered-principle-loads-before-code"
+ ],
+ "fixture": "roster",
+ "entry": "poteto-mode",
+ "turns": [
+  "members.csv is getting a status column: active, leave, or alumni. team counts should only count active members and show how many are on leave next to each team. alumni don't count anywhere. add the column to the sample data too."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "principle": "principle-model-the-domain",
+  "trigger": "poteto-mode/references/task-triggers.md"
+ },
+ "env": {
+  "todo_tools": true
+ },
+ "skill_overlays": [
+  {
+   "file": "poteto-mode/references/task-triggers.md",
+   "old": "Use the **principle-model-the-domain** skill to choose its organizing structure.",
+   "new": "Run /principle-model-the-domain to choose its organizing structure."
+  }
+ ],
+ "note": "arm of principle-load-run: one wording of the task-triggers line that names principle-model-the-domain. tools/skill-references.py bans a slash spelling of a skill in shipped skill text. This overlay exists only in the installed copy of one run, so it measures that spelling without shipping it."
+}

@@ -171,6 +171,21 @@ class AuditTest(unittest.TestCase):
         self.assertEqual(ledger.owner_status("skills/poteto-tdd/SKILL.md", upstream), "verbatim")
         self.assertEqual(ledger.owner_status("skills/pstack-harness/SKILL.md", upstream), "port-only")
 
+    def test_a_port_change_to_the_principle_load_contract_is_not_possibly_upstream(self):
+        pid = "triggered-principle-loads-before-code"
+        contract = ["skills/poteto-mode/references/task-triggers.md", "skills/poteto-mode/SKILL.md",
+                    "skills/setup-pstack/scripts/skill-listing.py", "skills/pstack-harness/SKILL.md",
+                    "skills/principle-model-the-domain/SKILL.md"]
+        for changed in ("skills/pstack-harness/SKILL.md", "skills/principle-model-the-domain/SKILL.md"):
+            with self.subTest(changed=changed):
+                upstream = self.tmp / changed.replace("/", "_")
+                for owner in contract:
+                    theirs = upstream / ledger.upstream_path(owner)
+                    theirs.parent.mkdir(parents=True, exist_ok=True)
+                    theirs.write_bytes((ledger.ROOT / owner).read_bytes() + (b"\nUpstream wording.\n" if owner == changed else b""))
+                report = ledger.owners_report(self.book, upstream, [pid])[pid]
+                self.assertEqual((report["owners"].get(changed), report["possibly_upstream"]), ("modified", False), report)
+
 
 if __name__ == "__main__":
     unittest.main()

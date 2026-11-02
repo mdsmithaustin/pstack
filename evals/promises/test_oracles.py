@@ -1908,6 +1908,129 @@ class DeslopHandsOff(unittest.TestCase):
         self.assertEqual(self.grade(events)["evidence"][-1], "unsettled comment survived: unknown, no project")
 
 
+class TriggeredPrincipleLoads(unittest.TestCase):
+    case = load_case("principle-load-run")
+    SKILL = "principle-model-the-domain"
+    SOURCE, TEST = "/w/roster/roster/report.py", "/w/roster/tests/test_report.py"
+
+    def answered_read(self, seq, returned):
+        return [{**read(seq, f"{self.SKILL}/SKILL.md"), "id": f"r{seq}"},
+                {"seq": returned, "kind": "tool_result", "name": "Read", "ok": True, "output_head": "---", "id": f"r{seq}"}]
+
+    def grade(self, events, exit_code=0, harness="claude-code", project=None, **extra):
+        trace = minimal(events=events, final_reply="Added the status column.", exit_code=exit_code, harness=harness, **extra)
+        return grade("triggered-principle-loads-before-code", trace, self.case, project)
+
+    def test_a_skill_tool_load_before_the_first_test_write_passes(self):
+        result = self.grade(skill_call(2, self.SKILL) + [edit(5, self.TEST), edit(7, self.SOURCE)])
+        self.assertEqual((result["verdict"], result["evidence"][:2]),
+                         (PASS, [f"{self.SKILL} loaded by skill-tool at seq 2", f"{self.SKILL} load attempts by the lead: [(2, 'skill-tool', True)]"]))
+        self.assertIn(f"first code write: wrote {self.TEST} at seq 5", result["evidence"])
+
+    def test_a_returned_read_of_the_skill_file_counts_on_claude(self):
+        result = self.grade(self.answered_read(2, 3) + [edit(4, self.SOURCE)])
+        self.assertEqual((result["verdict"], result["evidence"][0]), (PASS, f"{self.SKILL} loaded by read at seq 2"))
+
+    def test_a_write_issued_before_the_load_returned_fails(self):
+        for returned, verdict, failures in ((2, PASS, []), (4, FAIL, [f"{self.SKILL} load at seq 1 returned at seq 4, after the lead wrote {self.TEST} at seq 3"])):
+            with self.subTest(returned=returned):
+                result = self.grade(self.answered_read(1, returned) + [edit(3, self.TEST)])
+                self.assertEqual((result["verdict"], result["failures"]), (verdict, failures), result)
+
+    def test_a_load_after_the_first_code_write_fails(self):
+        result = self.grade([edit(1, self.SOURCE)] + skill_call(3, self.SKILL))
+        self.assertEqual((result["verdict"], result["failures"]),
+                         (FAIL, [f"{self.SKILL} load at seq 3 returned at seq 4, after the lead wrote {self.SOURCE} at seq 1"]))
+
+    def test_a_code_delegate_spawn_is_the_deadline(self):
+        spawn = {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {"prompt": "add the status column"}}
+        result = self.grade([spawn] + skill_call(4, self.SKILL), spawns=[{"seq": 2, "persona": "poteto-agent", "prompt_head": "add the status column"}])
+        self.assertEqual((result["verdict"], result["failures"]),
+                         (FAIL, [f"{self.SKILL} load at seq 4 returned at seq 5, after the lead spawned a code delegate at seq 2"]))
+
+    def test_a_data_file_write_is_not_code(self):
+        result = self.grade([edit(1, "/w/roster/data/members.csv")] + skill_call(3, self.SKILL) + [edit(5, self.SOURCE)])
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_refused_skill_call_is_not_a_load(self):
+        result = self.grade(skill_call(1, self.SKILL, ok=False) + [edit(3, self.SOURCE)])
+        self.assertEqual((result["verdict"], result["failures"]),
+                         (FAIL, [f"the lead wrote {self.SOURCE} at seq 3 with no {self.SKILL} load before it"]))
+
+    def test_a_delegate_load_is_reported_and_does_not_pass_the_lead(self):
+        result = self.grade([edit(3, self.SOURCE)], x_child_skill_calls={"agent-a1": [{"skill": self.SKILL, "ok": True}]},
+                            x_files_read_by={"lead": [], "agent-b2": [f"/w/.claude/skills/{self.SKILL}/SKILL.md"]})
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertIn("delegate loads: [('agent-a1', 'skill-tool'), ('agent-b2', 'read')]", result["evidence"])
+
+    def test_a_run_that_writes_no_code_is_inconclusive(self):
+        for exit_code, reason in ((0, "the run wrote no code, so the trigger never came due"), (-9, "run killed before any code write")):
+            with self.subTest(exit_code=exit_code):
+                result = self.grade(bash(0, "python3 -m roster data/members.csv"), exit_code=exit_code)
+                self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, [reason]))
+
+    def test_the_evidence_records_when_the_lead_read_the_task_triggers(self):
+        trigger = self.case["expect"]["trigger"]
+        result = self.grade([read(1, trigger)] + skill_call(3, self.SKILL) + [edit(5, self.SOURCE)])
+        self.assertEqual(result["evidence"][-1], f"{trigger} read by the lead at seq 1")
+
+    def test_a_shell_mention_of_the_task_triggers_is_not_a_read(self):
+        trigger = self.case["expect"]["trigger"]
+        events = bash(1, f"wc -l .claude/skills/{trigger}") + bash(3, f"cat .claude/skills/{trigger}") + [edit(5, self.SOURCE)]
+        self.assertEqual(self.grade(events)["evidence"][-1], f"{trigger} read by the lead at seq 3")
+
+    def test_codex_needs_a_whole_file_read(self):
+        project = installed_skill(self, self.SKILL, 30)
+        source = str(project / "roster" / "report.py")
+        for command, verdict in ((f"sed -n '1,10p' .agents/skills/{self.SKILL}/SKILL.md", FAIL), (f"cat .agents/skills/{self.SKILL}/SKILL.md", PASS)):
+            with self.subTest(command=command):
+                result = self.grade(shell(0, command) + [edit(4, source)], harness="codex", project=project)
+                self.assertEqual(result["verdict"], verdict, result)
+
+    def test_a_codex_patch_is_a_code_write(self):
+        project = installed_skill(self, self.SKILL, 30)
+        test, source = str(project / "tests" / "test_report.py"), str(project / "roster" / "report.py")
+        for status, failures in (("completed", [f"{self.SKILL} load at seq 3 returned at seq 4, after the lead wrote {test} at seq 1"]), ("failed", [])):
+            with self.subTest(status=status):
+                patch = {"seq": 1, "kind": "tool_call", "name": "FileChange",
+                         "input": {"changes": {test: {"type": "update"}}, "status": status, "stderr": ""}}
+                events = [patch] + shell(3, f"cat .agents/skills/{self.SKILL}/SKILL.md") + [edit(6, source)]
+                result = self.grade(events, harness="codex", project=project)
+                self.assertEqual((result["verdict"], result["failures"]), (FAIL if failures else PASS, failures), result)
+
+    def test_parallel_shell_chunks_load_only_when_all_chunks_have_returned(self):
+        project = installed_skill(self, self.SKILL, 30)
+        path = project / ".agents" / "skills" / self.SKILL / "SKILL.md"
+        first = shell(1, f"sed -n '1,10p' {path}")
+        rest = shell(2, f"sed -n '11,$p' {path}")
+        rest[1]["seq"] = 3
+        for returned, verdict in ((None, FAIL), (8, FAIL), (4, PASS)):
+            with self.subTest(first_chunk_returned=returned):
+                events = [first[0], *rest, edit(5, str(project / "tests" / "test_report.py"))]
+                if returned is not None:
+                    events.append({**first[1], "seq": returned})
+                result = self.grade(events, harness="codex", project=project)
+                self.assertEqual(result["verdict"], verdict, result)
+
+    def test_a_grok_search_replace_is_a_code_write(self):
+        replace = {"seq": 1, "kind": "tool_call", "name": "search_replace", "id": "g1",
+                   "input": {"file_path": self.TEST, "old_string": "a", "new_string": "b"}}
+        load = [{"seq": 3, "kind": "tool_call", "name": "read_file", "id": "g3",
+                 "input": {"target_file": f"/w/.agents/skills/{self.SKILL}/SKILL.md"}},
+                {"seq": 4, "kind": "tool_result", "name": "read_file", "ok": True, "output_head": "---", "id": "g3"}]
+        result = self.grade([replace, {"seq": 2, "kind": "tool_result", "name": "search_replace", "ok": True, "id": "g1"}] + load, harness="grok")
+        self.assertEqual((result["verdict"], result["failures"]),
+                         (FAIL, [f"{self.SKILL} load at seq 3 returned at seq 4, after the lead wrote {self.TEST} at seq 1"]))
+
+    def test_a_grok_read_killed_before_it_returned_is_not_a_load(self):
+        load = {"seq": 1, "kind": "tool_call", "name": "read_file", "id": "g1", "input": {"target_file": f"/w/.agents/skills/{self.SKILL}/SKILL.md"}}
+        batched = {"seq": 2, "kind": "tool_call", "name": "read_file", "id": "g2", "input": {"target_file": "/w/roster/report.py"}}
+        for events in ([load], [load, batched]):
+            with self.subTest(calls=len(events)):
+                result = self.grade(events, exit_code=-9, harness="grok")
+                self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, ["run killed before any code write"]))
+
+
 def codex_spawn(seq, task, reply, model="gpt-6.1-sol"):
     events = [{"seq": seq, "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": task, "model": model, "message": "gAAAAABqwbhN"}},
               {"seq": seq + 1, "kind": "tool_call", "name": "SubAgentActivity", "input": {"kind": "started", "agent_path": f"/root/{task}"}},

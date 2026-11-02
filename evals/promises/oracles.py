@@ -63,7 +63,7 @@ SHELL_TOOLS = {"Bash": "command", "exec_command": "cmd", "terminal": "command",
 READ_VERBS = {"cat", "head", "tail", "sed", "less", "more", "nl", "bat", "awk", "grep", "rg", "python3", "python"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "patch", "write_file", "apply_patch",
               "edit_file", "create_file", "str_replace_editor", "str_replace_based_edit_tool",
-              "edit", "write", "insert", "create", "replace_in_file", "search_replace"}
+              "edit", "write", "insert", "create", "replace_in_file", "search_replace", "FileChange"}
 PATH_FIELDS = ("file_path", "path", "target_file", "target_path", "filename", "file", "notebook_path")
 SPAWN_TOOLS = {"Agent", "Task", "spawn_agent", "spawn_subagent", "delegate_task", "SubAgentActivity"}
 WAIT_TOOLS = {"get_command_or_subagent_output", "wait_agent", "TaskOutput"}
@@ -531,9 +531,10 @@ class View:
             if turn is not None and self.turn_of(call.get("seq")) != turn:
                 continue
             if name in EDIT_TOOLS:
-                if (self.results_for(call) or {}).get("ok") is False:
+                if (self.results_for(call) or {}).get("ok") is False or given.get("status", "completed") != "completed":
                     continue
                 paths = [given[f] for f in PATH_FIELDS if isinstance(given.get(f), str)]
+                paths.extend(given.get("changes") or ())
                 patch = given.get("patch") or given.get("input") or ""
                 if isinstance(patch, str):
                     paths.extend(re.findall(r"\*\*\* (?:Update|Add|Delete) File: (\S+)", patch))
@@ -3626,17 +3627,21 @@ def skill_lines(view, skill):
     return None if text is None else text.count("\n") + (0 if text.endswith("\n") else 1)
 
 
-def load_attempts(view, skill, turn=None):
+def load_attempts(view, skill, turn=None, *, by_return=False):
     """Every attempt by the lead to load skill, in trace order, as (seq, how, ok, detail). how is skill-tool, injection,
-    read (a file-read tool), read-whole, read-part, read-unknown, or search; ok is None when the call never returned."""
+    read (a file-read tool), read-whole, read-part, read-unknown, or search; ok is None when the call never returned.
+    With by_return, require recorded results and accumulate shell-read coverage in result order."""
     rel, total, covered, out = f"{skill}/SKILL.md", skill_lines(view, skill), [], []
-    for call in view.tool_calls:
+    calls = view.tool_calls
+    if by_return:
+        calls = sorted(calls, key=lambda call: (view.results_for(call) or {}).get("seq", float("inf")))
+    for call in calls:
         seq = call.get("seq")
         if turn is not None and view.turn_of(seq) != turn:
             continue
         name, given = call.get("name"), call.get("input") or {}
         result = view.results_for(call)
-        ok = (True if view.read_returned(call) else None) if result is None else result.get("ok") is not False
+        ok = result.get("ok") is not False if result is not None else (True if not by_return and view.read_returned(call) else None)
         head = (result or {}).get("output_head") or ""
         if name in SKILL_LOAD_TOOLS:
             if skill_load(str(given.get("skill") or given.get("name") or "")) == rel:
@@ -3939,11 +3944,6 @@ def lead_test_files(view):
     """The test files the lead's own tool calls wrote, relative to the project. A file written in a git worktree maps to
     its path in the project, where the merged copy sits."""
     rels = {view.tree_rel(path) for _, path, _ in view.edits()}
-    # Codex code mode applies patches inside an `exec` call, so only its FileChange events name the files. A failed patch
-    # establishes no authorship.
-    rels |= {view.tree_rel(path) for call in view.tool_calls if call.get("name") == "FileChange"
-             and (call.get("input") or {}).get("status") == "completed"
-             for path in (call.get("input") or {}).get("changes") or {}}
     return sorted(rel for rel in rels if TEST_FILE.search(rel) and not rel.startswith(("/", "..", *PRIVATE_PREFIXES))
                   and _is_file(view.project / rel))
 
@@ -3990,3 +3990,76 @@ def feature_delivers_spec_edges(view):
     result = failed(failures, *evidence) if failures else passed(*evidence)
     result["measures"] = measures
     return result
+
+
+CODE_CLASSES = ("source", "test")
+
+
+def code_deadline(view):
+    marks = [(seq, f"wrote {path}") for seq, path, kind in view.edits() if kind in CODE_CLASSES]
+    marks += [(seq, "spawned a code delegate") for seq in view.code_delegate_seqs()]
+    return min(marks, default=None)
+
+
+def principle_loaded(view, attempt):
+    _, how, ok, _ = attempt
+    if view.harness == "claude-code":
+        return ok is True and how in ("skill-tool", "read", "read-whole")
+    return ok is True and allowed_load(view, attempt)
+
+
+def returned_at(view, attempt):
+    seq, how, _, _ = attempt
+    if how == "injection":
+        return seq
+    call = next(c for c in view.tool_calls if c.get("seq") == seq)
+    return (view.results_for(call) or {}).get("seq")
+
+
+def first_file_read(view, rel):
+    for call in view.tool_calls:
+        name, given = call.get("name"), call.get("input") or {}
+        if name in READ_TOOLS:
+            path = next((given[f] for f in READ_TOOLS[name] if isinstance(given.get(f), str)), "")
+            if skill_rel(path) == rel and view.read_returned(call):
+                return call.get("seq")
+        elif name in SHELL_TOOLS and (view.results_for(call) or {}).get("ok") is not False:
+            command = str(given.get(SHELL_TOOLS[name]) or "")
+            if any((pipeline_read(stages, base, rel) or ("",))[0] == "span" for stages, base in pipelines(command)):
+                return call.get("seq")
+    return None
+
+
+def delegate_loads(view, skill):
+    rel = f"{skill}/SKILL.md"
+    found = [(agent, "skill-tool") for agent, calls in (view.trace.get("x_child_skill_calls") or {}).items()
+             if any(c.get("ok") and skill_load(str(c.get("skill") or "")) == rel for c in calls)]
+    found += [(agent, "read") for agent, paths in (view.trace.get("x_files_read_by") or {}).items()
+              if agent != "lead" and any(skill_rel(p) == rel for p in paths)]
+    return found
+
+
+@oracle("triggered-principle-loads-before-code")
+def triggered_principle_loads(view):
+    expect = view.case.get("expect") or {}
+    skill, trigger = expect.get("principle"), expect.get("trigger")
+    if not skill:
+        return inconclusive("case names no expect.principle")
+    attempts = load_attempts(view, skill, by_return=True)
+    loads = [(returned, a) for a in attempts if principle_loaded(view, a) and (returned := returned_at(view, a)) is not None]
+    returned, loaded = min(loads, key=lambda load: load[0], default=(None, None))
+    deadline = code_deadline(view)
+    evidence = [f"{skill} load attempts by the lead: {[(seq, how, ok) for seq, how, ok, _ in attempts]}",
+                f"first code write: {f'{deadline[1]} at seq {deadline[0]}' if deadline else None}",
+                f"delegate loads: {delegate_loads(view, skill)}"]
+    if trigger:
+        evidence.append(f"{trigger} read by the lead at seq {first_file_read(view, trigger)}")
+    if loaded and (deadline is None or returned < deadline[0]):
+        return passed(f"{skill} loaded by {loaded[1]} at seq {loaded[0]}", *evidence)
+    if loaded:
+        return failed(f"{skill} load at seq {loaded[0]} returned at seq {returned}, after the lead {deadline[1]} at seq {deadline[0]}", *evidence)
+    if deadline:
+        return failed(f"the lead {deadline[1]} at seq {deadline[0]} with no {skill} load before it", *evidence)
+    if turn_finished(view):
+        return inconclusive("the run wrote no code, so the trigger never came due", *evidence)
+    return inconclusive("run killed before any code write", *evidence)
