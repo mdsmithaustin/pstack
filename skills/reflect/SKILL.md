@@ -39,7 +39,7 @@ One `Task` call, `subagent_type: general-purpose`, `model` from the `reflect jud
 
 ## 4. Structural enforcement check
 
-Move any Accepted item that a lint rule, script, metadata flag, or runtime check would enforce more reliably to Backlog. See the **principle-encode-lessons-in-structure** skill.
+Move any Accepted item that a lint rule, script, metadata flag, or runtime check would enforce more reliably to Backlog. Call the Skill tool with `principle-encode-lessons-in-structure`.
 
 ## 5. Apply
 

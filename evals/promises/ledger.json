@@ -728,7 +728,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "named data shape and its organizing structure per **principle-model-the-domain**, a state machine over scattered booleans, a table/registry over branching, a typed model over repeated shape assumptions, chosen before the delegate writes logic"
+     "quote": "named data shape and the organizing structure you chose with `principle-model-the-domain`, a state machine over scattered booleans, a table/registry over branching, a typed model over repeated shape assumptions, chosen before the delegate writes logic"
     },
     {
      "file": "skills/poteto-mode/playbooks/refactoring.md",
@@ -1605,7 +1605,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/hillclimb.md",
-     "quote": "Build the measurement harness, prove its sensitivity, then freeze it (the **principle-build-the-lever** skill)."
+     "quote": "Build the measurement harness, prove its sensitivity, then freeze it. Call the Skill tool with `principle-build-the-lever`."
     },
     {
      "file": "skills/poteto-mode/playbooks/hillclimb.md",
@@ -1909,7 +1909,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autonomous-run.md",
-     "quote": "Pick the wake mechanism using your CLI's loop facility, a built-in or wrapper, not a pstack skill. Call the Skill tool with `pstack-harness`, then follow its [loop procedure](../../pstack-harness/references/loops.md) to find it. An event to watch (CI, a merge, a ref advancing) gets a watcher subagent on the `routine` role that wakes you on the event, with a long time-based heartbeat as fallback."
+     "quote": "Pick the wake mechanism using your CLI's loop facility, a built-in or wrapper, not a pstack skill. Follow the [loop procedure](../../pstack-harness/references/loops.md) to find it. An event to watch (CI, a merge, a ref advancing) gets a watcher subagent on the `routine` role that wakes you on the event, with a long time-based heartbeat as fallback."
     },
     {
      "file": "skills/pstack-harness/references/loops.md",
@@ -2999,7 +2999,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "The current code's behavior is the spec for everything the task does not explicitly change, per the **principle-redesign-from-first-principles** skill. Keep that behavior, and say so in the step 4 brief."
+     "quote": "The current code's behavior is the spec for everything the task does not explicitly change. Call the Skill tool with `principle-redesign-from-first-principles`. Keep that behavior, and say so in the step 4 brief."
     },
     {
      "file": "skills/poteto-mode/SKILL.md",
@@ -3234,7 +3234,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/session-pickup.md",
-     "quote": "Verify the inherited claims against the original goal on the real artifact (the **principle-prove-it-works** skill). A passing prior self-report is not the proof."
+     "quote": "Verify the inherited claims against the original goal on the real artifact. Call the Skill tool with `principle-prove-it-works`. A passing prior self-report is not the proof."
     }
    ],
    "harness_sensitive": false,
@@ -3337,7 +3337,7 @@
     },
     {
      "file": "skills/setup-pstack/SKILL.md",
-     "quote": "`swarm workers` runs every swarm worker that runs something, per the **swarm** skill, unless a race or comparison assigns another model per arm."
+     "quote": "`swarm workers` runs every swarm worker that runs something, as the **swarm** skill assigns, unless a race or comparison assigns another model per arm."
     },
     {
      "file": "skills/swarm/SKILL.md",

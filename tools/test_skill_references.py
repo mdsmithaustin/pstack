@@ -41,6 +41,31 @@ class SkillReferenceSpelling(unittest.TestCase):
                              ["skills/demo/SKILL.md:1: Use the **demo** skill",
                               "skills/demo/SKILL.md:2: use the **demo** skill"])
 
+    def test_upstream_load_forms_are_legacy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/principle-prove-it-works/SKILL.md": "Prove it.\n",
+                "skills/demo/SKILL.md": "Run the **demo** skill over it.\n- Any code → the **demo** skill.\n"
+                                        "Log it via the **demo** skill.\nCheck it, per the **demo** skill.\n"
+                                        "Route through the **demo** skill.\nApply the **demo** skill.\n"
+                                        "Verify it (the **principle-prove-it-works** skill).\n"
+                                        "Verify it (**principle-prove-it-works**).\nThen run `demo` on it.\n"
+                                        "Spawn per the Subagents section of the **demo** skill.\n"
+                                        "See the **demo** and **principle-prove-it-works** skills.\nRead the\n**demo** skill.\n",
+            })
+            self.assertEqual([row.split(":")[1] for row in skill_references.legacy_loads(root)],
+                             ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"])
+
+    def test_descriptions_index_labels_and_headings_are_not_loads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/principle-prove-it-works/SKILL.md": "Prove it.\n",
+                "skills/demo/SKILL.md": "The **demo** skill owns prose.\nA complement to the **demo** skill.\n"
+                                        "- **Prove It Works** (**principle-prove-it-works**). After a task.\n"
+                                        "## Proof (**principle-prove-it-works**)\nEvery owner uses the **demo** skill.\n",
+            })
+            self.assertEqual(skill_references.legacy_loads(root), [])
+
     def test_a_skill_tool_name_must_exist(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = tracked_repo(tmp, {
