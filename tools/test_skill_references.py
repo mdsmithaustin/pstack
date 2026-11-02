@@ -51,10 +51,21 @@ class SkillReferenceSpelling(unittest.TestCase):
                                         "Verify it (the **principle-prove-it-works** skill).\n"
                                         "Verify it (**principle-prove-it-works**).\nThen run `demo` on it.\n"
                                         "Spawn per the Subagents section of the **demo** skill.\n"
-                                        "See the **demo** and **principle-prove-it-works** skills.\nRead the\n**demo** skill.\n",
+                                        "See the **demo** and **principle-prove-it-works** skills.\nRead the\n**demo** skill.\n"
+                                        "State it with the **demo** skill.\nRun Phase B of the **demo** skill.\n"
+                                        "Shape them with the **principle-prove-it-works** principle skill.\n",
             })
             self.assertEqual([row.split(":")[1] for row in skill_references.legacy_loads(root)],
-                             ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"])
+                             ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "14", "15", "16"])
+
+    def test_a_not_load_passage_is_exempt_only_where_it_stands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/demo/SKILL.md": "Owners do a comment review with the **demo** skill.\nCheck it with the **demo** skill.\n",
+            })
+            with mock.patch.object(skill_references, "NOT_LOADS",
+                                   {"skills/demo/SKILL.md": ["a comment review with the **demo** skill"]}):
+                self.assertEqual(skill_references.legacy_loads(root), ["skills/demo/SKILL.md:2: with the **demo** skill"])
 
     def test_descriptions_index_labels_and_headings_are_not_loads(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -146,7 +157,7 @@ class SkillReferenceSpelling(unittest.TestCase):
             })
             table = {"skills/demo/SKILL.md": ["Say /demo to start.", "Say /demo to pause."],
                      "skills/other/SKILL.md": ["Run /other."]}
-            with mock.patch.object(skill_references, "EXEMPT", table):
+            with mock.patch.object(skill_references, "EXEMPT", table), mock.patch.object(skill_references, "NOT_LOADS", {}):
                 self.assertEqual(skill_references.stale_exemptions(root),
                                  ["skills/demo/SKILL.md: Say /demo to pause.", "skills/other/SKILL.md: Run /other."])
 

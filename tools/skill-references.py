@@ -108,14 +108,18 @@ def violations(root: Path = ROOT) -> list[str]:
 
 def stale_exemptions(root: Path = ROOT) -> list[str]:
     hits = sigils(root)
-    return [f"{rel}: {passage}" for rel, passages in EXEMPT.items() for passage in passages
-            if not any(hit.file == rel and hit.spelling in passage and passage in hit.text for hit in hits)]
+    stale = [f"{rel}: {passage}" for rel, passages in EXEMPT.items() for passage in passages
+             if not any(hit.file == rel and hit.spelling in passage and passage in hit.text for hit in hits)]
+    return stale + [f"{rel}: {passage}" for rel, passages in NOT_LOADS.items() for passage in passages
+                    if not (root / rel).is_file() or passage not in (root / rel).read_text(encoding="utf-8")]
 
 
 LEGACY_LOADS = (
-    re.compile(r"(?:\b(?:[Uu]se|[Rr]un|[Ff]ollow|[Rr]ead|[Ss]ee|[Aa]pply|[Tt]hrough|[Rr]outes?\s+to)|→)\s+the\s+\*\*([a-z0-9][a-z0-9-]*)\*\*(?:\s+and\s+\*\*[a-z0-9-]+\*\*)?\s+skill"),
+    re.compile(r"(?:\b(?:[Uu]se|[Rr]un|[Ff]ollow|[Rr]ead|[Ss]ee|[Aa]pply|[Tt]hrough|[Rr]outes?\s+to)|→)\s+the\s+\*\*([a-z0-9][a-z0-9-]*)\*\*(?:\s+and\s+\*\*[a-z0-9-]+\*\*)?(?:\s+principle)?\s+skill"),
+    re.compile(r"\b[Ww]ith\s+the\s+\*\*([a-z0-9][a-z0-9-]*)\*\*(?:\s+principle)?\s+skill"),
+    re.compile(r"\b(?:(?:Phase|[Ss]tep)\s+\S+|\S+\s+section)\s+of\s+the\s+\*\*([a-z0-9][a-z0-9-]*)\*\*(?:\s+principle)?\s+skill"),
     re.compile(r"\b(?:[Pp]er|[Vv]ia)\s+(?:the\s+)?\*\*([a-z0-9][a-z0-9-]*)\*\*"),
-    re.compile(r"\(the\s+\*\*([a-z0-9][a-z0-9-]*)\*\*\s+skills?\)"),
+    re.compile(r"\(the\s+\*\*([a-z0-9][a-z0-9-]*)\*\*(?:\s+principle)?\s+skills?\)"),
     re.compile(r"\b[Pp]er\s+the\s+[^.\n]{1,60}?\s+of\s+the\s+\*\*([a-z0-9][a-z0-9-]*)\*\*\s+skill"),
     re.compile(r"\b[Rr]un\s+`([a-z0-9][a-z0-9-]*)`"),
     re.compile(r"(?<!\*\* )\(\*\*(principle-[a-z0-9-]+)\*\*(?:,\s+\*\*principle-[a-z0-9-]+\*\*)*\)"),
@@ -125,17 +129,39 @@ BOLD_SKILL = re.compile(r"\*\*([a-z0-9][a-z0-9-]*)\*\*(?=(?:\s+[a-z-]+){0,2}\s+s
 BOLD_PRINCIPLE_SHORTHAND = re.compile(r"\*\*([a-z0-9]+(?:-[a-z0-9]+)+)\*\*")
 
 
+NOT_LOADS = {
+    "skills/figure-it-out/SKILL.md": ["read the Principles section of the **poteto-mode** skill"],
+    "skills/poteto-mode/playbooks/autopilot-full.md": ["self-proof on the real artifact (the **principle-prove-it-works** skill)",
+                                                       "a comment review with the **no-comments** skill"],
+    "skills/poteto-mode/playbooks/autopilot-stack.md": ["a comment review with the **no-comments** skill"],
+}
+
+
+def not_a_load(text: str, rel: str, start: int, end: int) -> bool:
+    for passage in NOT_LOADS.get(rel, ()):
+        at = text.find(passage)
+        while at != -1:
+            if at <= start and end <= at + len(passage):
+                return True
+            at = text.find(passage, at + 1)
+    return False
+
+
 def legacy_loads(root: Path = ROOT) -> list[str]:
     names = set(skill_names(root))
     rows = []
     for path in model_facing_files(root):
         text = path.read_text(encoding="utf-8")
+        seen = set()
         for pattern in LEGACY_LOADS:
             for match in pattern.finditer(text):
                 start = text.rfind("\n", 0, match.start()) + 1
-                if match.group(1) in names and not text.startswith("#", start):
+                rel = path.relative_to(root).as_posix()
+                if (match.group(1) in names and match.start(1) not in seen and not text.startswith("#", start)
+                        and not not_a_load(text, rel, match.start(), match.end())):
+                    seen.add(match.start(1))
                     number = text.count("\n", 0, match.start()) + 1
-                    rows.append(f"{path.relative_to(root).as_posix()}:{number}: {' '.join(match.group(0).split())}")
+                    rows.append(f"{rel}:{number}: {' '.join(match.group(0).split())}")
     return sorted(rows, key=lambda row: (row.split(":")[0], int(row.split(":")[1])))
 
 

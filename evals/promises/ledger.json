@@ -728,7 +728,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "named data shape and the organizing structure you chose with `principle-model-the-domain`, a state machine over scattered booleans, a table/registry over branching, a typed model over repeated shape assumptions, chosen before the delegate writes logic"
+     "quote": "named data shape and its organizing structure, a state machine over scattered booleans, a table/registry over branching, a typed model over repeated shape assumptions, chosen before the delegate writes logic"
     },
     {
      "file": "skills/poteto-mode/playbooks/refactoring.md",
