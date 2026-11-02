@@ -5,7 +5,7 @@ description: "Catch the user up as the ketchup skill does, with a short silent v
 
 # Ketchup video
 
-Use the **ketchup** skill. Show what happened in a short silent video instead of its summary and visuals. The catch-up window starts at the last message the user wrote before `/ketchup-video`, not before any earlier `/ketchup`. Writing and rendering the video, outside the repo, is the one exception to ketchup's read-only rule. The reply is ketchup's opening sentence, the embedded video, one line naming any work left that you can do yourself, and the action items. When the video shows a call's options, call each option by the name the video gives it. If the render fails, say so in one line and give only the calls.
+Call the Skill tool with `ketchup`. Show what happened in a short silent video instead of its summary and visuals. The catch-up window starts at the last message the user wrote before `/ketchup-video`, not before any earlier `/ketchup`. Writing and rendering the video, outside the repo, is the one exception to ketchup's read-only rule. The reply is ketchup's opening sentence, the embedded video, one line naming any work left that you can do yourself, and the action items. When the video shows a call's options, call each option by the name the video gives it. If the render fails, say so in one line and give only the calls.
 
 ## Slides
 

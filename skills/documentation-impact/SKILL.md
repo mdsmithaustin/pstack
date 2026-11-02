@@ -48,7 +48,7 @@ For each affected reader task, identify the maintained document or explain why n
 
 In `author` mode, make the smallest corrections needed for the changed behavior. Follow the repository's documentation layout and generation commands. Update the source of generated docs instead of hand-editing generated output.
 
-Use the **technical-writing** skill on documentation you write or review. Then use the **unslop** skill on it. Keep examples tied to real symbols, paths, flags, defaults, and supported versions. Example paths must resolve on a reader's machine. For machine-specific paths, use an explicit placeholder and show how to discover or supply the real value. A temporary path is valid when a preceding step creates it. A writer's unexplained scratch path is not a usable example. If an upgrade requires user action, state that action and the old-to-new behavior.
+Call the Skill tool with `technical-writing` on documentation you write or review. Then call the Skill tool with `unslop` on it. Keep examples tied to real symbols, paths, flags, defaults, and supported versions. Example paths must resolve on a reader's machine. For machine-specific paths, use an explicit placeholder and show how to discover or supply the real value. A temporary path is valid when a preceding step creates it. A writer's unexplained scratch path is not a usable example. If an upgrade requires user action, state that action and the old-to-new behavior.
 
 Trace documented effects through the implementation. Accepting or reporting a setting does not prove that the corresponding operation runs. If intended behavior and observed behavior disagree, report the mismatch as an implementation finding instead of documenting a defect as supported behavior.
 
@@ -69,7 +69,7 @@ When independent review is required, a different agent reviews the resulting art
 
 ## Verify and return the result
 
-Run the relevant repository documentation checks and exercise changed examples against the actual implementation when safe within the task's authority. Use the **verify-commands** skill on commands used as completion evidence. In review mode, run checks without modifying the reviewed files, using a disposable copy if the check writes output.
+Run the relevant repository documentation checks and exercise changed examples against the actual implementation when safe within the task's authority. Call the Skill tool with `verify-commands` on commands used as completion evidence. In review mode, run checks without modifying the reviewed files, using a disposable copy if the check writes output.
 
 Check factual meaning as well as syntax and rendering. An example that runs with the wrong default or a diagram that invents an approval step is still wrong. Report unsafe or unavailable checks as gaps. Never run a deployment, publish docs, or change external data just to verify an example.
 

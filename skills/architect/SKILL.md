@@ -19,17 +19,17 @@ Open a worklist with one entry per phase before starting.
 
 ## Phase A: Ground the problem
 
-Build a real mental model of every system the new code touches. Use the **how** skill on the relevant subsystems.
+Build a real mental model of every system the new code touches. Call the Skill tool with `how` on the relevant subsystems.
 
-Naming a file isn't grounding. Produce the architectural explanation `how` prescribes. If the design redefines ownership or layering, also use the **why** skill on the existing shape so the rationale becomes a constraint, not a guess.
+Naming a file isn't grounding. Produce the architectural explanation `how` prescribes. If the design redefines ownership or layering, also call the Skill tool with `why` on the existing shape so the rationale becomes a constraint, not a guess.
 
 Skip Phase A only when the work is genuinely greenfield with no surrounding system to integrate.
 
 ## Phase B: Sketch
 
-Use the **arena** skill with the design-sketch task and the Phase A grounding artifacts. Pass `references/runner-prompt.md` as each runner's prompt.
+Call the Skill tool with `arena`, and give it the design-sketch task and the Phase A grounding artifacts. Pass `references/runner-prompt.md` as each runner's prompt.
 
-Take the runners from the `architect runners` role in place of `arena runners`. Its default is `fable`, `opus`, `sonnet`. Alias and rejected entries follow the runner rules in the **arena** skill's Phase A. Use the **pstack-harness** skill for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call.
+Take the runners from the `architect runners` role in place of `arena runners`. Its default is `fable`, `opus`, `sonnet`. Alias and rejected entries follow the runner rules in the **arena** skill's Phase A. Call the Skill tool with `pstack-harness` for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call.
 
 Design it twice. Require at least two structurally distinct candidates before synthesis, even when the first looks sufficient. This is the **principle-exhaust-the-design-space** skill made concrete. Whole-shape alternatives, not point fixes inside one shape.
 
@@ -45,7 +45,7 @@ Default: proceed directly to implementation with the synthesized design. No huma
 
 Opt in to a checkpoint when the invoker explicitly asks: "/architect with checkpoint," "stop and show me before implementing," or similar. Then surface the synthesized design and pause for sign-off.
 
-Without a checkpoint, or once the invoker signs off, the synthesis can ship as its own commit, as the "scaffold first" mode of the **principle-foundational-thinking** skill. Planned and scoped breakage during fill-in is fine, per the **principle-outcome-oriented-execution** skill. For adversarial pressure on the design before implementing, use the **interrogate** skill on the synthesized sketch.
+Without a checkpoint, or once the invoker signs off, the synthesis can ship as its own commit, as the "scaffold first" mode of the **principle-foundational-thinking** skill. Planned and scoped breakage during fill-in is fine. Call the Skill tool with `principle-outcome-oriented-execution`. For adversarial pressure on the design before implementing, call the Skill tool with `interrogate` on the synthesized sketch.
 
 If the human pushes back on the shape (in a checkpoint or after the fact), treat that as Phase A evidence. Re-ground and re-run Phase B before writing more code.
 
@@ -55,7 +55,7 @@ Replace `not implemented` bodies with code, pseudocode with logic. The synthesiz
 
 ## Phase E: Scrap when the architecture is wrong
 
-If implementation keeps producing friction the sketch can't absorb, throw the sketch out. Don't bolt fixes onto a wrong design, per the **principle-redesign-from-first-principles** and **principle-fix-root-causes** skills.
+If implementation keeps producing friction the sketch can't absorb, throw the sketch out. Don't bolt fixes onto a wrong design. Call the Skill tool with `principle-redesign-from-first-principles`. Call the Skill tool with `principle-fix-root-causes`.
 
 The signal is a *pattern*, not single instances. Tells:
 
@@ -70,9 +70,9 @@ Use judgment. A few edge cases don't condemn an architecture. Some problems are 
 
 When you scrap:
 
-1. Use the **how** skill again on what's been built.
+1. Call the Skill tool with `how` again on what's been built.
 2. Redesign as if the new constraints had been day-one assumptions, per redesign-from-first-principles.
-3. Subtract before adding, per the **principle-subtract-before-you-add** skill. The new sketch should be smaller than the old one before it grows.
+3. Subtract before adding. Call the Skill tool with `principle-subtract-before-you-add`. The new sketch should be smaller than the old one before it grows.
 4. Return to Phase B and re-run arena.
 
 ## Outputs

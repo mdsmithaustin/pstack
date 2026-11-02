@@ -8,7 +8,7 @@ Read this playbook in full. It has no numbered steps.
 
 **Commits.** Commit liberally. Rebase into small, ordered commits before opening PRs. Each commit is a future PR: landable, ordered to tell the story. Amend when the fix belongs in a just-made commit. New commit when separable. Commit bodies don't restate the subject.
 
-**PRs.** Before every commit or amend, use the **deslop** skill. Complete its [Before each commit](../../deslop/SKILL.md#before-each-commit) check and retain the per-commit evidence. Use the **no-comments** skill before review. Use the **technical-writing** skill for every PR title, PR description, and commit body. Then use the **unslop** skill. Apply every technical-writing layer except Diátaxis, and apply the STE vocabulary rules: use one word for each action, keep articles, and use a plain verb over `-ing` where one works.
+**PRs.** Before every commit or amend, call the Skill tool with `deslop`. Complete its [Before each commit](../../deslop/SKILL.md#before-each-commit) check and retain the per-commit evidence. Call the Skill tool with `no-comments` before review. Call the Skill tool with `technical-writing` for every PR title, PR description, and commit body. Then call the Skill tool with `unslop`. Apply every technical-writing layer except Diátaxis, and apply the STE vocabulary rules: use one word for each action, keep articles, and use a plain verb over `-ing` where one works.
 
 **Titles.** Conventional Commits `type(scope): subject`, no trailing period. Type such as `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, or `perf`. Scope is the area, such as `pstack` or `poteto-mode`. Subject is short, imperative, and names a real symbol when one carries the change, for example `fix(pstack): retarget opening-a-pr babysit trigger`.
 
@@ -49,7 +49,7 @@ In a gated repository, the gate owns every write to the push target and every PR
 - While a run is active, do not review its fix commits yourself and do not add findings to it. The gate owns that review.
 - Write the intent file as plain prose. Remove every `$skill` and `/skill` mention from it, because the gate's agent loads each mentioned skill.
 - When `no-mistakes doctor` fails or the gate cannot run, stop and report. Publish around the gate only when the user said "bypass no-mistakes" in this session.
-- Before the first run, check whether the repository config selects `pr.template`. A template file alone does not select no-mistakes template mode. For setup, use the **setup-pstack** skill's [PR template instructions](../../setup-pstack/references/pr-template.md). The template path and bytes must already be on the trusted default branch to affect the run. When setup is pending, retain the selected body format for post-run finalization.
+- Before the first run, check whether the repository config selects `pr.template`. A template file alone does not select no-mistakes template mode. For setup, follow the [PR template instructions](../../setup-pstack/references/pr-template.md). The template path and bytes must already be on the trusted default branch to affect the run. When setup is pending, retain the selected body format for post-run finalization.
 - After each run that creates or updates a PR, read its live body. Check the title against **Titles**, restore the selected **Body format**, and check every author claim against the PR's full diff at the current head. Correct the title and author text with the resolved forge. Preserve the generated evidence appendix, ownership markers, and attestation byte for byte; put author additions outside it. Read the PR back and verify the selected sections and unchanged generated evidence before reporting merge-ready. A later generic run can overwrite author sections again, so repeat this check after every publication until template mode is active. The squash body comes from `merge-gate --body-file` in `playbooks/shipping.md`.
 - `axi run` and `axi respond` block for up to 8 minutes. Give each call a tool timeout of 10 minutes. After `rerun` starts a new run, drive that run with `no-mistakes axi run` (reattach) and `axi respond` until it reaches an outcome.
 
@@ -82,7 +82,7 @@ For github.com or GHES attachments with the `https://<host>/user-attachments/ass
 
 For upstream-sync publication routes and draft requirements, follow [Syncing from upstream](../../../PORTING.md#syncing-from-upstream).
 
-**Recap.** After a PR opens, use the **pr-recap** skill. For post-push refresh timing, follow [task triggers](../references/task-triggers.md).
+**Recap.** After a PR opens, call the Skill tool with `pr-recap`. For post-push refresh timing, follow [task triggers](../references/task-triggers.md).
 
 **Babysit.** Opening a PR does not start a babysit. Post the URL and keep building. Finish the phase or stack first. Run a separate babysit pass only when the user asks for one after the whole stack exists. A babysit for each new PR stalls the build and spends checks on commits later waves restart. Push back when feedback drifts from intent.
 

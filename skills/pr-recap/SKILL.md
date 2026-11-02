@@ -49,7 +49,7 @@ Everything else goes in one collapsed `<details>` block after them: the risk lin
 
 Never copy a secret, token, or credential-looking value from the diff. Write `<redacted>` in its place.
 
-Use the **technical-writing** skill on the recap's sentences. Then use the **unslop** skill.
+Call the Skill tool with `technical-writing` on the recap's sentences. Then call the Skill tool with `unslop`.
 
 ## Draw the sketch
 

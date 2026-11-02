@@ -8,9 +8,9 @@ pstack needs one phrasing that a skill's body uses to make the agent load a sibl
 
 ## Recommendation
 
-Decided on 2026-11-01. At every site where a sibling must load, write "Call the Skill tool with `x`", with the bare skill name in code font, as in "Call the Skill tool with `no-comments`." Put it in a numbered step or a direct sentence, never in a "per" or "in" clause. Leave plain mentions (routers, "see also") as they are. Codex and Grok Build have no Skill tool for skills on disk. Hermes loads a skill with `skill_view(name)`, which this repository's grader counts as a load; how Hermes treats the phrase is unverified, because no Hermes arm ran. The planned **pstack-harness** update will map the phrase to reading `<installed skills root>/x/SKILL.md` in full on those CLIs.
+Decided on 2026-11-01. At every site where a sibling must load, write "Call the Skill tool with `x`", with the bare skill name in code font, as in "Call the Skill tool with `no-comments`." Put it in a numbered step or a direct sentence, never in a "per" or "in" clause. Codex and Grok Build have no Skill tool for skills on disk. Hermes loads a skill with `skill_view(name)`, which this repository's grader counts as a load; how Hermes treats the phrase is unverified, because no Hermes arm ran. The **pstack-harness** skill maps the phrase to reading `<installed skills root>/x/SKILL.md` in full on those CLIs.
 
-The rollout is pending. Shipped skills still write "Use the **x** skill", and the **pstack-harness** skill still maps that phrase. A separate change rewrites every load site, the mapping, and the matching `PORTING.md` rule.
+The rollout rewrote every "Use the **x** skill" load under `skills/` and poteto-agent's deslop line. It also converted principle citations into 56 explicit principle loads. The sibling-skill row in the [porting substitution map](../PORTING.md#substitution-map) owns the load forms, section and reference-file rules, exceptions, and lint coverage.
 
 This decision replaces the earlier recommendation, "Use the **x** skill", which kept the mechanism out of the skill text. Two findings reversed it.
 
@@ -27,7 +27,7 @@ Reasons, each with its evidence label.
 2. Fact. On Codex, `allow_implicit_invocation: false` hides the skill from the model's catalog. A name alone cannot resolve there. Only a file path, or a harness map that supplies the root, can reach the skill.
 3. Fact. On Claude Code, the Skill tool takes "exact name from the listing, no leading slash". A `name-only` override keeps the name in that listing.
 4. Inference from two independent origins (mattpocock/skills and zhupanov/larch). An explicit imperative tied to the load action fires more often than a bare mention. Both authors claim this without numbers.
-5. Measured, reversing an earlier inference. This reason first said that naming "the Skill tool" literally, as Pocock does, works on Claude Code only, so the verb belonged in prose and the mapping in pstack-harness. In the 2026-11-01 runs the Claude Code load was 1 of 3 with "Use the" and 3 of 3 with "Call the Skill tool with" (and also 3 of 3 with the slash and path arms), and Codex and Grok Build leads still read the file in 2 of 2 runs each. Three runs per arm is small. "Use the" against "Call the Skill tool with" alone gives a one-sided Fisher p of 0.2. The mapping stays in pstack-harness, which will map the tool name instead of a neutral verb once the rollout lands.
+5. Measured, reversing an earlier inference. This reason first said that naming "the Skill tool" literally, as Pocock does, works on Claude Code only, so the verb belonged in prose and the mapping in pstack-harness. In the 2026-11-01 runs the Claude Code load was 1 of 3 with "Use the" and 3 of 3 with "Call the Skill tool with" (and also 3 of 3 with the slash and path arms), and Codex and Grok Build leads still read the file in 2 of 2 runs each. Three runs per arm is small. "Use the" against "Call the Skill tool with" alone gives a one-sided Fisher p of 0.2. The mapping stays in pstack-harness, which now maps the tool name instead of a neutral verb.
 
 ## Vendor guidance, verbatim
 

@@ -7,7 +7,7 @@ description: "Use for \"how does X work\", code walkthroughs before changing som
 
 Explore the codebase to answer "how does X work?" questions. Produce architectural explanations at the level of a senior engineer onboarding onto a subsystem, enough to build a working mental model, not so much that it reads like annotated source code.
 
-Every spawn is a read-only `general-purpose` subagent. Explorers use the `how explorer` line in the pstack models config (default `sonnet`), and every explainer uses the `how explainer` line (default `opus`). Use the **pstack-harness** skill to resolve each spawn's model, effort, and agent type. Its **Spawn a role** section also covers a missing config, `inherit-parent`, and a rejected value.
+Every spawn is a read-only `general-purpose` subagent. Explorers use the `how explorer` line in the pstack models config (default `sonnet`), and every explainer uses the `how explainer` line (default `opus`). Call the Skill tool with `pstack-harness` to resolve each spawn's model, effort, and agent type. Its **Spawn a role** section also covers a missing config, `inherit-parent`, and a rejected value.
 
 ## 1. Assess complexity
 

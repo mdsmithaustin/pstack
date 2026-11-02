@@ -24,8 +24,65 @@ def tracked_repo(tmp, files):
 class SkillReferenceSpelling(unittest.TestCase):
     def test_model_facing_text_never_spells_a_skill_with_a_slash_or_dollar(self):
         self.assertEqual(skill_references.violations(), [],
-                         'write "Use the **name** skill." as its own sentence or step; a passage that quotes the '
+                         'write "Call the Skill tool with `name`." as its own sentence or step; a passage that quotes the '
                          "user or text shown to the user goes in USER_FACING in tools/skill-references.py")
+
+    def test_model_facing_text_loads_a_skill_through_the_skill_tool(self):
+        self.assertEqual(skill_references.legacy_loads(), [],
+                         'write "Call the Skill tool with `name`." in place of "Use the **name** skill."')
+
+    def test_a_use_the_load_is_legacy_and_a_bare_mention_is_not(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/demo/SKILL.md": "Use the **demo** skill.\nThen use the **demo** skill's Phase A.\n"
+                                        "Call the Skill tool with `demo`.\nThe **demo** skill owns this.\n",
+            })
+            self.assertEqual(skill_references.legacy_loads(root),
+                             ["skills/demo/SKILL.md:1: Use the **demo** skill",
+                              "skills/demo/SKILL.md:2: use the **demo** skill"])
+
+    def test_upstream_load_forms_are_legacy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/principle-prove-it-works/SKILL.md": "Prove it.\n",
+                "skills/demo/SKILL.md": "Run the **demo** skill over it.\n- Any code → the **demo** skill.\n"
+                                        "Log it via the **demo** skill.\nCheck it, per the **demo** skill.\n"
+                                        "Route through the **demo** skill.\nApply the **demo** skill.\n"
+                                        "Verify it (the **principle-prove-it-works** skill).\n"
+                                        "Verify it (**principle-prove-it-works**).\nThen run `demo` on it.\n"
+                                        "Spawn per the Subagents section of the **demo** skill.\n"
+                                        "See the **demo** and **principle-prove-it-works** skills.\nRead the\n**demo** skill.\n"
+                                        "State it with the **demo** skill.\nRun Phase B of the **demo** skill.\n"
+                                        "Shape them with the **principle-prove-it-works** principle skill.\n",
+            })
+            self.assertEqual([row.split(":")[1] for row in skill_references.legacy_loads(root)],
+                             ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "14", "15", "16"])
+
+    def test_a_not_load_passage_is_exempt_only_where_it_stands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/demo/SKILL.md": "Owners do a comment review with the **demo** skill.\nCheck it with the **demo** skill.\n",
+            })
+            with mock.patch.object(skill_references, "NOT_LOADS",
+                                   {"skills/demo/SKILL.md": ["a comment review with the **demo** skill"]}):
+                self.assertEqual(skill_references.legacy_loads(root), ["skills/demo/SKILL.md:2: with the **demo** skill"])
+
+    def test_descriptions_index_labels_and_headings_are_not_loads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/principle-prove-it-works/SKILL.md": "Prove it.\n",
+                "skills/demo/SKILL.md": "The **demo** skill owns prose.\nA complement to the **demo** skill.\n"
+                                        "- **Prove It Works** (**principle-prove-it-works**). After a task.\n"
+                                        "## Proof (**principle-prove-it-works**)\nEvery owner uses the **demo** skill.\n",
+            })
+            self.assertEqual(skill_references.legacy_loads(root), [])
+
+    def test_a_skill_tool_name_must_exist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/demo/SKILL.md": "Call the Skill tool with `demo`.\ncall the Skill tool with `missing`, then go.\n",
+            })
+            self.assertEqual(skill_references.unresolved_names(root), ["skills/demo/SKILL.md:2: `missing`"])
 
     def test_model_facing_text_names_only_skills_that_exist(self):
         self.assertEqual(skill_references.unresolved_names(), [],
@@ -100,7 +157,7 @@ class SkillReferenceSpelling(unittest.TestCase):
             })
             table = {"skills/demo/SKILL.md": ["Say /demo to start.", "Say /demo to pause."],
                      "skills/other/SKILL.md": ["Run /other."]}
-            with mock.patch.object(skill_references, "EXEMPT", table):
+            with mock.patch.object(skill_references, "EXEMPT", table), mock.patch.object(skill_references, "NOT_LOADS", {}):
                 self.assertEqual(skill_references.stale_exemptions(root),
                                  ["skills/demo/SKILL.md: Say /demo to pause.", "skills/other/SKILL.md: Run /other."])
 

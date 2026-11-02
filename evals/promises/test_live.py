@@ -257,7 +257,7 @@ class GradeRun(unittest.TestCase):
             trace = json.loads((root / "trace.json").read_text())
             record = json.loads((root / "run.json").read_text())
             verdict = json.loads((root / "verdict.json").read_text())
-        self.assertEqual(installed.count("Use the **no-comments** skill on those comments."), 1)
+        self.assertEqual(installed.count("Call the Skill tool with `no-comments` on those comments."), 1)
         self.assertNotIn("go to `/no-comments`.", installed)
         self.assertIn("no-comments", trace["x_implicit_off"])
         self.assertIn("arena", trace["x_implicit_off"])

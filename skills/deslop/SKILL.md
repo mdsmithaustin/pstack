@@ -27,7 +27,7 @@ Complete this check before every commit or amend, including test-only, failing-t
 2. Apply the rules below in order. Make the smallest edit. Delete before you rewrite.
 3. Stop at a cut that needs a new shape, such as a type, a helper, or a state model. Flag it for the [Refactoring playbook](../poteto-mode/playbooks/refactoring.md). Deslop never adds abstraction to remove slop.
 4. Prove behavior unchanged on the real artifact. Run the tests the diff touches and the type check. A test that must change to pass means behavior changed. Revert that cut.
-5. Hand what remains to the neighbors. A comment that rules 1 to 3 do not settle needs the comment review before you report. Use the **no-comments** skill on those comments. If its review changes code, run step 4 again. Then use the **unslop** skill on names, messages, and kept comments.
+5. Hand what remains to the neighbors. A comment that rules 1 to 3 do not settle needs the comment review before you report. Call the Skill tool with `no-comments` on those comments. If its review changes code, run step 4 again. Then call the Skill tool with `unslop` on names, messages, and kept comments.
 6. Report in the format below.
 
 ## Rules

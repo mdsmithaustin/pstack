@@ -25,9 +25,9 @@ Update mode changes the rest of the flow:
 
 ### 1. Mine their history
 
-Use the **pstack-harness** skill to locate the active workspace's transcripts before fanning out. Use only this workspace's store. Don't read other workspaces' sessions. That crosses workspace boundaries and reads private chats from unrelated projects.
+Call the Skill tool with `pstack-harness` to locate the active workspace's transcripts before fanning out. Use only this workspace's store. Don't read other workspaces' sessions. That crosses workspace boundaries and reads private chats from unrelated projects.
 
-Survey recent agent conversations within that scope for recurring patterns. Run multiple parallel subagents on the `routine` role across slices of history (e.g. last 2-4 weeks, split into 3 slices so each has enough material). Use the **pstack-harness** skill's **Spawn a role** section to resolve the role. Each slice mining subagent reads transcripts from the workspace-scoped path the parent provides, looks for the signals below, and returns a short structured list of patterns it saw with evidence pointers. Default signals worth hunting:
+Survey recent agent conversations within that scope for recurring patterns. Run multiple parallel subagents on the `routine` role across slices of history (e.g. last 2-4 weeks, split into 3 slices so each has enough material). Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section to resolve the role. Each slice mining subagent reads transcripts from the workspace-scoped path the parent provides, looks for the signals below, and returns a short structured list of patterns it saw with evidence pointers. Default signals worth hunting:
 
 - Response preferences (length, tone, format, "dumb it down" corrections)
 - Delegation habits (subagents, models, specialized workflows, parallelism)
@@ -73,7 +73,7 @@ Author the skill per `../poteto-mode/playbooks/authoring-a-skill.md`. Placement:
 
 ### 5. Iterate on prose
 
-Use the **unslop** skill on every line, with the authoring-a-skill playbook's writing guidelines.
+Call the Skill tool with `unslop` on every line, with the authoring-a-skill playbook's writing guidelines.
 
 Show the draft to the user and take feedback. Expect multiple iterations. Cut ruthlessly. A mode skill is not a manual.
 
@@ -85,7 +85,7 @@ Work in a worktree off main. Commit and open a PR. Don't push to main directly.
 
 - **Don't overfit to one conversation.** A preference stated once and contradicted another time is noise. Require multiple instances before codifying it.
 - **Don't be clever.** Restating other skills' contents, inventing metaphors, or writing "poetic" prose for an agent reader is cost without benefit. Keep it operational.
-- **Reference, don't inline.** Name another skill the user relies on with "Use the **<name>** skill.", for example "Use the **unslop** skill.", using that skill's bare name, per the authoring playbook, never as a pasted excerpt. Point at principle docs they maintain elsewhere by path.
+- **Reference, don't inline.** Name another skill the user relies on with "Call the Skill tool with `<name>`.", for example "Call the Skill tool with `unslop`.", using that skill's bare name, per the authoring playbook, never as a pasted excerpt. Point at principle docs they maintain elsewhere by path.
 - **Keep sections minimal.** Only add a section if the user has a specific, non-default rule there. "Communicate clearly" is not a section. "Short paragraphs. Tables when comparing options. Bullets only when items are genuinely parallel." is.
 - **Name conventions generic.** Use "the user" or "the human" in imperatives, not the author's first name.
 - **Don't force symmetry.** If a user has no process rules worth writing down, skip the Process section entirely.
