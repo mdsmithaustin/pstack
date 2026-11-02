@@ -59,7 +59,7 @@ The Principles section below grounds every trigger. Name each principle that cha
 
 ## Principles
 
-Before you apply a principle, call the Skill tool with its leaf skill's bare name. Each entry names when it applies. Load every leaf and sibling skill this suite names yourself, even when the listing shows only the name. The **pstack-harness** skill maps the Skill tool on every CLI.
+Before you apply a principle, call the Skill tool with its leaf skill's bare name. Each entry names when it applies. Use every leaf and sibling skill this suite names yourself, even when the listing shows only the name. The **pstack-harness** skill maps the Skill tool on every CLI.
 
 **Core**
 

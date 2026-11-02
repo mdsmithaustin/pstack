@@ -119,7 +119,6 @@ BOLD_NAME = re.compile(r"\*\*([a-z0-9]+(?:-[a-z0-9]+)+)\*\*")
 
 
 def legacy_loads(root: Path = ROOT) -> list[str]:
-    """Loads still written in the "Use the **name** skill" form that "Call the Skill tool with `name`" replaced."""
     return [f"{path.relative_to(root).as_posix()}:{number}: {match.group(0)}"
             for path in model_facing_files(root)
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
@@ -127,8 +126,6 @@ def legacy_loads(root: Path = ROOT) -> list[str]:
 
 
 def unresolved_names(root: Path = ROOT) -> list[str]:
-    """Skill names that no skills/<name>/SKILL.md defines: bold names, a principle named without its prefix, and the
-    code-font name after "Skill tool with"."""
     names = set(skill_names(root))
     rows = []
     for path in model_facing_files(root):
