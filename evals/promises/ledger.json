@@ -3923,7 +3923,9 @@
    "owners": [
     "skills/poteto-mode/references/task-triggers.md",
     "skills/poteto-mode/SKILL.md",
-    "skills/setup-pstack/scripts/skill-listing.py"
+    "skills/setup-pstack/scripts/skill-listing.py",
+    "skills/pstack-harness/SKILL.md",
+    "skills/principle-model-the-domain/SKILL.md"
    ],
    "scenario": "principle-load-run"
   },
