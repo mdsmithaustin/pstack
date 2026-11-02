@@ -1908,6 +1908,76 @@ class DeslopHandsOff(unittest.TestCase):
         self.assertEqual(self.grade(events)["evidence"][-1], "unsettled comment survived: unknown, no project")
 
 
+class TriggeredPrincipleLoads(unittest.TestCase):
+    case = load_case("principle-load-run")
+    SKILL = "principle-model-the-domain"
+    SOURCE, TEST = "/w/roster/roster/report.py", "/w/roster/tests/test_report.py"
+
+    def grade(self, events, exit_code=0, harness="claude-code", project=None, **extra):
+        trace = minimal(events=events, final_reply="Added the status column.", exit_code=exit_code, harness=harness, **extra)
+        return grade("triggered-principle-loads-before-code", trace, self.case, project)
+
+    def test_a_skill_tool_load_before_the_first_test_write_passes(self):
+        result = self.grade(skill_call(2, self.SKILL) + [edit(5, self.TEST), edit(7, self.SOURCE)])
+        self.assertEqual((result["verdict"], result["evidence"][:2]),
+                         (PASS, [f"{self.SKILL} loaded by skill-tool at seq 2", f"{self.SKILL} load attempts by the lead: [(2, 'skill-tool', True)]"]))
+        self.assertIn(f"first code write: wrote {self.TEST} at seq 5", result["evidence"])
+
+    def test_a_returned_read_of_the_skill_file_counts_on_claude(self):
+        result = self.grade([read(2, f"{self.SKILL}/SKILL.md"), edit(4, self.SOURCE)])
+        self.assertEqual((result["verdict"], result["evidence"][0]), (PASS, f"{self.SKILL} loaded by read at seq 2"))
+
+    def test_a_load_after_the_first_code_write_fails(self):
+        result = self.grade([edit(1, self.SOURCE)] + skill_call(3, self.SKILL))
+        self.assertEqual((result["verdict"], result["failures"]),
+                         (FAIL, [f"{self.SKILL} loaded at seq 3, after the lead wrote {self.SOURCE} at seq 1"]))
+
+    def test_a_code_delegate_spawn_is_the_deadline(self):
+        spawn = {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {"prompt": "add the status column"}}
+        result = self.grade([spawn] + skill_call(4, self.SKILL), spawns=[{"seq": 2, "persona": "poteto-agent", "prompt_head": "add the status column"}])
+        self.assertEqual((result["verdict"], result["failures"]),
+                         (FAIL, [f"{self.SKILL} loaded at seq 4, after the lead spawned a code delegate at seq 2"]))
+
+    def test_a_data_file_write_is_not_code(self):
+        result = self.grade([edit(1, "/w/roster/data/members.csv")] + skill_call(3, self.SKILL) + [edit(5, self.SOURCE)])
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_refused_skill_call_is_not_a_load(self):
+        result = self.grade(skill_call(1, self.SKILL, ok=False) + [edit(3, self.SOURCE)])
+        self.assertEqual((result["verdict"], result["failures"]),
+                         (FAIL, [f"the lead wrote {self.SOURCE} at seq 3 with no {self.SKILL} load before it"]))
+
+    def test_a_delegate_load_is_reported_and_does_not_pass_the_lead(self):
+        result = self.grade([edit(3, self.SOURCE)], x_child_skill_calls={"agent-a1": [{"skill": self.SKILL, "ok": True}]},
+                            x_files_read_by={"lead": [], "agent-b2": [f"/w/.claude/skills/{self.SKILL}/SKILL.md"]})
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertIn("delegate loads: [('agent-a1', 'skill-tool'), ('agent-b2', 'read')]", result["evidence"])
+
+    def test_a_run_that_writes_no_code_is_inconclusive(self):
+        for exit_code, reason in ((0, "the run wrote no code, so the trigger never came due"), (-9, "run killed before any code write")):
+            with self.subTest(exit_code=exit_code):
+                result = self.grade(bash(0, "python3 -m roster data/members.csv"), exit_code=exit_code)
+                self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, [reason]))
+
+    def test_the_evidence_records_when_the_lead_read_the_task_triggers(self):
+        trigger = self.case["expect"]["trigger"]
+        result = self.grade([read(1, trigger)] + skill_call(3, self.SKILL) + [edit(5, self.SOURCE)])
+        self.assertEqual(result["evidence"][-1], f"{trigger} read by the lead at seq 1")
+
+    def test_a_shell_mention_of_the_task_triggers_is_not_a_read(self):
+        trigger = self.case["expect"]["trigger"]
+        events = bash(1, f"wc -l .claude/skills/{trigger}") + bash(3, f"cat .claude/skills/{trigger}") + [edit(5, self.SOURCE)]
+        self.assertEqual(self.grade(events)["evidence"][-1], f"{trigger} read by the lead at seq 3")
+
+    def test_codex_needs_a_whole_file_read(self):
+        project = installed_skill(self, self.SKILL, 30)
+        source = str(project / "roster" / "report.py")
+        for command, verdict in ((f"sed -n '1,10p' .agents/skills/{self.SKILL}/SKILL.md", FAIL), (f"cat .agents/skills/{self.SKILL}/SKILL.md", PASS)):
+            with self.subTest(command=command):
+                result = self.grade(shell(0, command) + [edit(4, source)], harness="codex", project=project)
+                self.assertEqual(result["verdict"], verdict, result)
+
+
 def codex_spawn(seq, task, reply, model="gpt-6.1-sol"):
     events = [{"seq": seq, "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": task, "model": model, "message": "gAAAAABqwbhN"}},
               {"seq": seq + 1, "kind": "tool_call", "name": "SubAgentActivity", "input": {"kind": "started", "agent_path": f"/root/{task}"}},

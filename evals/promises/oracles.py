@@ -3990,3 +3990,67 @@ def feature_delivers_spec_edges(view):
     result = failed(failures, *evidence) if failures else passed(*evidence)
     result["measures"] = measures
     return result
+
+
+CODE_CLASSES = ("source", "test")
+
+
+def code_deadline(view):
+    marks = [(seq, f"wrote {path}") for seq, path, kind in view.edits() if kind in CODE_CLASSES]
+    marks += [(seq, "spawned a code delegate") for seq in view.code_delegate_seqs()]
+    return min(marks, default=None)
+
+
+def principle_loaded(view, attempt):
+    _, how, ok, _ = attempt
+    if view.harness == "claude-code":
+        return ok is True and how in ("skill-tool", "read", "read-whole")
+    return allowed_load(view, attempt)
+
+
+def first_file_read(view, rel):
+    for call in view.tool_calls:
+        name, given = call.get("name"), call.get("input") or {}
+        if name in READ_TOOLS:
+            path = next((given[f] for f in READ_TOOLS[name] if isinstance(given.get(f), str)), "")
+            if skill_rel(path) == rel and view.read_returned(call):
+                return call.get("seq")
+        elif name in SHELL_TOOLS and (view.results_for(call) or {}).get("ok") is not False:
+            command = str(given.get(SHELL_TOOLS[name]) or "")
+            if any((pipeline_read(stages, base, rel) or ("",))[0] == "span" for stages, base in pipelines(command)):
+                return call.get("seq")
+    return None
+
+
+def delegate_loads(view, skill):
+    rel = f"{skill}/SKILL.md"
+    found = [(agent, "skill-tool") for agent, calls in (view.trace.get("x_child_skill_calls") or {}).items()
+             if any(c.get("ok") and skill_load(str(c.get("skill") or "")) == rel for c in calls)]
+    found += [(agent, "read") for agent, paths in (view.trace.get("x_files_read_by") or {}).items()
+              if agent != "lead" and any(skill_rel(p) == rel for p in paths)]
+    return found
+
+
+@oracle("triggered-principle-loads-before-code")
+def triggered_principle_loads(view):
+    expect = view.case.get("expect") or {}
+    skill, trigger = expect.get("principle"), expect.get("trigger")
+    if not skill:
+        return inconclusive("case names no expect.principle")
+    attempts = load_attempts(view, skill)
+    loaded = next((a for a in attempts if principle_loaded(view, a)), None)
+    deadline = code_deadline(view)
+    evidence = [f"{skill} load attempts by the lead: {[(seq, how, ok) for seq, how, ok, _ in attempts]}",
+                f"first code write: {f'{deadline[1]} at seq {deadline[0]}' if deadline else None}",
+                f"delegate loads: {delegate_loads(view, skill)}"]
+    if trigger:
+        evidence.append(f"{trigger} read by the lead at seq {first_file_read(view, trigger)}")
+    if loaded and (deadline is None or loaded[0] < deadline[0]):
+        return passed(f"{skill} loaded by {loaded[1]} at seq {loaded[0]}", *evidence)
+    if loaded:
+        return failed(f"{skill} loaded at seq {loaded[0]}, after the lead {deadline[1]} at seq {deadline[0]}", *evidence)
+    if deadline:
+        return failed(f"the lead {deadline[1]} at seq {deadline[0]} with no {skill} load before it", *evidence)
+    if turn_finished(view):
+        return inconclusive("the run wrote no code, so the trigger never came due", *evidence)
+    return inconclusive("run killed before any code write", *evidence)
