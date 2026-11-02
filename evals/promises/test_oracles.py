@@ -1913,6 +1913,10 @@ class TriggeredPrincipleLoads(unittest.TestCase):
     SKILL = "principle-model-the-domain"
     SOURCE, TEST = "/w/roster/roster/report.py", "/w/roster/tests/test_report.py"
 
+    def answered_read(self, seq, returned):
+        return [{**read(seq, f"{self.SKILL}/SKILL.md"), "id": f"r{seq}"},
+                {"seq": returned, "kind": "tool_result", "name": "Read", "ok": True, "output_head": "---", "id": f"r{seq}"}]
+
     def grade(self, events, exit_code=0, harness="claude-code", project=None, **extra):
         trace = minimal(events=events, final_reply="Added the status column.", exit_code=exit_code, harness=harness, **extra)
         return grade("triggered-principle-loads-before-code", trace, self.case, project)
@@ -1924,19 +1928,25 @@ class TriggeredPrincipleLoads(unittest.TestCase):
         self.assertIn(f"first code write: wrote {self.TEST} at seq 5", result["evidence"])
 
     def test_a_returned_read_of_the_skill_file_counts_on_claude(self):
-        result = self.grade([read(2, f"{self.SKILL}/SKILL.md"), edit(4, self.SOURCE)])
+        result = self.grade(self.answered_read(2, 3) + [edit(4, self.SOURCE)])
         self.assertEqual((result["verdict"], result["evidence"][0]), (PASS, f"{self.SKILL} loaded by read at seq 2"))
+
+    def test_a_write_issued_before_the_load_returned_fails(self):
+        for returned, verdict, failures in ((2, PASS, []), (4, FAIL, [f"{self.SKILL} load at seq 1 returned at seq 4, after the lead wrote {self.TEST} at seq 3"])):
+            with self.subTest(returned=returned):
+                result = self.grade(self.answered_read(1, returned) + [edit(3, self.TEST)])
+                self.assertEqual((result["verdict"], result["failures"]), (verdict, failures), result)
 
     def test_a_load_after_the_first_code_write_fails(self):
         result = self.grade([edit(1, self.SOURCE)] + skill_call(3, self.SKILL))
         self.assertEqual((result["verdict"], result["failures"]),
-                         (FAIL, [f"{self.SKILL} loaded at seq 3, after the lead wrote {self.SOURCE} at seq 1"]))
+                         (FAIL, [f"{self.SKILL} load at seq 3 returned at seq 4, after the lead wrote {self.SOURCE} at seq 1"]))
 
     def test_a_code_delegate_spawn_is_the_deadline(self):
         spawn = {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {"prompt": "add the status column"}}
         result = self.grade([spawn] + skill_call(4, self.SKILL), spawns=[{"seq": 2, "persona": "poteto-agent", "prompt_head": "add the status column"}])
         self.assertEqual((result["verdict"], result["failures"]),
-                         (FAIL, [f"{self.SKILL} loaded at seq 4, after the lead spawned a code delegate at seq 2"]))
+                         (FAIL, [f"{self.SKILL} load at seq 4 returned at seq 5, after the lead spawned a code delegate at seq 2"]))
 
     def test_a_data_file_write_is_not_code(self):
         result = self.grade([edit(1, "/w/roster/data/members.csv")] + skill_call(3, self.SKILL) + [edit(5, self.SOURCE)])
@@ -1980,7 +1990,7 @@ class TriggeredPrincipleLoads(unittest.TestCase):
     def test_a_codex_patch_is_a_code_write(self):
         project = installed_skill(self, self.SKILL, 30)
         test, source = str(project / "tests" / "test_report.py"), str(project / "roster" / "report.py")
-        for status, failures in (("completed", [f"{self.SKILL} loaded at seq 3, after the lead wrote {test} at seq 1"]), ("failed", [])):
+        for status, failures in (("completed", [f"{self.SKILL} load at seq 3 returned at seq 4, after the lead wrote {test} at seq 1"]), ("failed", [])):
             with self.subTest(status=status):
                 patch = {"seq": 1, "kind": "tool_call", "name": "FileChange",
                          "input": {"changes": {test: {"type": "update"}}, "status": status, "stderr": ""}}
@@ -1996,12 +2006,15 @@ class TriggeredPrincipleLoads(unittest.TestCase):
                 {"seq": 4, "kind": "tool_result", "name": "read_file", "ok": True, "output_head": "---", "id": "g3"}]
         result = self.grade([replace, {"seq": 2, "kind": "tool_result", "name": "search_replace", "ok": True, "id": "g1"}] + load, harness="grok")
         self.assertEqual((result["verdict"], result["failures"]),
-                         (FAIL, [f"{self.SKILL} loaded at seq 3, after the lead wrote {self.TEST} at seq 1"]))
+                         (FAIL, [f"{self.SKILL} load at seq 3 returned at seq 4, after the lead wrote {self.TEST} at seq 1"]))
 
     def test_a_grok_read_killed_before_it_returned_is_not_a_load(self):
         load = {"seq": 1, "kind": "tool_call", "name": "read_file", "id": "g1", "input": {"target_file": f"/w/.agents/skills/{self.SKILL}/SKILL.md"}}
-        result = self.grade([load], exit_code=-9, harness="grok")
-        self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, ["run killed before any code write"]))
+        batched = {"seq": 2, "kind": "tool_call", "name": "read_file", "id": "g2", "input": {"target_file": "/w/roster/report.py"}}
+        for events in ([load], [load, batched]):
+            with self.subTest(calls=len(events)):
+                result = self.grade(events, exit_code=-9, harness="grok")
+                self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, ["run killed before any code write"]))
 
 
 def codex_spawn(seq, task, reply, model="gpt-6.1-sol"):

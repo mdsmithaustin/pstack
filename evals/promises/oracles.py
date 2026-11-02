@@ -4004,6 +4004,14 @@ def principle_loaded(view, attempt):
     return ok is True and allowed_load(view, attempt)
 
 
+def returned_at(view, attempt):
+    seq, how, _, _ = attempt
+    if how == "injection":
+        return seq
+    call = next(c for c in view.tool_calls if c.get("seq") == seq)
+    return (view.results_for(call) or {}).get("seq")
+
+
 def first_file_read(view, rel):
     for call in view.tool_calls:
         name, given = call.get("name"), call.get("input") or {}
@@ -4034,17 +4042,18 @@ def triggered_principle_loads(view):
     if not skill:
         return inconclusive("case names no expect.principle")
     attempts = load_attempts(view, skill)
-    loaded = next((a for a in attempts if principle_loaded(view, a)), None)
+    loads = [(returned, a) for a in attempts if principle_loaded(view, a) and (returned := returned_at(view, a)) is not None]
+    returned, loaded = min(loads, key=lambda load: load[0], default=(None, None))
     deadline = code_deadline(view)
     evidence = [f"{skill} load attempts by the lead: {[(seq, how, ok) for seq, how, ok, _ in attempts]}",
                 f"first code write: {f'{deadline[1]} at seq {deadline[0]}' if deadline else None}",
                 f"delegate loads: {delegate_loads(view, skill)}"]
     if trigger:
         evidence.append(f"{trigger} read by the lead at seq {first_file_read(view, trigger)}")
-    if loaded and (deadline is None or loaded[0] < deadline[0]):
+    if loaded and (deadline is None or returned < deadline[0]):
         return passed(f"{skill} loaded by {loaded[1]} at seq {loaded[0]}", *evidence)
     if loaded:
-        return failed(f"{skill} loaded at seq {loaded[0]}, after the lead {deadline[1]} at seq {deadline[0]}", *evidence)
+        return failed(f"{skill} load at seq {loaded[0]} returned at seq {returned}, after the lead {deadline[1]} at seq {deadline[0]}", *evidence)
     if deadline:
         return failed(f"the lead {deadline[1]} at seq {deadline[0]} with no {skill} load before it", *evidence)
     if turn_finished(view):
