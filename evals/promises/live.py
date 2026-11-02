@@ -301,7 +301,7 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
         raise SystemExit(f"{case_id} does not run live: kind {case.get('kind', 'live')}, deferred {case.get('deferred')}")
     module = adapter(harness)
     root = Path(tempfile.mkdtemp(prefix=f"{case['fixture']}-", dir=out)).resolve()
-    commit = subprocess.run(["git", "-C", str(ROOT), "rev-parse", skills_at],
+    commit = subprocess.run(["git", "-C", str(ROOT), "rev-parse", skills_at or case.get("skills_at", "HEAD")],
                             check=True, capture_output=True, text=True).stdout.strip()
     retention = Path(hermes_retain_out).absolute() if hermes_retain_out is not None else None
     if retention is not None:
@@ -381,7 +381,7 @@ def main(argv=None):
     r.add_argument("--harness", required=True, choices=sorted(HARNESSES))
     r.add_argument("--case", required=True, action="append")
     r.add_argument("--runs", type=int, default=1)
-    r.add_argument("--skills-at", default="HEAD")
+    r.add_argument("--skills-at", help="skills commit; default the case's skills_at pin, else HEAD")
     r.add_argument("--out", default=str(Path(tempfile.gettempdir()) / "pstack-live"))
     r.add_argument("--hermes-retain-out", help="durable parent for private Hermes evidence and paired exports")
     r.add_argument("--model", help="model for every turn of every case in this invocation (claude-code, codex)")

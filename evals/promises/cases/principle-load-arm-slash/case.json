@@ -3,6 +3,7 @@
   "triggered-principle-loads-before-code"
  ],
  "fixture": "roster",
+ "skills_at": "f186fba3bd2b774416773abd32041f8def77956e",
  "entry": "poteto-mode",
  "turns": [
   "members.csv is getting a status column: active, leave, or alumni. team counts should only count active members and show how many are on leave next to each team. alumni don't count anywhere. add the column to the sample data too."

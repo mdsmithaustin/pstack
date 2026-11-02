@@ -255,6 +255,23 @@ class TestStaticPromises(unittest.TestCase):
             else:
                 self.assertIn(target, selector)
 
+    def test_every_overlay_applies_at_its_case_skills(self):
+        for case_file in sorted((ROOT / "evals" / "promises" / "cases").glob("*/case.json")):
+            case = json.loads(case_file.read_text(encoding="utf-8"))
+            texts = {}
+            for overlay in case.get("skill_overlays", []):
+                with self.subTest(case=case_file.parent.name, file=overlay["file"]):
+                    rev = case.get("skills_at", "HEAD")
+                    if overlay["file"] not in texts:
+                        texts[overlay["file"]] = subprocess.run(
+                            ["git", "-C", str(ROOT), "show", f"{rev}:skills/{overlay['file']}"],
+                            check=True, capture_output=True, text=True).stdout
+                    self.assertEqual(texts[overlay["file"]].count(overlay["old"]), 1,
+                                     "pin the case with skills_at at the commit its overlay was written against")
+                    texts[overlay["file"]] = texts[overlay["file"]].replace(overlay["old"], overlay["new"])
+                    if "sha256" in overlay:
+                        self.assertEqual(hashlib.sha256(texts[overlay["file"]].encode()).hexdigest(), overlay["sha256"])
+
     def test_feature_map_example_shipped(self):
         example = SKILLS / "create-verification-skill" / "references" / "feature-map-example"
         self.assertIn("[`references/feature-map-example/`](references/feature-map-example/)",

@@ -4,6 +4,7 @@
   "poteto-mode-routes-to-playbook"
  ],
  "fixture": "strides",
+ "skills_at": "19bd25de59f3a338bc54e2069d0d1a42e4dc9631",
  "entry": "poteto-mode",
  "turns": [
   "add the streaks command described in docs/streaks.md. verify it."
