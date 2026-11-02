@@ -1345,7 +1345,8 @@
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/playbooks/feature.md",
-    "skills/poteto-mode/references/task-triggers.md"
+    "skills/poteto-mode/references/task-triggers.md",
+    "skills/spec-probes/SKILL.md"
    ]
   },
   "figure-it-out-keeps-decision-log": {
