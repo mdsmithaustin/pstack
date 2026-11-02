@@ -1,6 +1,6 @@
 # Skill cross-reference phrasing
 
-Checked 2026-10-09, and 2026-11-01 for the Skill tool versus Read section, the public suites, and the reliability evidence. Installed hosts were Claude Code 2.1.295 and codex-cli 0.162.0 on 2026-10-09, and Claude Code 2.1.314, codex-cli 0.162.0, and Grok 1.0.70 on 2026-11-01. Codex source for the 2026-11-01 checks was read at openai/codex `cb1bc0ae` (main). Codex source was read at openai/codex `4aa94dce` (main, 2026-10-09). Earlier pstack research on 2026-09-14, kept outside the repository, reached the same Codex result at rust-v0.152.0.
+Checked 2026-10-09, and 2026-11-01 for the Skill tool versus Read section, the public suites, the reliability evidence, and the recommendation. Installed hosts were Claude Code 2.1.295 and codex-cli 0.162.0 on 2026-10-09, and Claude Code 2.1.314, codex-cli 0.162.0, and Grok 1.0.70 on 2026-11-01. Codex source for the 2026-11-01 checks was read at openai/codex `cb1bc0ae` (main). Codex source was read at openai/codex `4aa94dce` (main, 2026-10-09). Earlier pstack research on 2026-09-14, kept outside the repository, reached the same Codex result at rust-v0.152.0.
 
 ## Decision
 
@@ -8,9 +8,18 @@ pstack needs one phrasing that a skill's body uses to make the agent load a sibl
 
 ## Recommendation
 
-Use an imperative verb, then the bare skill name, then the word "skill": **"Use the `no-comments` skill"** (the house bold form, "Use the **no-comments** skill", is equivalent). Put it in a numbered step or a direct sentence, never in a "per" or "in" clause, at every site where the sibling must load. Leave plain mentions (routers, "see also") as they are. The **pstack-harness** skill defines what "use the X skill" means on each CLI. On Claude Code it means a Skill tool call with the bare name. On Codex, Grok, and Hermes it means reading `<installed skills root>/X/SKILL.md`.
+Decided on 2026-11-01. At every site where a sibling must load, write "Call the Skill tool with `x`", with the bare skill name in code font, as in "Call the Skill tool with `no-comments`." Put it in a numbered step or a direct sentence, never in a "per" or "in" clause. Leave plain mentions (routers, "see also") as they are. Codex, Grok Build, and Hermes have no Skill tool for skills on disk. On those CLIs the **pstack-harness** skill maps the phrase to reading `<installed skills root>/x/SKILL.md` in full.
 
-The [2026-10-10 results record](../evals/promises/results/2026-10-10-use-the-skill.md) measures the shipped wording against an old-text control on Claude Code and Codex. It owns the hit rates, trace classifications, and remaining failures. Those runs support the deslop hand-off change, but do not establish a gain for every sibling-skill load point or harness.
+The rollout is pending. Shipped skills still write "Use the **x** skill", and the **pstack-harness** skill still maps that phrase. A separate change rewrites every load site, the mapping, and the matching `PORTING.md` rule.
+
+This decision replaces the earlier recommendation, "Use the **x** skill", which kept the mechanism out of the skill text. Two findings reversed it.
+
+- The [2026-11-01 results record](../evals/promises/results/2026-11-01-principle-load-phrasing.md) varied the wording of one task-triggers line. On Claude Code, the lead loaded the principle before its first code write in 1 of 3 runs with "Use the" and in 3 of 3 with "Call the Skill tool with". On Codex and Grok Build, every arm passed 2 of 2. Those leads read the `SKILL.md` by path whatever the line said, the Skill tool arm included. So the tool name helped on Claude Code, and these runs show no cost on the other two CLIs.
+- [Skill tool versus Read on Claude Code](#skill-tool-versus-read-on-claude-code) found that reattachment after compaction is the difference that decides. Claude Code reattaches the latest Skill invocation of each skill inside a 25,000-token budget. A `SKILL.md` loaded with Read comes back only if it ranks among the five most recently modified files the session touched, and a principle file the task never edits usually does not.
+
+Two caveats from the research still hold. "Call the Skill tool with" is not the only wording that yields a Skill call. The `/x` arm loaded through the Skill tool in 3 of 3 runs too, but the skill reference lint bans that user syntax in shipped text. A Read is not always lost at compaction. The file can come back under the five-recent-files rule.
+
+The [2026-10-10 results record](../evals/promises/results/2026-10-10-use-the-skill.md) measures the earlier "Use the" wording against an old-text control on Claude Code and Codex. It owns the hit rates, trace classifications, and remaining failures. Those runs support the deslop hand-off change, but do not establish a gain for every sibling-skill load point or harness.
 
 Reasons, each with its evidence label.
 
@@ -18,7 +27,7 @@ Reasons, each with its evidence label.
 2. Fact. On Codex, `allow_implicit_invocation: false` hides the skill from the model's catalog. A name alone cannot resolve there. Only a file path, or a harness map that supplies the root, can reach the skill.
 3. Fact. On Claude Code, the Skill tool takes "exact name from the listing, no leading slash". A `name-only` override keeps the name in that listing.
 4. Inference from two independent origins (mattpocock/skills and zhupanov/larch). An explicit imperative tied to the load action fires more often than a bare mention. Both authors claim this without numbers.
-5. Inference. Naming "the Skill tool" literally, as Pocock does, works on Claude Code only. pstack runs on four hosts, so the verb belongs in prose and the mapping belongs in pstack-harness, which already maps every other primitive.
+5. Measured, reversing an earlier inference. This reason first said that naming "the Skill tool" literally, as Pocock does, works on Claude Code only, so the verb belonged in prose and the mapping in pstack-harness. In the 2026-11-01 runs the tool name raised the Claude Code load from 1 of 3 to 3 of 3, and Codex and Grok Build leads still read the file in 2 of 2 runs each. Three runs per arm is small. "Use the" against "Call the Skill tool with" alone gives a one-sided Fisher p of 0.2. The mapping stays in pstack-harness, which will map the tool name instead of a neutral verb once the rollout lands.
 
 ## Vendor guidance, verbatim
 
@@ -123,7 +132,7 @@ Popularity is the star count from `gh search repos skills --sort stars` on 2026-
 | coreyhaines31/marketingskills (57.6k, `88c79f6`) | "Use the **x** skill" | "Use the **ab-testing** skill to design statistically rigorous tests." | [churn-prevention#L373](https://github.com/coreyhaines31/marketingskills/blob/88c79f6528a9347420e57ceb1fff9a60de651768/skills/churn-prevention/SKILL.md#L373) |
 | EveryInc/compound-engineering-plugin (25.8k, `f816d99`) | Code-span name plus the host's skill mechanism, stated as a rule | "format formal skill names as inline code (for example, `ce-plan`) and invoke the named skill through the active harness's callable skill mechanism." | [portable-agent-skill-authoring.md#L177](https://github.com/EveryInc/compound-engineering-plugin/blob/f816d99557a9d81ede830bc1a9b2762974427758/docs/solutions/skill-design/portable-agent-skill-authoring.md#L177) |
 
-EveryInc's rule matches pstack's: a harness-neutral verb in the skill, with the mechanism mapped per host.
+EveryInc's rule matches pstack's earlier recommendation, a harness-neutral verb in the skill with the mechanism mapped per host. The 2026-11-01 decision keeps the per-host mapping and names the Claude Code tool in the skill.
 
 ## Evidence on reliability
 
@@ -151,6 +160,6 @@ This census describes the tree at f8eb694f, before PR 185 (e4968e32) dropped `di
 ## Unknowns
 
 1. Precedence. Moot for pstack, because PR 185 removed the frontmatter flag and the 2026-10-10 runs loaded figure-it-out through the Skill tool on a name-only listing. The docs question stays open. The docs do not say whether a `skillOverrides` value of `"name-only"` overrides frontmatter `disable-model-invocation: true`. If frontmatter wins, the Skill tool keeps refusing gated siblings (#43809), and Claude Code needs the path route too. One `/skills` check or one `Skill` call settles it.
-2. Hit rate. The [2026-10-10 results record](../evals/promises/results/2026-10-10-use-the-skill.md) compares the shipped deslop wording with its old-text control. It does not isolate the step 5 wording from the Report wording or compare "Use the X skill", "Call the Skill tool with X", `/X`, and a path as separate arms. The 2026-11-01 eval in [Evidence on reliability](#evidence-on-reliability) runs those four forms and "Load the X skill" as separate arms at one task-triggers line. The recommendation above is unchanged until a wording ships.
+2. Hit rate. The [2026-10-10 results record](../evals/promises/results/2026-10-10-use-the-skill.md) compares the shipped deslop wording with its old-text control. It does not isolate the step 5 wording from the Report wording or compare "Use the X skill", "Call the Skill tool with X", `/X`, and a path as separate arms. The 2026-11-01 eval in [Evidence on reliability](#evidence-on-reliability) runs those four forms and "Load the X skill" as separate arms at one task-triggers line. The gain at other load sites is unmeasured.
 3. Grok Build and Hermes. [Codex and Grok Build](#codex-and-grok-build) covers what Grok Build's docs and the 2026-11-01 eval show. Hermes docs and source were not inspected for how it handles sibling skills.
 4. Cursor. Its skills docs URL returned 404, and nothing else was inspected.
