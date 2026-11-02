@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail on a slash or dollar skill spelling that no exemption covers, a load written "Use the **name** skill", or a skill name that no skill defines, in model-facing text.
+"""Fail on unexempted skill sigils, legacy sibling-skill loads, or undefined skill names in model-facing text.
 
 The scan covers tracked markdown under skills/ that is still present on disk, so deleted
 files, an installed node_modules, or another untracked file never fail it. Root agents/*.md
