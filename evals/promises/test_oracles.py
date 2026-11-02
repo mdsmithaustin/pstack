@@ -1998,6 +1998,11 @@ class TriggeredPrincipleLoads(unittest.TestCase):
         self.assertEqual((result["verdict"], result["failures"]),
                          (FAIL, [f"{self.SKILL} loaded at seq 3, after the lead wrote {self.TEST} at seq 1"]))
 
+    def test_a_grok_read_killed_before_it_returned_is_not_a_load(self):
+        load = {"seq": 1, "kind": "tool_call", "name": "read_file", "id": "g1", "input": {"target_file": f"/w/.agents/skills/{self.SKILL}/SKILL.md"}}
+        result = self.grade([load], exit_code=-9, harness="grok")
+        self.assertEqual((result["verdict"], result["failures"]), (INCONCLUSIVE, ["run killed before any code write"]))
+
 
 def codex_spawn(seq, task, reply, model="gpt-6.1-sol"):
     events = [{"seq": seq, "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": task, "model": model, "message": "gAAAAABqwbhN"}},

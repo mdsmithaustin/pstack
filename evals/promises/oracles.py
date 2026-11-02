@@ -4001,7 +4001,7 @@ def principle_loaded(view, attempt):
     _, how, ok, _ = attempt
     if view.harness == "claude-code":
         return ok is True and how in ("skill-tool", "read", "read-whole")
-    return allowed_load(view, attempt)
+    return ok is True and allowed_load(view, attempt)
 
 
 def first_file_read(view, rel):
