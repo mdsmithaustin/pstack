@@ -1977,6 +1977,27 @@ class TriggeredPrincipleLoads(unittest.TestCase):
                 result = self.grade(shell(0, command) + [edit(4, source)], harness="codex", project=project)
                 self.assertEqual(result["verdict"], verdict, result)
 
+    def test_a_codex_patch_is_a_code_write(self):
+        project = installed_skill(self, self.SKILL, 30)
+        test, source = str(project / "tests" / "test_report.py"), str(project / "roster" / "report.py")
+        for status, failures in (("completed", [f"{self.SKILL} loaded at seq 3, after the lead wrote {test} at seq 1"]), ("failed", [])):
+            with self.subTest(status=status):
+                patch = {"seq": 1, "kind": "tool_call", "name": "FileChange",
+                         "input": {"changes": {test: {"type": "update"}}, "status": status, "stderr": ""}}
+                events = [patch] + shell(3, f"cat .agents/skills/{self.SKILL}/SKILL.md") + [edit(6, source)]
+                result = self.grade(events, harness="codex", project=project)
+                self.assertEqual((result["verdict"], result["failures"]), (FAIL if failures else PASS, failures), result)
+
+    def test_a_grok_search_replace_is_a_code_write(self):
+        replace = {"seq": 1, "kind": "tool_call", "name": "search_replace", "id": "g1",
+                   "input": {"file_path": self.TEST, "old_string": "a", "new_string": "b"}}
+        load = [{"seq": 3, "kind": "tool_call", "name": "read_file", "id": "g3",
+                 "input": {"target_file": f"/w/.agents/skills/{self.SKILL}/SKILL.md"}},
+                {"seq": 4, "kind": "tool_result", "name": "read_file", "ok": True, "output_head": "---", "id": "g3"}]
+        result = self.grade([replace, {"seq": 2, "kind": "tool_result", "name": "search_replace", "ok": True, "id": "g1"}] + load, harness="grok")
+        self.assertEqual((result["verdict"], result["failures"]),
+                         (FAIL, [f"{self.SKILL} loaded at seq 3, after the lead wrote {self.TEST} at seq 1"]))
+
 
 def codex_spawn(seq, task, reply, model="gpt-6.1-sol"):
     events = [{"seq": seq, "kind": "tool_call", "name": "spawn_agent", "input": {"task_name": task, "model": model, "message": "gAAAAABqwbhN"}},

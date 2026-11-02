@@ -63,7 +63,7 @@ SHELL_TOOLS = {"Bash": "command", "exec_command": "cmd", "terminal": "command",
 READ_VERBS = {"cat", "head", "tail", "sed", "less", "more", "nl", "bat", "awk", "grep", "rg", "python3", "python"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "patch", "write_file", "apply_patch",
               "edit_file", "create_file", "str_replace_editor", "str_replace_based_edit_tool",
-              "edit", "write", "insert", "create", "replace_in_file", "search_replace"}
+              "edit", "write", "insert", "create", "replace_in_file", "search_replace", "FileChange"}
 PATH_FIELDS = ("file_path", "path", "target_file", "target_path", "filename", "file", "notebook_path")
 SPAWN_TOOLS = {"Agent", "Task", "spawn_agent", "spawn_subagent", "delegate_task", "SubAgentActivity"}
 WAIT_TOOLS = {"get_command_or_subagent_output", "wait_agent", "TaskOutput"}
@@ -531,9 +531,10 @@ class View:
             if turn is not None and self.turn_of(call.get("seq")) != turn:
                 continue
             if name in EDIT_TOOLS:
-                if (self.results_for(call) or {}).get("ok") is False:
+                if (self.results_for(call) or {}).get("ok") is False or given.get("status", "completed") != "completed":
                     continue
                 paths = [given[f] for f in PATH_FIELDS if isinstance(given.get(f), str)]
+                paths.extend(given.get("changes") or ())
                 patch = given.get("patch") or given.get("input") or ""
                 if isinstance(patch, str):
                     paths.extend(re.findall(r"\*\*\* (?:Update|Add|Delete) File: (\S+)", patch))
@@ -3939,11 +3940,6 @@ def lead_test_files(view):
     """The test files the lead's own tool calls wrote, relative to the project. A file written in a git worktree maps to
     its path in the project, where the merged copy sits."""
     rels = {view.tree_rel(path) for _, path, _ in view.edits()}
-    # Codex code mode applies patches inside an `exec` call, so only its FileChange events name the files. A failed patch
-    # establishes no authorship.
-    rels |= {view.tree_rel(path) for call in view.tool_calls if call.get("name") == "FileChange"
-             and (call.get("input") or {}).get("status") == "completed"
-             for path in (call.get("input") or {}).get("changes") or {}}
     return sorted(rel for rel in rels if TEST_FILE.search(rel) and not rel.startswith(("/", "..", *PRIVATE_PREFIXES))
                   and _is_file(view.project / rel))
 
