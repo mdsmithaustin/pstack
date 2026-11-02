@@ -30,4 +30,4 @@ Run a named acceptance helper when the task or project requires it. If it cannot
 
 The strongest proof is a deterministic script that re-runs the same comparison, not a one-time eyeball. Write the script, run it, and keep its output as an artifact a reviewer can re-run instead of trusting your word.
 
-Keep the artifact visible for the human. Use the **show-me-your-work** skill for trail storage and evidence-retention rules.
+Keep the artifact visible for the human. Call the Skill tool with `show-me-your-work` for trail storage and evidence-retention rules.

@@ -251,7 +251,7 @@ class TestStaticPromises(unittest.TestCase):
         selector = {name for name, _ in poteto_playbook_bullets()}
         for target in ROUTER_ROUTES.values():
             if target == "figure-it-out":
-                self.assertIn("Use the **figure-it-out** skill whenever no bundled playbook fits.", skill)
+                self.assertIn("Call the Skill tool with `figure-it-out` whenever no bundled playbook fits.", skill)
             else:
                 self.assertIn(target, selector)
 

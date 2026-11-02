@@ -11,7 +11,7 @@ Invoke when the user says "reflect" or "/reflect". Skip when the conversation is
 
 ## 1. Locate the active transcript
 
-The parent finds its own transcript file before fanning out: the newest session in this workspace's transcript store. Use the **pstack-harness** skill to locate it. Do not read other workspaces' transcript stores. That crosses workspace boundaries and reads private chats from unrelated projects.
+The parent finds its own transcript file before fanning out: the newest session in this workspace's transcript store. Call the Skill tool with `pstack-harness` to locate it. Do not read other workspaces' transcript stores. That crosses workspace boundaries and reads private chats from unrelated projects.
 
 ```bash
 ls -t <agent-transcripts>/*.jsonl <agent-transcripts>/*/*.jsonl <agent-transcripts>/*/subagents/*.jsonl 2>/dev/null | head -10
@@ -21,9 +21,9 @@ That covers the legacy flat (`<id>.jsonl`), current nested (`<id>/<id>.jsonl`), 
 
 ## 2. Spawn three reviewers in parallel
 
-One message, three `Task` calls, `subagent_type: general-purpose`, with `model` set as below, agent mode (`readonly: false`). Reviewers need MCP access to look up the tickets, chat threads, and observability traces the transcript references, and readonly strips MCPs. Use the **pstack-harness** skill for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call.
+One message, three `Task` calls, `subagent_type: general-purpose`, with `model` set as below, agent mode (`readonly: false`). Reviewers need MCP access to look up the tickets, chat threads, and observability traces the transcript references, and readonly strips MCPs. Call the Skill tool with `pstack-harness` for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call.
 
-Each reviewer and the synthesizer name a role line in the pstack models config and a default. Use the **pstack-harness** skill to resolve its model, effort, and agent type. Its **Spawn a role** section also covers a missing config, `inherit-parent`, and a rejected value.
+Each reviewer and the synthesizer name a role line in the pstack models config and a default. Call the Skill tool with `pstack-harness` to resolve its model, effort, and agent type. Its **Spawn a role** section also covers a missing config, `inherit-parent`, and a rejected value.
 
 | Lens | Role line | Default `model` | Prompt template |
 |---|---|---|---|

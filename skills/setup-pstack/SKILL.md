@@ -89,7 +89,7 @@ For a full setup in a Git repository, follow [references/pr-template.md](referen
 
 ### 1. Detect available models and efforts
 
-Enumerate the model values your session's spawn mechanism accepts, and the reasoning-effort values it accepts per spawn (use the **pstack-harness** skill to find the mechanism). On Claude Code, the per-spawn efforts are the levels whose `pstack-effort-<level>` agent the live catalog lists, and none when no effort agent is loaded. That is the dependable source. If your CLI also exposes a models API or command that lists the user's entitled models, such as `codex debug models` or `grok models`, prefer it for completeness. If you cannot detect any, ask the user to paste the slugs they have access to. Never write a real slug you have not confirmed is available. The aliases `inherit-parent` and `auto` are always valid even though they are not detected slugs.
+Enumerate the model values your session's spawn mechanism accepts, and the reasoning-effort values it accepts per spawn (call the Skill tool with `pstack-harness` to find the mechanism). On Claude Code, the per-spawn efforts are the levels whose `pstack-effort-<level>` agent the live catalog lists, and none when no effort agent is loaded. That is the dependable source. If your CLI also exposes a models API or command that lists the user's entitled models, such as `codex debug models` or `grok models`, prefer it for completeness. If you cannot detect any, ask the user to paste the slugs they have access to. Never write a real slug you have not confirmed is available. The aliases `inherit-parent` and `auto` are always valid even though they are not detected slugs.
 
 ### 2. Load current state
 
@@ -137,8 +137,8 @@ Tell the user the config was written and that skills read it the next time they 
 
 ### 7. Offer a verification skill (optional)
 
-Check whether the project has a way to drive the real app for proof (a `verify-*` skill, or an existing harness). If not, offer once: "want a project-local verification skill, so agents can drive the app the way a user does and prove changes work? I can generate one with /create-verification-skill." On yes, use the **create-verification-skill** skill. On no, move on without pushing.
+Check whether the project has a way to drive the real app for proof (a `verify-*` skill, or an existing harness). If not, offer once: "want a project-local verification skill, so agents can drive the app the way a user does and prove changes work? I can generate one with /create-verification-skill." On yes, call the Skill tool with `create-verification-skill`. On no, move on without pushing.
 
 ### 8. Offer a formal verification skill (optional)
 
-Check whether the project already has a formal verification skill (a project skill that runs a model checker, a proof, or another verifier against the code). If not, offer once: "want a formal verification skill, so agents can prove a key property of your code holds in every case in scope, not only the cases tests reach? I can generate one with /create-formal-verification-skill." On yes, use the **create-formal-verification-skill** skill. On no, move on without pushing.
+Check whether the project already has a formal verification skill (a project skill that runs a model checker, a proof, or another verifier against the code). If not, offer once: "want a formal verification skill, so agents can prove a key property of your code holds in every case in scope, not only the cases tests reach? I can generate one with /create-formal-verification-skill." On yes, call the Skill tool with `create-formal-verification-skill`. On no, move on without pushing.

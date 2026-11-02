@@ -6,7 +6,7 @@ paths: ["**/*.ts", "**/*.tsx"]
 
 # TypeScript best practices
 
-Use the **principle-type-system-discipline** skill first.
+Call the Skill tool with `principle-type-system-discipline` first.
 
 | Rule | Summary |
 |------|---------|

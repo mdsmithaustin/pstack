@@ -24,8 +24,29 @@ def tracked_repo(tmp, files):
 class SkillReferenceSpelling(unittest.TestCase):
     def test_model_facing_text_never_spells_a_skill_with_a_slash_or_dollar(self):
         self.assertEqual(skill_references.violations(), [],
-                         'write "Use the **name** skill." as its own sentence or step; a passage that quotes the '
+                         'write "Call the Skill tool with `name`." as its own sentence or step; a passage that quotes the '
                          "user or text shown to the user goes in USER_FACING in tools/skill-references.py")
+
+    def test_model_facing_text_loads_a_skill_through_the_skill_tool(self):
+        self.assertEqual(skill_references.legacy_loads(), [],
+                         'write "Call the Skill tool with `name`." in place of "Use the **name** skill."')
+
+    def test_a_use_the_load_is_legacy_and_a_bare_mention_is_not(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/demo/SKILL.md": "Use the **demo** skill.\nThen use the **demo** skill's Phase A.\n"
+                                        "Call the Skill tool with `demo`.\nThe **demo** skill owns this.\n",
+            })
+            self.assertEqual(skill_references.legacy_loads(root),
+                             ["skills/demo/SKILL.md:1: Use the **demo** skill",
+                              "skills/demo/SKILL.md:2: use the **demo** skill"])
+
+    def test_a_skill_tool_name_must_exist(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = tracked_repo(tmp, {
+                "skills/demo/SKILL.md": "Call the Skill tool with `demo`.\ncall the Skill tool with `missing`, then go.\n",
+            })
+            self.assertEqual(skill_references.unresolved_names(root), ["skills/demo/SKILL.md:2: `missing`"])
 
     def test_model_facing_text_names_only_skills_that_exist(self):
         self.assertEqual(skill_references.unresolved_names(), [],

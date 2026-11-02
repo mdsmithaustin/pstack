@@ -29,7 +29,7 @@ Present the framing and tradeoffs before committing to a long run. Reversible wo
 Decompose into atomic, independently-landable units. Sequence riskiest-unknown-first. Scaffold and verification come before features (the **principle-foundational-thinking** skill).
 
 - Build the verification harness before the work, with the baseline captured from the pre-change state, so the check reads as "old value vs new value".
-- For one-way-door design decisions, use the **architect** skill (it runs **arena**). Skip it for mechanical work whose shape is already concrete. A second arena over a settled design is over-engineering (the **principle-laziness-protocol** skill).
+- For one-way-door design decisions, call the Skill tool with `architect` (it runs **arena**). Skip it for mechanical work whose shape is already concrete. A second arena over a settled design is over-engineering (the **principle-laziness-protocol** skill).
 - Decide what fans out. Parallelize only across seams, and give each worker its own worktree or branch (the **principle-separate-before-serializing-shared-state** skill). Don't over-fan.
 - Write the designed phase list down. That list is what the human reviews.
 
@@ -38,7 +38,7 @@ Then execute the design. Add its steps to the worklist as concrete items between
 ## Phase C: Run the loop
 
 Each unit is an experiment. State the hypothesis, make the smallest change, measure against the predicate on the real artifact, keep it if it advanced, revert it if it didn't.
-Use the **principle-sequence-verifiable-units** skill. Verify each unit before starting the next instead of batching checks at the end.
+Call the Skill tool with `principle-sequence-verifiable-units`. Verify each unit before starting the next instead of batching checks at the end.
 
 - Verify by inspecting the artifact, never a self-report. When something passes too easily, suspect the observation method before the system.
 - Pair delegated work with a judge. If a worker games the gate, reset and harden the contract. If the gate itself is wrong, fix the gate in its own change rather than routing around it.
@@ -47,7 +47,7 @@ Use the **principle-sequence-verifiable-units** skill. Verify each unit before s
 
 ## Phase D: Keep the audit trail
 
-Use the **show-me-your-work** skill to log the run. Let that skill choose whether the trail stays local or is committed. Keep durable completion evidence available to the reviewer.
+Call the Skill tool with `show-me-your-work` to log the run. Let that skill choose whether the trail stays local or is committed. Keep durable completion evidence available to the reviewer.
 
 ## Phase E: Verify and hand back
 

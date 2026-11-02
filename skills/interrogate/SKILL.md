@@ -23,7 +23,7 @@ Before spawning reviewers, state the intent in one clear paragraph from the user
 
 ## Step 3, Spawn Reviewers
 
-Launch all reviewers in a single message with the Task tool, one per entry of the `interrogate reviewers` role, labeled Reviewer A, B, and so on to match the entry count. Its default is the table below. Use the **pstack-harness** skill for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call.
+Launch all reviewers in a single message with the Task tool, one per entry of the `interrogate reviewers` role, labeled Reviewer A, B, and so on to match the entry count. Its default is the table below. Call the Skill tool with `pstack-harness` for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call.
 
 | Subagent | Default model |
 |----------|---------------|
@@ -36,7 +36,7 @@ For each reviewer:
 - `model` and effort: that reviewer's resolved arm, per **Spawn a role**.
 - `readonly`: `true`
 
-If the Task tool rejects a configured entry or a table default, use the **pstack-harness** skill to handle it. When it rejects a table default, also open a separate PR to update this step's Default model table and `skills/setup-pstack/examples/pstack-models.md` in the pstack repository, the file the resolver reads. Do not block the review on the slug issue. Never treat an alias entry as a rejected slug.
+If the Task tool rejects a configured entry or a table default, call the Skill tool with `pstack-harness` to handle it. When it rejects a table default, also open a separate PR to update this step's Default model table and `skills/setup-pstack/examples/pstack-models.md` in the pstack repository, the file the resolver reads. Do not block the review on the slug issue. Never treat an alias entry as a rejected slug.
 
 Read `references/reviewer-prompt.md` and fill in the same template for every reviewer with the stated intent, the diff or file contents, the rubric from `references/rubric.md`, and the code-quality lens from `references/code-quality-review.md`.
 

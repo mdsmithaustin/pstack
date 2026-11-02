@@ -7,7 +7,7 @@ description: "Use for 'why does X work this way', 'why we picked Y', design rati
 
 Investigate the motivation and intent behind code. The companion `how` skill answers what the code does and how it works. `why` answers what forces led to its shape.
 
-Each spawn below names a role line in the pstack models config and a default. Use the **pstack-harness** skill to resolve its model, effort, and agent type. Its **Spawn a role** section also covers a missing config, `inherit-parent`, and a rejected value.
+Each spawn below names a role line in the pstack models config and a default. Call the Skill tool with `pstack-harness` to resolve its model, effort, and agent type. Its **Spawn a role** section also covers a missing config, `inherit-parent`, and a rejected value.
 
 Every spawn is `general-purpose` with `readonly: false` (agent mode). **Do not use readonly/Ask mode.** It strips MCP access, which disables the MCP-backed investigators and the synthesizer's citation spot-checks. Investigators still shouldn't write anything.
 
@@ -45,7 +45,7 @@ Map each available MCP to one evidence category:
 
 Source control is always available through git and `gh`. For the other six, classify using the MCP name, server instructions, tool names, and resource descriptors. If an MCP could fit more than one category, choose the one matching its primary evidence. Record ambiguous cases in the coverage map.
 
-Spawn one investigator per category that has a matching MCP, all in a single message so they run concurrently, each owning exactly one tool or MCP. Don't ask one agent to cover multiple MCPs. Use the **pstack-harness** skill for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call. `model`: the `why investigators` line, default `sonnet`.
+Spawn one investigator per category that has a matching MCP, all in a single message so they run concurrently, each owning exactly one tool or MCP. Don't ask one agent to cover multiple MCPs. Call the Skill tool with `pstack-harness` for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call. `model`: the `why investigators` line, default `sonnet`.
 
 Each investigator's prompt is `references/investigator-prompt.md` filled in, plus:
 - the category playbook `references/sources/<source>.md` for the selected MCP, adapted from the examples in `references/source-playbook.md`
