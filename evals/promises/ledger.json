@@ -3915,6 +3915,18 @@
    ],
    "scenario": "technical-writing-run"
   },
+  "triggered-principle-loads-before-code": {
+   "check": "live",
+   "claim": "When a poteto-mode task trigger names a principle for the work at hand, the lead loads that principle's skill before it writes code or hands code-writing to a delegate.",
+   "harness_sensitive": true,
+   "live_case": "roster fixture; prompt `/poteto-mode` with `members.csv is getting a status column: active, leave, or alumni. team counts should only count active members and show how many are on leave next to each team. alumni don't count anywhere. add the column to the sample data too.`; case principle-load-run runs the shipped task-triggers line, and the principle-load-arm-* cases overlay that line with other wordings; pass when the lead loads principle-model-the-domain (a Skill tool call whose result succeeded or a Read of its SKILL.md that returned on Claude Code, a skill injection or a read that covers the whole file on Codex) before its first write of a code or test file or its first code delegate spawn; fail when that write or spawn comes first; evidence records delegate loads separately and when the lead read task-triggers.md.",
+   "owners": [
+    "skills/poteto-mode/references/task-triggers.md",
+    "skills/poteto-mode/SKILL.md",
+    "skills/setup-pstack/scripts/skill-listing.py"
+   ],
+   "scenario": "principle-load-run"
+  },
   "twenty-five-playbooks": {
    "check": "static",
    "claim": "poteto-mode's Playbooks section lists 25 playbooks and skills/poteto-mode/playbooks/ holds exactly those 25 files.",
@@ -7677,6 +7689,9 @@
    "text": "[Autopilot-stack](../../skills/poteto-mode/playbooks/autopilot-stack.md) runs the same owner loop but ships nothing."
   },
   "61b9825f7364": {
+   "also": [
+    "triggered-principle-loads-before-code"
+   ],
    "class": "promise",
    "file": "08-principles.md",
    "promise": "poteto-mode-reads-principles-and-names-applied",
