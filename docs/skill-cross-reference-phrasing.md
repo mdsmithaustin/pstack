@@ -8,7 +8,7 @@ pstack needs one phrasing that a skill's body uses to make the agent load a sibl
 
 ## Recommendation
 
-Decided on 2026-11-01. At every site where a sibling must load, write "Call the Skill tool with `x`", with the bare skill name in code font, as in "Call the Skill tool with `no-comments`." Put it in a numbered step or a direct sentence, never in a "per" or "in" clause. Leave plain mentions (routers, "see also") as they are. Codex, Grok Build, and Hermes have no Skill tool for skills on disk. On those CLIs the **pstack-harness** skill maps the phrase to reading `<installed skills root>/x/SKILL.md` in full.
+Decided on 2026-11-01. At every site where a sibling must load, write "Call the Skill tool with `x`", with the bare skill name in code font, as in "Call the Skill tool with `no-comments`." Put it in a numbered step or a direct sentence, never in a "per" or "in" clause. Leave plain mentions (routers, "see also") as they are. Codex, Grok Build, and Hermes have no Skill tool for skills on disk. The planned **pstack-harness** update will map the phrase to reading `<installed skills root>/x/SKILL.md` in full on those CLIs.
 
 The rollout is pending. Shipped skills still write "Use the **x** skill", and the **pstack-harness** skill still maps that phrase. A separate change rewrites every load site, the mapping, and the matching `PORTING.md` rule.
 
