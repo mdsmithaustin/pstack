@@ -566,7 +566,8 @@ class InterrogateSwarmArena(unittest.TestCase):
         case = load_case("interrogate-run")
         reviewers = [{"seq": 1, "tool": "Agent", "persona": None, "model": "fable", "prompt_head": "You are an adversarial code reviewer. Reviewer A"},
                      {"seq": 2, "tool": "Agent", "persona": None, "model": "opus", "prompt_head": "You are an adversarial code reviewer. Reviewer B"}]
-        events = [{"seq": 1, "kind": "tool_call", "name": "Agent", "input": {}}, {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {}}]
+        events = ([{"seq": 1, "kind": "tool_call", "name": "Agent", "input": {}}, {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {}}]
+                  + bash(5, "pytest -k dedupe", ok=False, head="2 != 1"))
         reply = "## Verdict\n### Intent\n- dedupe\n### Findings\n- bug: `pytest -k dedupe` printed 2, intent needs 1\n### Dropped\n- Reviewer A: 1, no run"
         trace = minimal(events=events, spawns=reviewers, final_reply=reply)
         for pid in ("interrogate-multi-reviewer-adversarial", "interrogate-reviewers-on-different-models",
@@ -580,6 +581,25 @@ class InterrogateSwarmArena(unittest.TestCase):
         edited = minimal(events=events + [edit(3, "/w/relay/dedupe.py")], spawns=reviewers, final_reply=reply)
         self.assertEqual(grade("interrogate-read-only-when-asked", edited, case)["verdict"], FAIL)
         self.assertEqual(grade("interrogate-keeps-run-proven-findings", minimal(final_reply="Findings: fix it"), case)["verdict"], FAIL)
+
+    def test_copilot_a_reported_finding_needs_the_leads_rerun(self):
+        case = load_case("interrogate-run")
+        adversaries = [{"seq": s, "tool": "Agent", "model": m, "prompt_head": f"Break this change. Adversary {label}"}
+                       for s, m, label in ((1, "fable", "A"), (2, "opus", "B"))]
+        spawned = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {}} for s in (1, 2)]
+        reply = ("### Intent\n- dedupe\n### Findings\n- duplicate kept: `python3 -m pytest -k dedupe` printed 2, the intent needs 1 (Adversary A)\n"
+                 "### Dropped\n- Adversary B: 0")
+
+        def verdict(events, final_reply=reply):
+            return grade("interrogate-keeps-run-proven-findings", minimal(events=events, spawns=adversaries, final_reply=final_reply), case)
+        unsupported = verdict(spawned)
+        self.assertEqual(unsupported["verdict"], FAIL, unsupported)
+        self.assertEqual(unsupported["failures"], ["the reply reports a finding but the lead reran no command after the adversaries spawned"])
+        self.assertEqual(verdict(spawned + bash(5, "python3 -m pytest -k dedupe", ok=False, head="1 failed"))["verdict"], PASS)
+        self.assertEqual(verdict(spawned + bash(5, "python3 -m pytest -q", ok=False, head="1 failed"))["verdict"], INCONCLUSIVE)
+        self.assertEqual(verdict([])["verdict"], INCONCLUSIVE)
+        clean = reply.replace("- duplicate kept: `python3 -m pytest -k dedupe` printed 2, the intent needs 1 (Adversary A)", "No verified findings.")
+        self.assertEqual(verdict(spawned, clean)["verdict"], PASS)
 
     def test_swarm_statuses(self):
         case = load_case("swarm-run")

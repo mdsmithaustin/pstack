@@ -1935,6 +1935,18 @@ def interrogate_models(view):
     return failed("all reviewers on one model with identical arms", *evidence)
 
 
+FINDINGS_END = re.compile(r"\n\W*(?:intent|threats|dropped)\b")
+NO_FINDINGS = re.compile(r"^\W*(?:no (?:verified )?findings|none)\b")
+
+
+def reported_findings(low):
+    head = re.search(r"(?:^|\n)\W*findings\b", low)
+    body = low[head.end():] if head else ""
+    end = FINDINGS_END.search(body)
+    body = body[:end.start()] if end else body
+    return "" if NO_FINDINGS.search(body) or not re.search(r"\w", body) else " ".join(body.split())
+
+
 @oracle("interrogate-keeps-run-proven-findings")
 def interrogate_proven_findings(view):
     gate = completion_gate(view)
@@ -1946,6 +1958,22 @@ def interrogate_proven_findings(view):
     evidence.append(f"sections present: {present}")
     if len(present) < len(INTERROGATE_SECTIONS):
         failures.append(f"missing sections: {[s for s in INTERROGATE_SECTIONS if s not in present]}")
+    findings = reported_findings(low)
+    if findings and not failures:
+        adversaries = reviewer_spawns(view)
+        anchor = min((s.get("seq") or 0 for s in adversaries), default=0)
+        reruns = [c for seq, c, _, _ in view.commands() if seq > anchor]
+        quoted = [c for c in reruns if any(p.lower() in findings for p in command_segments(c) + [" ".join(c.split())] if len(p) >= 10)]
+        delegates = [s for s in view.spawns if (s.get("seq") or 0) > anchor and s not in adversaries]
+        evidence.append(f"lead commands after the first adversary spawn: {len(reruns)}, quoted in Findings: {len(quoted)}; "
+                        f"later non-adversary spawns: {len(delegates)} (adversary runs are not in the trace)")
+        if not view.tool_calls:
+            return inconclusive("the trace carries no tool calls, so no run evidence for the reported findings", *evidence)
+        if not quoted and (reruns or delegates):
+            return inconclusive("Findings quote no command the lead reran after the adversaries; a judge must match them",
+                                *evidence, needs_judge=True, excerpt=excerpt_of(view.final_reply))
+        if not quoted:
+            failures.append("the reply reports a finding but the lead reran no command after the adversaries spawned")
     return failed(failures, *evidence) if failures else passed(*evidence)
 
 
