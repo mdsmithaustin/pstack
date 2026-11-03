@@ -746,6 +746,19 @@ class InterrogateSwarmArena(unittest.TestCase):
                                 for i in range(1, 6)]
         self.assertEqual(grade("arena-lead-reads-rationales-and-base", with_tool, case)["verdict"], PASS)
 
+    def test_a_skipped_judge_requires_rationale_contents_not_just_paths(self):
+        case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
+        reply = "Skipped the cross-judge: nothing runs on another model. Base: candidate 3."
+        artifacts = [f"cat /tmp/k/candidate-{i}/relay/cache.py" for i in range(1, 6)]
+        # Arena Phase D requires reading every rationale, even when every artifact was read.
+        for command, ok, expected in (("ls -l", True, FAIL), ("rm", True, FAIL), ("cat", False, INCONCLUSIVE)):
+            with self.subTest(command=command, ok=ok):
+                rationales = [f"{command} /tmp/k/candidate-{i}/rationale.md" for i in range(1, 6)]
+                trace = self.skipped("gpt-5.6-sol", same, reply, artifacts)
+                trace["events"] += [e for i, cmd in enumerate(rationales) for e in bash(40 + 2 * i, cmd, ok=ok)]
+                result = grade("arena-lead-reads-rationales-and-base", trace, case)
+                self.assertEqual(result["verdict"], expected, result)
+
     def test_a_judge_with_no_model_inherits_the_leads_and_fails_when_the_run_used_another(self):
         result = self.judged_by("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], None)
         self.assertEqual(result["verdict"], FAIL, result)

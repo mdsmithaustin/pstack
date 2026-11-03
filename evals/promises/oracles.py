@@ -3280,10 +3280,13 @@ def arena_lead_reads(view):
             kind = "listing" if name in NOT_READS else "read" if name in READ_TOOLS and name not in SKILL_LOAD_TOOLS and returned else "other"
             reads += [(given[f], 0, kind) for f in PATH_FIELDS if isinstance(given.get(f), str)]
     named = rationale_pattern(view, candidates)
-    rationale_reads = [(p, copy) for p, copy, _ in reads if named.search(p) and not skill_rel(p)]
+    rationale_reads = [(p, copy, kind) for p, copy, kind in reads if named.search(p) and not skill_rel(p)]
     others = [p for p, _, _ in reads if not named.search(p) and not skill_rel(p)]
     # An unrolled loop repeats one unresolved path inside a command, and each copy can name a different file.
-    rationales = {(p, copy) if "$" in p else os.path.normpath(p.strip("\"'")) for p, copy in rationale_reads}
+    rationales = {(p, copy) if "$" in p else os.path.normpath(p.strip("\"'"))
+                  for p, copy, kind in rationale_reads if judges or kind == "read"}
+    possible_rationales = {(p, copy) if "$" in p else os.path.normpath(p.strip("\"'"))
+                          for p, copy, kind in rationale_reads if kind != "listing"}
     want = int((view.case.get("expect") or {}).get("candidates") or 2)
     evidence = [f"rationale files read after the last candidate spawn: {len(rationales)}", f"other candidate files read: {len(others)}"]
     if not judges:
@@ -3305,8 +3308,8 @@ def arena_lead_reads(view):
             return passed(*evidence)
         if view.killed:
             return inconclusive("run killed during the read phase", *evidence)
-        if len(rationales) >= want and unsure == unread:
-            return inconclusive("judge skipped; a command names a candidate's directory but is not a file read the grader recognizes",
+        if len(possible_rationales) >= want and unsure == unread:
+            return inconclusive("judge skipped; a command names a candidate artifact or rationale but is not a file read the grader recognizes",
                                 *evidence, needs_judge=True, excerpt=excerpt_of("\n".join(c for seq, c, _, _ in view.commands() if seq > after)))
         return failed("judge skipped, and the lead did not read every rationale and every candidate's full artifact", *evidence)
     if len(rationales) >= want and others:
