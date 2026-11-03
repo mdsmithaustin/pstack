@@ -639,6 +639,13 @@ class InterrogateSwarmArena(unittest.TestCase):
         self.assertTrue(one.get("needs_judge"), one)
         for final_reply in (reply, bulleted):
             self.assertEqual(verdict("python3 -m pytest -k dedupe", "python3 scripts/expire.py --ttl 0", final_reply=final_reply)["verdict"], PASS)
+        grouped = ("### Intent\n- dedupe\n### Findings\n#### High\n"
+                   "- duplicate kept: `python3 -m pytest -k dedupe` printed 2 (Adversary A)\n"
+                   "- stale entry: `python3 scripts/expire.py --ttl 0` printed 1 row (Adversary B)\n"
+                   "### Dropped\n- Adversary B: 0")
+        one = verdict("python3 -m pytest -k dedupe", final_reply=grouped)
+        self.assertEqual(one["verdict"], INCONCLUSIVE, one)
+        self.assertEqual(verdict("python3 -m pytest -k dedupe", "python3 scripts/expire.py --ttl 0", final_reply=grouped)["verdict"], PASS)
 
     def test_copilot_a_rerun_matches_a_finding_only_with_its_arguments(self):
         case = load_case("interrogate-run")

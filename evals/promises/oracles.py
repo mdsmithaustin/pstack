@@ -1959,6 +1959,7 @@ FINDINGS_END = re.compile(r"\n\W*(?:intent|threats|dropped)\b")
 NO_FINDINGS = re.compile(r"^\W*(?:no (?:verified )?findings|none)\b")
 FINDING_ITEM = re.compile(r"(?m)^([ \t]*)(?:[-*•]|\d+[.)])[ \t]+")
 FINDING_HEADING = re.compile(r"(?m)^[ \t]*#{1,6}[ \t]+")
+NUMBERED_HEADING = re.compile(r"[ \t]*#{1,6}[ \t]+\d+[.)]")
 
 
 def reported_findings(low):
@@ -1970,9 +1971,18 @@ def reported_findings(low):
         return []
     starts = [m.start() for m in FINDING_HEADING.finditer(body)]
     if not starts:
-        items = list(FINDING_ITEM.finditer(body))
-        indent = min((len(m.group(1)) for m in items), default=0)
-        starts = [m.start() for m in items if len(m.group(1)) == indent] or [0]
+        return finding_items(body)
+    sections = [body[a:b] for a, b in zip(starts, starts[1:] + [len(body)])]
+    # A numbered heading is one finding; a heading like "High" groups the findings listed under it.
+    return [item for section in sections
+            for item in ([" ".join(section.split())] if NUMBERED_HEADING.match(section) else finding_items(section.split("\n", 1)[-1]))
+            if re.search(r"\w", item)]
+
+
+def finding_items(body):
+    items = list(FINDING_ITEM.finditer(body))
+    indent = min((len(m.group(1)) for m in items), default=0)
+    starts = [m.start() for m in items if len(m.group(1)) == indent] or [0]
     return [" ".join(body[a:b].split()) for a, b in zip(starts, starts[1:] + [len(body)])]
 
 
