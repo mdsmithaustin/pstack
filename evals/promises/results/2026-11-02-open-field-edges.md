@@ -10,17 +10,13 @@ The proposed fix was skill text saying that an edge neither the spec nor current
 
 ## What ran
 
-Both cases use the strides fixture. The first history step adds a club config whose `log` key must start with `log://` and exits 2 otherwise. The second adds `docs/export.md`, which introduces an `export` key. Its one example is `report://weekly`, and its text never restricts the scheme.
-
-| Case | `export` in the spec | Held-out edges |
-|---|---|---|
-| `feature-edges-open-field` | optional | `open-scheme`: `export: other://x` without `--out` exits 0 and prints the totals. `open-scheme-out`: the same value with `--out` is not an error, because the spec defines the export path as what follows `://`. |
-| `feature-edges-required-field` | "now required", and a config without it exits 2 | the same two edges |
+The [suite guide](../README.md#feature-spec-edges) describes `feature-edges-open-field` and `feature-edges-required-field`, their histories, held-out checks, and shared grader.
 
 The second case tests whether the word "required" triggers the extra check, because every benchmark run that over-validated added the required check and the scheme check together.
 
 - Skills pin: `f17b6305` (main after #393). Command: `python3 evals/promises/live.py run --harness <claude-code|codex> --model <claude-sonnet-5-5|gpt-6.1-sol> --effort high --runs <3|2> --skills-at f17b6305 --case <case> --out <dir>`.
-- The oracle is `feature-keeps-open-edges-open`, which reuses the `feature-delivers-spec-edges` function and runs the case's `held_out.py` after the session.
+
+At the time of these runs, `open-scheme-out` checked the exit status and printed totals but did not check exported files. The current check also verifies those files. The grades below are the original results, not reruns with the stricter check.
 
 ## Results
 

@@ -52,7 +52,8 @@ CHECKS = [
     ("export-files", "core", LOG_KEY + EXPORT_KEY, True, 0, TOTALS, MEMBER_FILES),
     ("export-needs-out", "core", LOG_KEY + EXPORT_KEY, False, 0, TOTALS, {}),
     ("open-scheme", "edge", LOG_KEY + "export: other://x\n", False, 0, TOTALS, {}),
-    ("open-scheme-out", "edge", LOG_KEY + "export: other://x\n", True, 0, TOTALS, None),
+    ("open-scheme-out", "edge", LOG_KEY + "export: other://x\n", True, 0, TOTALS,
+     {"site/x/Ada Lim.txt": "Ada Lim: 9.1 km", "site/x/Ben Okafor.txt": "Ben Okafor: 3.2 km"}),
 ]
 EDGES = [check[0] for check in CHECKS if check[1] == "edge"]
 

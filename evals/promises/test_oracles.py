@@ -3557,6 +3557,26 @@ class ExportTest(unittest.TestCase):
                          ["held-out edge check open-scheme failed", "held-out edge check open-scheme-out failed"])
         self.assertEqual(result["measures"]["core_passed"], self.CORE_CHECKS)
 
+    def test_a_delivery_that_silently_skips_another_export_scheme_fails(self):
+        root = self.project()
+        (root / "strides" / "export.py").write_text('''\
+from pathlib import Path
+
+
+def write_export(out, export, rows):
+    if not export.startswith("report://"):
+        return
+    folder = Path(out) / export.partition("://")[2]
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, km in rows:
+        (folder / f"{name}.txt").write_text(f"{name}: {km:.1f} km\\n", encoding="utf-8")
+''')
+        result = grade(self.PID, minimal(events=[edit(1, "strides/export.py")]), load_case(self.CASE_ID), root)
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual([f.split(":")[0] for f in result["failures"]],
+                         ["held-out edge check open-scheme-out failed"])
+        self.assertEqual(result["measures"]["core_passed"], self.CORE_CHECKS)
+
     def test_a_delivered_test_catches_the_mutants_whose_rejection_it_reaches(self):
         root = self.project()
         (root / "tests" / "test_export.py").write_text(self.OTHER_SCHEME)
