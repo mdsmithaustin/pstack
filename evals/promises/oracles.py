@@ -61,8 +61,8 @@ SKILL_LOAD_TOOLS = {"skill_view", "Skill"}
 SHELL_TOOLS = {"Bash": "command", "exec_command": "cmd", "terminal": "command",
                "run_terminal_command": "command", "shell": "command", "bash": "command"}
 READ_VERBS = {"cat", "head", "tail", "sed", "less", "more", "nl", "bat", "awk", "grep", "rg", "python3", "python"}
-CONTENT_VERBS = READ_VERBS - {"grep", "rg", "python3", "python"}
-BOUNDED_READ = re.compile(r"(?:^|[;&|]\s*)(?:head|tail)\b|\bsed\s+-n\b")
+CONTENT_VERBS = READ_VERBS - {"head", "tail", "sed", "awk", "grep", "rg", "python3", "python"}
+BOUNDED_READ = re.compile(r"(?:^|\|)\s*(?:head|tail|sed|awk)\b")
 NOT_READS = {"ls", "tree", "stat", "du", "rm", "mkdir", "rmdir", "touch", "test", "[", "cd", "git worktree", "git branch", "git clean",
              "git status", "git rev-parse", "Glob", "LS"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "patch", "write_file", "apply_patch",
@@ -309,6 +309,7 @@ def expand_assignments(command):
 
 
 SHELL_SEGMENT = re.compile(r"&&|\|\||[;|\n]")
+SHELL_PIPELINE = re.compile(r"&&|\|\||[;\n]")
 
 
 def shell_verb(words):
@@ -322,19 +323,20 @@ def shell_verb(words):
 
 def shell_path_verbs(command):
     base, out = "", []
-    for segment in SHELL_SEGMENT.split(expand_assignments(command)):
-        words = segment.strip().split()
-        if words[:1] == ["cd"] and len(words) > 1:
-            target = words[1].strip("\"'")
-            base = target if target.startswith("/") or not base else f"{base}/{target}"
-            continue
-        for token in shell_paths(segment):
-            out.append((shell_verb(words), token if token.startswith("/") or not base else f"{base}/{token}"))
+    for pipeline in SHELL_PIPELINE.split(expand_assignments(command)):
+        for segment in SHELL_SEGMENT.split(pipeline):
+            words = segment.strip().split()
+            if words[:1] == ["cd"] and len(words) > 1:
+                target = words[1].strip("\"'")
+                base = target if target.startswith("/") or not base else f"{base}/{target}"
+                continue
+            for token in shell_paths(segment):
+                out.append((shell_verb(words), token if token.startswith("/") or not base else f"{base}/{token}", pipeline))
     return out
 
 
 def resolved_shell_paths(command):
-    return [path for _, path in shell_path_verbs(command)]
+    return [path for _, path, _ in shell_path_verbs(command)]
 
 
 def shell_paths(command):
@@ -3282,13 +3284,12 @@ def arena_lead_reads(view):
         if call.get("name") in SHELL_TOOLS:
             command = str(given.get(SHELL_TOOLS[call["name"]]) or "")
             written = {os.path.normpath(w) for w in shell_writes(command) + python_writes(command)}
-            listing = {shell_verb(segment.split()) for segment in SHELL_SEGMENT.split(strip_heredocs(command))} - {""} <= NOT_READS
-            whole = returned and not BOUNDED_READ.search(command)
             found = []
-            for verb, token in shell_path_verbs(strip_heredocs(command)):
+            for verb, token, pipeline in shell_path_verbs(strip_heredocs(command)):
                 if ASSIGNMENT.fullmatch(" " + token):
                     continue
-                kind = "listing" if listing else "read" if verb in CONTENT_VERBS and whole else "other"
+                whole = returned and not BOUNDED_READ.search(pipeline)
+                kind = "listing" if verb in NOT_READS else "read" if verb in CONTENT_VERBS and whole else "other"
                 paths = re.findall(r"['\"]([^'\"]*[/.][^'\"]*)['\"]", token) if "(" in token else [token]
                 found += [(p, kind) for p in paths if os.path.normpath(p.strip("\"'").lstrip("<>")) not in written]
             reads += [(p, [q for q, _ in found[:n]].count(p), k) for n, (p, k) in enumerate(found)]

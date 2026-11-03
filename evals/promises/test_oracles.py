@@ -798,18 +798,44 @@ class InterrogateSwarmArena(unittest.TestCase):
     def test_copilot_after_a_skipped_judge_a_bounded_read_is_not_a_full_read(self):
         case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
         reply = "Skipped the cross-judge: nothing runs on another model. Base: candidate 3."
-        rationales = [f"cat /tmp/k/candidate-{i}/rationale.md" for i in range(1, 6)]
-        for per_candidate in ("head -n 1 /tmp/k/candidate-{i}/relay/cache.py", "sed -n 1,20p /tmp/k/candidate-{i}/relay/cache.py"):
-            with self.subTest(command=per_candidate):
-                trace = self.skipped("gpt-5.6-sol", same, reply, rationales + [per_candidate.format(i=i) for i in range(1, 6)])
+        for partial, full in (("relay/cache.py", "rationale.md"), ("rationale.md", "relay/cache.py")):
+            reads = [f"cat /tmp/k/candidate-{i}/{full}" for i in range(1, 6)]
+            for command in ("head -n 1 {path}", "tail -n 5 {path}", "sed -n 1,20p {path}",
+                            "sed -e 1,10p -n {path}", "sed --quiet 1,10p {path}", "awk 'NR<10' {path}",
+                            "cat {path} | head -n 5", "cat {path} | tail -n 5", "cat {path} | sed --quiet 1,10p",
+                            "cat {path} | awk 'NR<10'"):
+                with self.subTest(partial=partial, command=command):
+                    bounded = [command.format(path=f"/tmp/k/candidate-{i}/{partial}") for i in range(1, 6)]
+                    trace = self.skipped("gpt-5.6-sol", same, reply, reads + bounded)
+                    result = grade("arena-lead-reads-rationales-and-base", trace, case)
+                    self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+                    self.assertTrue(result.get("needs_judge"), result)
+            for bounds in ({"limit": 5}, {"offset": 5}):
+                with self.subTest(partial=partial, bounds=bounds):
+                    limited = self.skipped("gpt-5.6-sol", same, reply, reads)
+                    limited["events"] += [{"seq": 40 + i, "kind": "tool_call", "name": "Read",
+                                           "input": {"file_path": f"/tmp/k/candidate-{i}/{partial}", **bounds}}
+                                          for i in range(1, 6)]
+                    result = grade("arena-lead-reads-rationales-and-base", limited, case)
+                    self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_full_candidate_reads_survive_unrelated_bounded_commands(self):
+        case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
+        reply = "Skipped the cross-judge: nothing runs on another model. Base: candidate 3."
+        for command in ("cat {root}/relay/cache.py {root}/rationale.md && tail -n 5 run.log",
+                        "cat {root}/relay/cache.py {root}/rationale.md; head run.log",
+                        "cat {root}/relay/cache.py {root}/rationale.md || tail run.log",
+                        "head run.log; cat {root}/relay/cache.py {root}/rationale.md",
+                        "tail run.log && cat {root}/relay/cache.py {root}/rationale.md",
+                        "head run.log\ncat {root}/relay/cache.py {root}/rationale.md",
+                        "cd {root} && cat relay/cache.py rationale.md && tail -n 5 run.log",
+                        "cat {root}/relay/cache.py && head run.log; cat {root}/rationale.md",
+                        "for f in {root}/relay/cache.py {root}/rationale.md; do cat $f; done; head run.log"):
+            with self.subTest(command=command):
+                reads = [command.format(root=f"/tmp/k/candidate-{i}") for i in range(1, 6)]
+                trace = self.skipped("gpt-5.6-sol", same, reply, reads)
                 result = grade("arena-lead-reads-rationales-and-base", trace, case)
-                self.assertEqual(result["verdict"], INCONCLUSIVE, result)
-                self.assertTrue(result.get("needs_judge"), result)
-        limited = self.skipped("gpt-5.6-sol", same, reply, rationales)
-        limited["events"] += [{"seq": 40 + i, "kind": "tool_call", "name": "Read", "input": {"file_path": f"/tmp/k/candidate-{i}/relay/cache.py", "limit": 5}}
-                              for i in range(1, 6)]
-        result = grade("arena-lead-reads-rationales-and-base", limited, case)
-        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+                self.assertEqual(result["verdict"], PASS, result)
 
     def test_a_skipped_judge_requires_rationale_contents_not_just_paths(self):
         case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
