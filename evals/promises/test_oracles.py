@@ -675,10 +675,15 @@ class InterrogateSwarmArena(unittest.TestCase):
         unchecked = self.judged_by("gpt-5.6-sol", ["gpt-5.6-sol"] * 5, "gpt-5.6-sol", "Base: candidate 3. The model check did not run.")
         self.assertEqual(unchecked["verdict"], INCONCLUSIVE, unchecked)
 
-    def skipped(self, lead, models, reply, reads=()):
+    def skipped(self, lead, models, reply, reads=(), pool=None):
         candidates = [{"seq": i, "tool": "Agent", "model": m, "prompt_head": f"Candidate {i}: write to /tmp/k/candidate-{i}, with `rationale.md`"}
                       for i, m in enumerate(models, 1)]
         events = [{"seq": i, "kind": "tool_call", "name": "Agent", "input": {}} for i in range(1, len(models) + 1)]
+        if pool is not None:
+            rows = "\n".join(json.dumps({"role": "arena cross-judge pool", "arm": n, "model": m, "effort": "high", "source": "user flat"})
+                             for n, m in enumerate(pool, 1))
+            events += bash(15, 'python3 "$PSTACK_SKILLS_ROOT/setup-pstack/scripts/check-models-config.py" --resolve --harness codex "arena cross-judge pool"',
+                           head=rows[:400])
         events += [e for n, command in enumerate(reads) for e in bash(20 + 2 * n, command)]
         trace = minimal(events=events, spawns=candidates, final_reply=reply)
         trace["model"] = lead
@@ -687,12 +692,29 @@ class InterrogateSwarmArena(unittest.TestCase):
     def test_copilot_an_evidenced_judge_skip_passes_the_judge_promise(self):
         case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
         reply = "Phase C skipped the judge: no cross-judge pool entry runs on another model. Base: candidate 3. Grafts: retries from candidate 1."
-        self.assertEqual(grade("arena-readonly-cross-judge", self.skipped("gpt-5.6-sol", same, reply), case)["verdict"], PASS)
-        mixed = grade("arena-readonly-cross-judge", self.skipped("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], reply), case)
-        self.assertEqual(mixed["verdict"], FAIL, mixed)
+        resolved = self.skipped("gpt-5.6-sol", same, reply, pool=["auto", "gpt-5.6-sol", "inherit-parent"])
+        self.assertEqual(grade("arena-readonly-cross-judge", resolved, case)["verdict"], PASS)
         self.assertEqual(grade("arena-readonly-cross-judge", self.skipped("gpt-5.6-sol", same, "Base: candidate 3."), case)["verdict"], FAIL)
         unclear = self.skipped("gpt-5.6-sol", same, "The judge was not needed. Base: candidate 3.")
         self.assertEqual(grade("arena-readonly-cross-judge", unclear, case)["verdict"], INCONCLUSIVE)
+
+    def test_copilot_a_judge_skip_is_graded_on_the_resolved_pool_not_the_runners(self):
+        case, same, mixed = load_case("arena-run"), ["gpt-5.6-sol"] * 5, ["fable", "opus", "sonnet", "fable", "opus"]
+        reply = "Phase C skipped the judge: no cross-judge pool entry runs on another model. Base: candidate 3. Grafts: retries from candidate 1."
+
+        def verdict(lead, models, pool=None):
+            return grade("arena-readonly-cross-judge", self.skipped(lead, models, reply, pool=pool), case)
+        self.assertEqual(verdict("claude-opus-5-5", mixed, ["auto", "auto"])["verdict"], PASS)
+        unresolved = verdict("gpt-5.6-sol", same)
+        self.assertEqual(unresolved["verdict"], INCONCLUSIVE, unresolved)
+        self.assertEqual(verdict("claude-opus-5-5", mixed)["verdict"], INCONCLUSIVE)
+        other = verdict("gpt-5.6-sol", same, ["auto", "opus"])
+        self.assertEqual(other["verdict"], FAIL, other)
+        self.assertEqual(other["failures"], ["judge skipped although a cross-judge pool entry runs on a model other than the lead's"])
+        self.assertEqual(verdict("claude-opus-5-5", mixed, ["sonnet"])["verdict"], FAIL)
+        self.assertEqual(verdict("claude-opus-5-5", mixed, ["opus", "claude-opus-5-5"])["verdict"], PASS)
+        cut = verdict("gpt-5.6-sol", same, ["auto", "gpt-5.6-sol", "auto", "gpt-5.6-sol", "auto"])
+        self.assertEqual(cut["verdict"], INCONCLUSIVE, cut)
 
     def test_copilot_a_skipped_judge_needs_every_candidates_full_artifact_read(self):
         case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5

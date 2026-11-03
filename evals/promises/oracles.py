@@ -3155,6 +3155,27 @@ def same_model(spawned, lead):
 
 JUDGE_SKIPPED = re.compile(r"\bskip\w*\b[^.\n]{0,40}\b(?:cross-?)?judge\b|\b(?:cross-?)?judge\b[^.\n]{0,20}\bskipped\b|\b(?:no|without an?)\s+(?:cross-?)?judge\b", re.I)
 MODEL_CHECK_SKIPPED = re.compile(r"model check (?:did not|didn't|was not|wasn't) run|did(?: not|n't) run the model check", re.I)
+JUDGE_POOL = "arena cross-judge pool"
+PARENT_MODELS = {"auto", "inherit-parent"}
+RESULT_HEAD = 400
+
+
+def resolved_pool(view):
+    for _, command, ok, head in reversed(view.commands()):
+        if ok is False or "check-models-config" not in command:
+            continue
+        rows = []
+        for line in filter(str.strip, head.splitlines()):
+            try:
+                row = json.loads(line)
+            except ValueError:
+                row = None
+            rows.append(row if isinstance(row, dict) else None)
+        pool = [r.get("model") for r in rows if r and r.get("role") == JUDGE_POOL]
+        if pool:
+            cut = None in rows or (len(head) >= RESULT_HEAD and rows[-1].get("role") == JUDGE_POOL)
+            return pool, not cut
+    return None, False
 
 
 @oracle("arena-readonly-cross-judge")
@@ -3172,12 +3193,16 @@ def arena_judge(view):
                 return inconclusive("no judge spawned and the reply's judge wording neither confirms nor rules out a skip", *evidence,
                                     needs_judge=True, excerpt=excerpt_of(view.final_reply))
             return failed("no cross-judge spawned and the reply does not say Phase C skipped it", *evidence)
-        spawned_same = [same_model(s["model"], view.model) for s in view.spawns if s.get("model")]
-        if view.model and False in spawned_same:
-            return failed("judge skipped although the run used a model other than the lead's", *evidence)
-        if not view.model or None in spawned_same:
-            return inconclusive("judge skipped, but the models cannot all be compared with the lead's", *evidence)
-        return passed(*evidence, "judge skipped: nothing in the run ran on another model")
+        pool, complete = resolved_pool(view)
+        evidence.append(f"resolved cross-judge pool: {pool}, every arm shown: {complete}")
+        if pool is None:
+            return inconclusive("judge skipped, and no resolver output in the trace shows the cross-judge pool", *evidence)
+        pool_same = [True if m in PARENT_MODELS else same_model(m, view.model) for m in pool]
+        if view.model and False in pool_same:
+            return failed("judge skipped although a cross-judge pool entry runs on a model other than the lead's", *evidence)
+        if not view.model or None in pool_same or not complete:
+            return inconclusive("judge skipped, but the pool's models cannot all be compared with the lead's", *evidence)
+        return passed(*evidence, "judge skipped: every cross-judge pool entry runs on the lead's model")
     judge = judges[-1]
     readonly = bool(re.search(r"read[- ]only|do not (?:edit|write|modify)", judge.get("prompt_head") or "", re.I))
     evidence.append(f"judge brief marked read-only: {readonly}")
