@@ -6747,6 +6747,14 @@
    ],
    "text": "[Foundational Thinking](../../skills/principle-foundational-thinking/SKILL.md) chooses the core data structures before writing logic."
   },
+  "43c1d0a5aed9": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "In the `arena cross-judge pool`, such an entry is the parent model, so arena never judges with it."
+  },
   "43d91940ae66": {
    "class": "promise",
    "file": "02-poteto-mode.md",
@@ -12862,8 +12870,11 @@
    "text": "It writes `.agents/skills/verify-<app>/`, agent-facing instructions with exact Launch, Doctor, Drive, Evidence, and Cleanup sections, a Helpers section for any script it ships, plus a feature map under `features/` that indexes what the app does and what result proves each feature works."
   },
   "e9b9a90fb70c": {
-   "class": "context",
+   "class": "substituted",
    "file": "10-recipes-and-pitfalls.md",
+   "ported_as": [
+    "fae075f9ac87"
+   ],
    "sources": [
     "upstream"
    ],
