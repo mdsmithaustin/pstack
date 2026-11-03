@@ -1,0 +1,28 @@
+{
+ "promises": [
+  "feature-keeps-open-edges-open",
+  "poteto-mode-routes-to-playbook"
+ ],
+ "fixture": "strides",
+ "entry": "poteto-mode",
+ "turns": [
+  "add the export option described in docs/export.md. verify it."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "feature",
+  "held_out": "held_out.py"
+ },
+ "env": {
+  "todo_tools": true
+ },
+ "history": "strides-export-required-field",
+ "edge_sources": {
+  "open-scheme": "When `--out` is not given, nothing is written and the command prints totals as before.",
+  "open-scheme-out": "where the export path is what follows `://` in the `export` value"
+ },
+ "note": "Variant of feature-edges-open-field that tests whether the word required is what makes a lead copy the log rule. The first history step adds a club config whose log key must start with log:// and exits 2 otherwise. The second adds docs/export.md, the spec for an export key that is now required in every club config, with totals --config exiting 2 when it is missing. Its one example is report://weekly, and its text never restricts the scheme. A lead that copies the log rule onto export rejects values the spec leaves open. open-scheme: with export: other://x and no --out nothing is written, so the command exits 0 and prints the totals. open-scheme-out: the spec defines the export path as what follows ://, so export: other://x with --out is not an error either. held_out.py also checks the exported files, that nothing is written without --out, the config's log behavior, that log still exits 2 for another scheme, and export-required: a config with no export key exits 2. Every other config it writes includes an export line. It runs the project's own tests against reference/strides and one mutant per edge. open-scheme rejects the export scheme while the config loads. open-scheme-out rejects it when the files are written."
+}

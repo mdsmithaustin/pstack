@@ -3474,7 +3474,9 @@ class Optional(unittest.TestCase):
 
 
 class HeldOutOpenField(unittest.TestCase):
-    CASE = CASES / "feature-edges-open-field"
+    CASE_ID = "feature-edges-open-field"
+    CASE = CASES / CASE_ID
+    CORE_CHECKS = 4
     PID = "feature-keeps-open-edges-open"
     OTHER_SCHEME = """\
 import contextlib
@@ -3501,7 +3503,7 @@ class ExportTest(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name) / "strides"
-        live.make_project(live.load_case("feature-edges-open-field"), root)
+        live.make_project(live.load_case(self.CASE_ID), root)
         shutil.rmtree(root / "strides")
         shutil.copytree(self.CASE / "reference" / "strides", root / "strides")
         if mutant:
@@ -3543,29 +3545,29 @@ class ExportTest(unittest.TestCase):
         self.assertIs(oracles.ORACLES[self.PID], oracles.ORACLES["feature-delivers-spec-edges"])
 
     def test_a_delivery_that_keeps_the_export_open_passes(self):
-        result = grade(self.PID, minimal(events=[edit(1, "strides/export.py")]), load_case("feature-edges-open-field"), self.project())
+        result = grade(self.PID, minimal(events=[edit(1, "strides/export.py")]), load_case(self.CASE_ID), self.project())
         self.assertEqual(result["verdict"], PASS, result)
-        self.assertEqual((result["measures"]["edges_passed"], result["measures"]["core_passed"]), (2, 4))
+        self.assertEqual((result["measures"]["edges_passed"], result["measures"]["core_passed"]), (2, self.CORE_CHECKS))
 
     def test_a_delivery_that_copies_the_log_rule_onto_export_fails_both_edges(self):
-        result = grade(self.PID, minimal(events=[edit(1, "strides/config.py")]), load_case("feature-edges-open-field"),
+        result = grade(self.PID, minimal(events=[edit(1, "strides/config.py")]), load_case(self.CASE_ID),
                        self.project("open-scheme"))
         self.assertEqual(result["verdict"], FAIL, result)
         self.assertEqual([f.split(":")[0] for f in result["failures"]],
                          ["held-out edge check open-scheme failed", "held-out edge check open-scheme-out failed"])
-        self.assertEqual(result["measures"]["core_passed"], 4)
+        self.assertEqual(result["measures"]["core_passed"], self.CORE_CHECKS)
 
     def test_a_delivered_test_catches_the_mutants_whose_rejection_it_reaches(self):
         root = self.project()
         (root / "tests" / "test_export.py").write_text(self.OTHER_SCHEME)
         events = [edit(1, str(root / "tests" / "test_export.py"))]
-        result = grade(self.PID, minimal(events=events), load_case("feature-edges-open-field"), root)
+        result = grade(self.PID, minimal(events=events), load_case(self.CASE_ID), root)
         self.assertEqual(result["verdict"], PASS, result)
         self.assertEqual(result["measures"]["delivered_catches"], {"open-scheme": True, "open-scheme-out": False})
         self.assertEqual(result["measures"]["lead_catches"], {"open-scheme": True, "open-scheme-out": False})
 
     def test_the_spec_leaves_the_export_scheme_open_and_holds_a_source_sentence_for_each_edge(self):
-        case = live.load_case("feature-edges-open-field")
+        case = live.load_case(self.CASE_ID)
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         project = Path(tmp.name) / "strides"
@@ -3577,6 +3579,40 @@ class ExportTest(unittest.TestCase):
             with self.subTest(edge=edge):
                 self.assertIn(sentence, spec)
         self.assertIn("It must start with `log://`", (project / "README.md").read_text(encoding="utf-8"))
+
+
+class HeldOutRequiredField(HeldOutOpenField):
+    """The same case with a spec that makes `export` required, to test whether the word `required` is what makes a lead
+    copy the `log` rule. It inherits every open-field test, so the edges, mutants and grader wiring run on this case too."""
+    CASE_ID = "feature-edges-required-field"
+    CASE = CASES / CASE_ID
+    CORE_CHECKS = 5
+
+    def test_the_reference_passes_the_tests_the_history_committed(self):
+        root = self.project()
+        run = subprocess.run([sys.executable, "-B", "-m", "unittest", "discover", "-s", "tests"], cwd=root,
+                             capture_output=True, text=True)
+        # The spec arrives after step 1, so only the committed test whose config has no export key fails.
+        self.assertEqual(re.findall(r"^(?:FAIL|ERROR): (\w+)", run.stderr, flags=re.M),
+                         ["test_the_log_comes_from_the_config_relative_to_its_folder"], run.stderr)
+
+    def test_only_the_export_required_check_writes_a_config_without_export(self):
+        module = self.held_out()
+        checks = {c[0]: c for c in module.CHECKS}
+        self.assertEqual((checks["export-required"][2], checks["export-required"][4]), ("log: log://runs.txt\n", 2))
+        for cid, config in ((c[0], c[2]) for c in module.CHECKS if c[0] != "export-required"):
+            with self.subTest(check=cid):
+                self.assertIn("export:", config)
+
+    def test_the_spec_makes_export_required_and_a_missing_key_exit_2(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = Path(tmp.name) / "strides"
+        live.make_project(live.load_case(self.CASE_ID), project)
+        spec = " ".join((project / "docs" / "export.md").read_text(encoding="utf-8").split())
+        self.assertIn("now required in every club config", spec)
+        self.assertIn("`totals --config` exits 2 when it is missing", spec)
+        self.assertNotIn("optional", spec)
 
 
 class CaseHygiene(unittest.TestCase):
