@@ -631,12 +631,12 @@ class InterrogateSwarmArena(unittest.TestCase):
         self.assertEqual(grade("arena-candidate-count-adjustable", three, case)["verdict"], FAIL)
         self.assertEqual(grade("arena-lead-reads-rationales-and-base", trace, case)["verdict"], FAIL)
 
-    def judged_by(self, lead, models, judge_model):
+    def judged_by(self, lead, models, judge_model, reply="Base: candidate 3. Grafts: the hashing from candidate 1."):
         candidates = [{"seq": i, "tool": "Agent", "persona": "poteto-agent", "model": m, "prompt_head": f"Candidate {i}: write to /tmp/relay-key/candidate-{i}"}
                       for i, m in enumerate(models, 1)]
         events = [{"seq": i, "kind": "tool_call", "name": "Agent", "input": {}} for i in range(1, len(models) + 1)]
         judge = {"seq": 9, "tool": "Agent", "persona": None, "model": judge_model, "prompt_head": "You are the read-only cross-judge. Score each against the rubric."}
-        trace = minimal(events=events, spawns=candidates + [judge], final_reply="Base: candidate 3. Grafts: the hashing from candidate 1.")
+        trace = minimal(events=events, spawns=candidates + [judge], final_reply=reply)
         trace["model"] = lead
         return grade("arena-readonly-cross-judge", trace, load_case("arena-run"))
 
@@ -649,11 +649,42 @@ class InterrogateSwarmArena(unittest.TestCase):
     def test_a_judge_on_the_leads_model_fails_when_the_run_used_another(self):
         result = self.judged_by("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], "opus")
         self.assertEqual(result["verdict"], FAIL, result)
-        self.assertEqual(result["failures"], ["judge runs on the lead's model although the run used another"])
+        self.assertEqual(result["failures"], ["judge runs on the lead's model"])
 
-    def test_a_judge_on_the_leads_model_passes_when_no_other_model_was_used(self):
+    def test_copilot_a_judge_on_the_leads_model_fails_even_when_no_other_model_was_used(self):
         result = self.judged_by("gpt-5.6-sol", ["gpt-5.6-sol"] * 5, "gpt-5.6-sol")
-        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["verdict"], FAIL, result)
+        unchecked = self.judged_by("gpt-5.6-sol", ["gpt-5.6-sol"] * 5, "gpt-5.6-sol", "Base: candidate 3. The model check did not run.")
+        self.assertEqual(unchecked["verdict"], INCONCLUSIVE, unchecked)
+
+    def skipped(self, lead, models, reply, reads=()):
+        candidates = [{"seq": i, "tool": "Agent", "model": m, "prompt_head": f"Candidate {i}: write to /tmp/k/candidate-{i}, with `rationale.md`"}
+                      for i, m in enumerate(models, 1)]
+        events = [{"seq": i, "kind": "tool_call", "name": "Agent", "input": {}} for i in range(1, len(models) + 1)]
+        events += [e for n, command in enumerate(reads) for e in bash(20 + 2 * n, command)]
+        trace = minimal(events=events, spawns=candidates, final_reply=reply)
+        trace["model"] = lead
+        return trace
+
+    def test_copilot_an_evidenced_judge_skip_passes_the_judge_promise(self):
+        case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
+        reply = "Phase C skipped the judge: no cross-judge pool entry runs on another model. Base: candidate 3. Grafts: retries from candidate 1."
+        self.assertEqual(grade("arena-readonly-cross-judge", self.skipped("gpt-5.6-sol", same, reply), case)["verdict"], PASS)
+        mixed = grade("arena-readonly-cross-judge", self.skipped("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], reply), case)
+        self.assertEqual(mixed["verdict"], FAIL, mixed)
+        self.assertEqual(grade("arena-readonly-cross-judge", self.skipped("gpt-5.6-sol", same, "Base: candidate 3."), case)["verdict"], FAIL)
+        unclear = self.skipped("gpt-5.6-sol", same, "The judge was not needed. Base: candidate 3.")
+        self.assertEqual(grade("arena-readonly-cross-judge", unclear, case)["verdict"], INCONCLUSIVE)
+
+    def test_copilot_a_skipped_judge_needs_every_candidates_full_artifact_read(self):
+        case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
+        reply = "Skipped the cross-judge: nothing runs on another model. Base: candidate 3."
+        rationales = [f"cat /tmp/k/candidate-{i}/rationale.md" for i in range(1, 6)]
+        artifacts = [f"cat /tmp/k/candidate-{i}/relay/cache.py" for i in range(1, 6)]
+        full = grade("arena-lead-reads-rationales-and-base", self.skipped("gpt-5.6-sol", same, reply, rationales + artifacts), case)
+        self.assertEqual(full["verdict"], PASS, full)
+        base_only = grade("arena-lead-reads-rationales-and-base", self.skipped("gpt-5.6-sol", same, reply, rationales + artifacts[2:3]), case)
+        self.assertEqual(base_only["verdict"], FAIL, base_only)
 
     def test_a_judge_with_no_model_inherits_the_leads_and_fails_when_the_run_used_another(self):
         result = self.judged_by("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], None)
@@ -4171,7 +4202,7 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
 
     def test_n6_inherit_is_the_leads_model(self):
         self.assertEqual(self.judged("inherit", "claude-opus-5-5", ["opus", "sonnet"]), FAIL)
-        self.assertEqual(self.judged("opus", "claude-opus-5-5", ["inherit", "inherit"]), PASS)
+        self.assertEqual(self.judged("opus", "claude-opus-5-5", ["inherit", "inherit"]), FAIL)
 
     def test_n7_tierless_slugs_match_whole_or_by_vendor(self):
         self.assertEqual(self.judged("claude", "claude", ["gpt-6"]), FAIL)

@@ -3011,6 +3011,7 @@ def arm_dirs(command):
 
 
 ARENA_DIRS = (".worktrees/", ".arena/")
+ARM_PATH = re.compile(r"(/[\w./-]+(?:worktree|candidate|arm|attempt)[\w./-]*)", re.I)
 GIT_DIRTY = re.compile(r'(?m)(?:^|")[ \t]?(?:[MADRCU][MADRCU ]?[ \t]+\S|\?\? (?:"([^"\n]+)"|([^\s"]+)))|^[ \t]*(?:modified|deleted|new file|both \w+):\s')
 
 
@@ -3064,7 +3065,7 @@ def parent_written(view, candidates):
 def arena_worktrees(view):
     candidates = candidate_spawns(view)
     made = len(set().union(*(arm_dirs(c[1]) for c in view.commands() if c[2] is not False)))
-    paths = {m.rstrip("/") for brief in map(view.spawn_brief, candidates) for m in re.findall(r"(/[\w./-]+(?:worktree|candidate|arm|attempt)[\w./-]*)", brief, re.I)}
+    paths = {m.rstrip("/") for brief in map(view.spawn_brief, candidates) for m in ARM_PATH.findall(brief)}
     evidence = [f"candidate directories created: {made}", f"distinct output paths named in briefs: {len(paths)}", f"worktrees on disk: {len(view.worktrees() or [])}"]
     if not candidates:
         return inconclusive("no candidate spawns", *evidence)
@@ -3140,6 +3141,10 @@ def same_model(spawned, lead):
     return None
 
 
+JUDGE_SKIPPED = re.compile(r"\bskip\w*\b[^.\n]{0,40}\b(?:cross-?)?judge\b|\b(?:cross-?)?judge\b[^.\n]{0,20}\bskipped\b|\b(?:no|without an?)\s+(?:cross-?)?judge\b", re.I)
+MODEL_CHECK_SKIPPED = re.compile(r"model check (?:did not|didn't|was not|wasn't) run|did(?: not|n't) run the model check", re.I)
+
+
 @oracle("arena-readonly-cross-judge")
 def arena_judge(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
@@ -3148,7 +3153,19 @@ def arena_judge(view):
     if not judges:
         if view.encrypted():
             return inconclusive("briefs encrypted; the judge cannot be told from the candidates", *evidence)
-        return inconclusive("run killed before the judge", *evidence) if view.killed else failed("no cross-judge spawned", *evidence)
+        if view.killed:
+            return inconclusive("run killed before the judge", *evidence)
+        if not JUDGE_SKIPPED.search(view.final_reply):
+            if re.search(r"\bjudge", view.final_reply, re.I):
+                return inconclusive("no judge spawned and the reply's judge wording neither confirms nor rules out a skip", *evidence,
+                                    needs_judge=True, excerpt=excerpt_of(view.final_reply))
+            return failed("no cross-judge spawned and the reply does not say Phase C skipped it", *evidence)
+        spawned_same = [same_model(s["model"], view.model) for s in view.spawns if s.get("model")]
+        if view.model and False in spawned_same:
+            return failed("judge skipped although the run used a model other than the lead's", *evidence)
+        if not view.model or None in spawned_same:
+            return inconclusive("judge skipped, but the models cannot all be compared with the lead's", *evidence)
+        return passed(*evidence, "judge skipped: nothing in the run ran on another model")
     judge = judges[-1]
     readonly = bool(re.search(r"read[- ]only|do not (?:edit|write|modify)", judge.get("prompt_head") or "", re.I))
     evidence.append(f"judge brief marked read-only: {readonly}")
@@ -3156,18 +3173,20 @@ def arena_judge(view):
         return failed("judge spawned before the candidates", *evidence)
     judge_model = judge.get("model") or view.model
     judge_same = same_model(judge_model, view.model)
-    spawned_same = [same_model(s["model"], view.model) for s in view.spawns if s.get("model") and s is not judge]
+    unchecked = bool(MODEL_CHECK_SKIPPED.search(view.final_reply))
     failures = []
-    if view.model and judge_same and False in spawned_same:
-        failures.append("judge runs on the lead's model although the run used another")
+    if view.model and judge_same and not unchecked:
+        failures.append("judge runs on the lead's model")
     if judge.get("prompt_head") and not readonly:
         failures.append("judge brief is not read-only")
     if failures:
         return failed(failures, *evidence)
     if not view.model:
         return inconclusive("the lead's model is unknown, so the judge's model cannot be compared with it", *evidence)
-    if judge_same is None or (judge_same and None in spawned_same):
+    if judge_same is None:
         return inconclusive("a model slug names no tier, so the judge's model cannot be compared with the lead's", *evidence)
+    if judge_same:
+        return inconclusive("judge runs on the lead's model, and the reply says the model check did not run", *evidence)
     return passed(*evidence)
 
 
@@ -3208,7 +3227,19 @@ def arena_lead_reads(view):
     want = int((view.case.get("expect") or {}).get("candidates") or 2)
     evidence = [f"rationale files read after the last candidate spawn: {len(rationales)}", f"other candidate files read: {len(others)}"]
     if not judges:
-        return inconclusive("no judge spawn to anchor the read phase", *evidence)
+        if not JUDGE_SKIPPED.search(view.final_reply):
+            return inconclusive("no judge spawn to anchor the read phase", *evidence)
+        dirs = [{d.rstrip("/") for d in ARM_PATH.findall(view.spawn_brief(s))} for s in candidates]
+        read = [os.path.normpath(p.strip("\"'")) for p in others]
+        unread = [n for n, named in enumerate(dirs, 1) if not any(r == d or r.startswith(d + "/") for d in named for r in read)]
+        evidence.append(f"judge skipped; candidates with no artifact read outside the rationale: {unread}")
+        if not all(dirs):
+            return inconclusive("judge skipped, but a candidate brief names no output directory", *evidence)
+        if len(rationales) >= want and not unread:
+            return passed(*evidence)
+        if view.killed:
+            return inconclusive("run killed during the read phase", *evidence)
+        return failed("judge skipped, and the lead did not read every rationale and every candidate's full artifact", *evidence)
     if len(rationales) >= want and others:
         return passed(*evidence)
     if view.killed:
