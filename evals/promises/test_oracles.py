@@ -562,22 +562,111 @@ class HowWhyOracles(unittest.TestCase):
 
 
 class InterrogateSwarmArena(unittest.TestCase):
-    def test_interrogate_buckets_and_models(self):
+    def test_interrogate_sections_and_models(self):
         case = load_case("interrogate-run")
         reviewers = [{"seq": 1, "tool": "Agent", "persona": None, "model": "fable", "prompt_head": "You are an adversarial code reviewer. Reviewer A"},
                      {"seq": 2, "tool": "Agent", "persona": None, "model": "opus", "prompt_head": "You are an adversarial code reviewer. Reviewer B"}]
-        events = [{"seq": 1, "kind": "tool_call", "name": "Agent", "input": {}}, {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {}}]
-        reply = "## Verdict\n### Act On\n- bug\n### Consider\n- x\n### Noted\n- y\n### Dismissed\n- z: nit"
+        events = ([{"seq": 1, "kind": "tool_call", "name": "Agent", "input": {}}, {"seq": 2, "kind": "tool_call", "name": "Agent", "input": {}}]
+                  + bash(5, "pytest -k dedupe", ok=False, head="2 != 1"))
+        reply = "## Verdict\n### Intent\n- dedupe\n### Findings\n- bug: `pytest -k dedupe` printed 2, intent needs 1\n### Dropped\n- Reviewer A: 1, no run"
         trace = minimal(events=events, spawns=reviewers, final_reply=reply)
         for pid in ("interrogate-multi-reviewer-adversarial", "interrogate-reviewers-on-different-models",
-                    "interrogate-sorts-four-buckets-no-auto-apply", "interrogate-read-only-when-asked"):
+                    "interrogate-keeps-run-proven-findings", "interrogate-read-only-when-asked"):
             with self.subTest(pid=pid):
                 self.assertEqual(grade(pid, trace, case)["verdict"], PASS)
         same = minimal(events=events, spawns=[dict(r, model="opus", prompt_head="You are an adversarial code reviewer.") for r in reviewers], final_reply=reply)
         self.assertEqual(grade("interrogate-reviewers-on-different-models", same, case)["verdict"], FAIL)
+        labeled = minimal(events=events, spawns=[dict(r, model="opus", prompt_head=f"Break this change. Adversary {l}") for r, l in zip(reviewers, "AB")], final_reply=reply)
+        self.assertEqual(grade("interrogate-reviewers-on-different-models", labeled, case)["verdict"], PASS)
         edited = minimal(events=events + [edit(3, "/w/relay/dedupe.py")], spawns=reviewers, final_reply=reply)
         self.assertEqual(grade("interrogate-read-only-when-asked", edited, case)["verdict"], FAIL)
-        self.assertEqual(grade("interrogate-sorts-four-buckets-no-auto-apply", minimal(final_reply="Act on: fix it"), case)["verdict"], FAIL)
+        self.assertEqual(grade("interrogate-keeps-run-proven-findings", minimal(final_reply="Findings: fix it"), case)["verdict"], FAIL)
+
+    def test_copilot_a_reported_finding_needs_the_leads_rerun(self):
+        case = load_case("interrogate-run")
+        adversaries = [{"seq": s, "tool": "Agent", "model": m, "prompt_head": f"Break this change. Adversary {label}"}
+                       for s, m, label in ((1, "fable", "A"), (2, "opus", "B"))]
+        spawned = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {}} for s in (1, 2)]
+        reply = ("### Intent\n- dedupe\n### Findings\n- duplicate kept: `python3 -m pytest -k dedupe` printed 2, the intent needs 1 (Adversary A)\n"
+                 "### Dropped\n- Adversary B: 0")
+
+        def verdict(events, final_reply=reply):
+            return grade("interrogate-keeps-run-proven-findings", minimal(events=events, spawns=adversaries, final_reply=final_reply), case)
+        unsupported = verdict(spawned)
+        self.assertEqual(unsupported["verdict"], FAIL, unsupported)
+        self.assertEqual(unsupported["failures"], ["the reply reports a finding but the lead reran no command after the adversaries spawned"])
+        self.assertEqual(verdict(spawned + bash(5, "python3 -m pytest -k dedupe", ok=False, head="1 failed"))["verdict"], PASS)
+        self.assertEqual(verdict(spawned + bash(5, "python3 -m pytest -q", ok=False, head="1 failed"))["verdict"], INCONCLUSIVE)
+        self.assertEqual(verdict([])["verdict"], INCONCLUSIVE)
+        clean = reply.replace("- duplicate kept: `python3 -m pytest -k dedupe` printed 2, the intent needs 1 (Adversary A)", "No verified findings.")
+        self.assertEqual(verdict(spawned, clean)["verdict"], PASS)
+
+    def test_copilot_each_reported_finding_needs_its_own_rerun(self):
+        case = load_case("interrogate-run")
+        adversaries = [{"seq": s, "tool": "Agent", "model": m, "prompt_head": f"Break this change. Adversary {label}"}
+                       for s, m, label in ((1, "fable", "A"), (2, "opus", "B"))]
+        spawned = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {}} for s in (1, 2)]
+        reply = ("### Intent\n- dedupe\n### Findings (2 kept)\n"
+                 "1. duplicate kept: `python3 -m pytest -k dedupe` printed 2, the intent needs 1 (Adversary A)\n"
+                 "2. stale entry: `python3 scripts/expire.py --ttl 0` printed 1 row, the intent needs 0 (Adversary B)\n"
+                 "### Dropped\n- Adversary B: 0")
+
+        def verdict(*commands):
+            events = spawned + [e for n, c in enumerate(commands) for e in bash(5 + 2 * n, c, ok=False, head="1 failed")]
+            return grade("interrogate-keeps-run-proven-findings", minimal(events=events, spawns=adversaries, final_reply=reply), case)
+        one = verdict("python3 -m pytest -k dedupe")
+        self.assertEqual(one["verdict"], INCONCLUSIVE, one)
+        self.assertTrue(one.get("needs_judge"), one)
+        self.assertEqual(verdict("python3 -m pytest -k dedupe", "python3 scripts/expire.py --ttl 0")["verdict"], PASS)
+
+    def test_copilot_heading_delimited_findings_each_need_a_rerun(self):
+        case = load_case("interrogate-run")
+        adversaries = [{"seq": s, "tool": "Agent", "model": m, "prompt_head": f"Break this change. Adversary {label}"}
+                       for s, m, label in ((1, "fable", "A"), (2, "opus", "B"))]
+        spawned = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {}} for s in (1, 2)]
+        reply = ("### Intent\n- dedupe\n### Findings\n"
+                 "#### 1. Duplicate entries\n`python3 -m pytest -k dedupe` printed 2, the intent needs 1 (Adversary A)\n"
+                 "#### 2. Stale entries\n`python3 scripts/expire.py --ttl 0` printed 1 row, the intent needs 0 (Adversary B)\n"
+                 "### Dropped\n- Adversary B: 0")
+        bulleted = reply.replace("`python3 scripts/expire.py --ttl 0` printed 1 row", "- command: `python3 scripts/expire.py --ttl 0`\n- output: 1 row")
+
+
+        def verdict(*commands, final_reply=reply):
+            events = spawned + [e for n, c in enumerate(commands) for e in bash(5 + 2 * n, c, ok=False, head="1 failed")]
+            return grade("interrogate-keeps-run-proven-findings", minimal(events=events, spawns=adversaries, final_reply=final_reply), case)
+        one = verdict("python3 -m pytest -k dedupe")
+        self.assertEqual(one["verdict"], INCONCLUSIVE, one)
+        self.assertTrue(one.get("needs_judge"), one)
+        for final_reply in (reply, bulleted):
+            self.assertEqual(verdict("python3 -m pytest -k dedupe", "python3 scripts/expire.py --ttl 0", final_reply=final_reply)["verdict"], PASS)
+        grouped = ("### Intent\n- dedupe\n### Findings\n#### High\n"
+                   "- duplicate kept: `python3 -m pytest -k dedupe` printed 2 (Adversary A)\n"
+                   "- stale entry: `python3 scripts/expire.py --ttl 0` printed 1 row (Adversary B)\n"
+                   "### Dropped\n- Adversary B: 0")
+        one = verdict("python3 -m pytest -k dedupe", final_reply=grouped)
+        self.assertEqual(one["verdict"], INCONCLUSIVE, one)
+        self.assertEqual(verdict("python3 -m pytest -k dedupe", "python3 scripts/expire.py --ttl 0", final_reply=grouped)["verdict"], PASS)
+
+    def test_copilot_a_rerun_matches_a_finding_only_with_its_arguments(self):
+        case = load_case("interrogate-run")
+        adversaries = [{"seq": s, "tool": "Agent", "model": m, "prompt_head": f"Break this change. Adversary {label}"}
+                       for s, m, label in ((1, "fable", "A"), (2, "opus", "B"))]
+        spawned = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {}} for s in (1, 2)]
+        reply = ("### Intent\n- dedupe\n### Findings\n"
+                 "1. duplicate kept: `python3 scripts/repro.py --case duplicate` printed 2, the intent needs 1 (Adversary A)\n"
+                 "2. stale entry: `python3 scripts/repro.py --case stale` printed 1 row, the intent needs 0 (Adversary B)\n"
+                 "### Dropped\n- Adversary B: 0")
+
+        def verdict(*commands):
+            events = spawned + [e for n, c in enumerate(commands) for e in bash(5 + 2 * n, c, ok=False, head="1 failed")]
+            return grade("interrogate-keeps-run-proven-findings", minimal(events=events, spawns=adversaries, final_reply=reply), case)
+        for commands in (("python3 scripts/repro.py --case duplicate",),
+                         ("python3 scripts/repro.py --case dup", "python3 scripts/repro.py --case stale")):
+            partial = verdict(*commands)
+            self.assertEqual(partial["verdict"], INCONCLUSIVE, partial)
+            self.assertTrue(partial.get("needs_judge"), partial)
+        self.assertEqual(verdict("cd /repo && python3 scripts/repro.py --case duplicate 2>&1",
+                                 "python3 scripts/repro.py --case stale | tail -5")["verdict"], PASS)
 
     def test_swarm_statuses(self):
         case = load_case("swarm-run")
@@ -609,12 +698,12 @@ class InterrogateSwarmArena(unittest.TestCase):
         self.assertEqual(grade("arena-candidate-count-adjustable", three, case)["verdict"], FAIL)
         self.assertEqual(grade("arena-lead-reads-rationales-and-base", trace, case)["verdict"], FAIL)
 
-    def judged_by(self, lead, models, judge_model):
+    def judged_by(self, lead, models, judge_model, reply="Base: candidate 3. Grafts: the hashing from candidate 1."):
         candidates = [{"seq": i, "tool": "Agent", "persona": "poteto-agent", "model": m, "prompt_head": f"Candidate {i}: write to /tmp/relay-key/candidate-{i}"}
                       for i, m in enumerate(models, 1)]
         events = [{"seq": i, "kind": "tool_call", "name": "Agent", "input": {}} for i in range(1, len(models) + 1)]
         judge = {"seq": 9, "tool": "Agent", "persona": None, "model": judge_model, "prompt_head": "You are the read-only cross-judge. Score each against the rubric."}
-        trace = minimal(events=events, spawns=candidates + [judge], final_reply="Base: candidate 3. Grafts: the hashing from candidate 1.")
+        trace = minimal(events=events, spawns=candidates + [judge], final_reply=reply)
         trace["model"] = lead
         return grade("arena-readonly-cross-judge", trace, load_case("arena-run"))
 
@@ -627,11 +716,139 @@ class InterrogateSwarmArena(unittest.TestCase):
     def test_a_judge_on_the_leads_model_fails_when_the_run_used_another(self):
         result = self.judged_by("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], "opus")
         self.assertEqual(result["verdict"], FAIL, result)
-        self.assertEqual(result["failures"], ["judge runs on the lead's model although the run used another"])
+        self.assertEqual(result["failures"], ["judge runs on the lead's model"])
 
-    def test_a_judge_on_the_leads_model_passes_when_no_other_model_was_used(self):
+    def test_copilot_a_judge_on_the_leads_model_fails_even_when_no_other_model_was_used(self):
         result = self.judged_by("gpt-5.6-sol", ["gpt-5.6-sol"] * 5, "gpt-5.6-sol")
-        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["verdict"], FAIL, result)
+        unchecked = self.judged_by("gpt-5.6-sol", ["gpt-5.6-sol"] * 5, "gpt-5.6-sol", "Base: candidate 3. The model check did not run.")
+        self.assertEqual(unchecked["verdict"], INCONCLUSIVE, unchecked)
+
+    def skipped(self, lead, models, reply, reads=(), pool=None):
+        candidates = [{"seq": i, "tool": "Agent", "model": m, "prompt_head": f"Candidate {i}: write to /tmp/k/candidate-{i}, with `rationale.md`"}
+                      for i, m in enumerate(models, 1)]
+        events = [{"seq": i, "kind": "tool_call", "name": "Agent", "input": {}} for i in range(1, len(models) + 1)]
+        if pool is not None:
+            rows = "\n".join(json.dumps({"role": "arena cross-judge pool", "arm": n, "model": m, "effort": "high", "source": "user flat"})
+                             for n, m in enumerate(pool, 1))
+            events += bash(15, 'python3 "$PSTACK_SKILLS_ROOT/setup-pstack/scripts/check-models-config.py" --resolve --harness codex "arena cross-judge pool"',
+                           head=rows[:400])
+        events += [e for n, command in enumerate(reads) for e in bash(20 + 2 * n, command)]
+        trace = minimal(events=events, spawns=candidates, final_reply=reply)
+        trace["model"] = lead
+        return trace
+
+    def test_copilot_an_evidenced_judge_skip_passes_the_judge_promise(self):
+        case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
+        reply = "Phase C skipped the judge: no cross-judge pool entry runs on another model. Base: candidate 3. Grafts: retries from candidate 1."
+        resolved = self.skipped("gpt-5.6-sol", same, reply, pool=["auto", "gpt-5.6-sol", "inherit-parent"])
+        self.assertEqual(grade("arena-readonly-cross-judge", resolved, case)["verdict"], PASS)
+        self.assertEqual(grade("arena-readonly-cross-judge", self.skipped("gpt-5.6-sol", same, "Base: candidate 3."), case)["verdict"], FAIL)
+        unclear = self.skipped("gpt-5.6-sol", same, "The judge was not needed. Base: candidate 3.")
+        self.assertEqual(grade("arena-readonly-cross-judge", unclear, case)["verdict"], INCONCLUSIVE)
+
+    def test_copilot_a_judge_skip_is_graded_on_the_resolved_pool_not_the_runners(self):
+        case, same, mixed = load_case("arena-run"), ["gpt-5.6-sol"] * 5, ["fable", "opus", "sonnet", "fable", "opus"]
+        reply = "Phase C skipped the judge: no cross-judge pool entry runs on another model. Base: candidate 3. Grafts: retries from candidate 1."
+
+        def verdict(lead, models, pool=None):
+            return grade("arena-readonly-cross-judge", self.skipped(lead, models, reply, pool=pool), case)
+        self.assertEqual(verdict("claude-opus-5-5", mixed, ["auto", "auto"])["verdict"], PASS)
+        unresolved = verdict("gpt-5.6-sol", same)
+        self.assertEqual(unresolved["verdict"], INCONCLUSIVE, unresolved)
+        self.assertEqual(verdict("claude-opus-5-5", mixed)["verdict"], INCONCLUSIVE)
+        other = verdict("gpt-5.6-sol", same, ["auto", "opus"])
+        self.assertEqual(other["verdict"], FAIL, other)
+        self.assertEqual(other["failures"], ["judge skipped although a cross-judge pool entry runs on a model other than the lead's"])
+        self.assertEqual(verdict("claude-opus-5-5", mixed, ["sonnet"])["verdict"], FAIL)
+        self.assertEqual(verdict("claude-opus-5-5", mixed, ["opus", "claude-opus-5-5"])["verdict"], PASS)
+        cut = verdict("gpt-5.6-sol", same, ["auto", "gpt-5.6-sol", "auto", "gpt-5.6-sol", "auto"])
+        self.assertEqual(cut["verdict"], INCONCLUSIVE, cut)
+
+    def test_copilot_a_skipped_judge_needs_every_candidates_full_artifact_read(self):
+        case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
+        reply = "Skipped the cross-judge: nothing runs on another model. Base: candidate 3."
+        rationales = [f"cat /tmp/k/candidate-{i}/rationale.md" for i in range(1, 6)]
+        artifacts = [f"cat /tmp/k/candidate-{i}/relay/cache.py" for i in range(1, 6)]
+        full = grade("arena-lead-reads-rationales-and-base", self.skipped("gpt-5.6-sol", same, reply, rationales + artifacts), case)
+        self.assertEqual(full["verdict"], PASS, full)
+        base_only = grade("arena-lead-reads-rationales-and-base", self.skipped("gpt-5.6-sol", same, reply, rationales + artifacts[2:3]), case)
+        self.assertEqual(base_only["verdict"], FAIL, base_only)
+
+    def test_copilot_after_a_skipped_judge_listing_or_removing_a_candidate_is_not_reading_it(self):
+        case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
+        reply = "Skipped the cross-judge: nothing runs on another model. Base: candidate 3."
+        rationales = [f"cat /tmp/k/candidate-{i}/rationale.md" for i in range(1, 6)]
+
+        def verdict(per_candidate):
+            trace = self.skipped("gpt-5.6-sol", same, reply, rationales + [per_candidate.format(i=i) for i in range(1, 6)])
+            return grade("arena-lead-reads-rationales-and-base", trace, case)
+        listed = verdict("ls -la /tmp/k/candidate-{i}/relay")
+        self.assertEqual(listed["verdict"], FAIL, listed)
+        removed = verdict("git worktree remove --force /tmp/k/candidate-{i}")
+        self.assertEqual(removed["verdict"], FAIL, removed)
+        diffed = verdict("git -C /tmp/k/candidate-{i} diff HEAD")
+        self.assertEqual(diffed["verdict"], INCONCLUSIVE, diffed)
+        self.assertTrue(diffed.get("needs_judge"), diffed)
+        with_tool = self.skipped("gpt-5.6-sol", same, reply, rationales)
+        with_tool["events"] += [{"seq": 40 + i, "kind": "tool_call", "name": "Read", "input": {"file_path": f"/tmp/k/candidate-{i}/relay/cache.py"}}
+                                for i in range(1, 6)]
+        self.assertEqual(grade("arena-lead-reads-rationales-and-base", with_tool, case)["verdict"], PASS)
+
+    def test_copilot_after_a_skipped_judge_a_bounded_read_is_not_a_full_read(self):
+        case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
+        reply = "Skipped the cross-judge: nothing runs on another model. Base: candidate 3."
+        for partial, full in (("relay/cache.py", "rationale.md"), ("rationale.md", "relay/cache.py")):
+            reads = [f"cat /tmp/k/candidate-{i}/{full}" for i in range(1, 6)]
+            for command in ("head -n 1 {path}", "tail -n 5 {path}", "sed -n 1,20p {path}",
+                            "sed -e 1,10p -n {path}", "sed --quiet 1,10p {path}", "awk 'NR<10' {path}",
+                            "cat {path} | head -n 5", "cat {path} | tail -n 5", "cat {path} | sed --quiet 1,10p",
+                            "cat {path} | awk 'NR<10'"):
+                with self.subTest(partial=partial, command=command):
+                    bounded = [command.format(path=f"/tmp/k/candidate-{i}/{partial}") for i in range(1, 6)]
+                    trace = self.skipped("gpt-5.6-sol", same, reply, reads + bounded)
+                    result = grade("arena-lead-reads-rationales-and-base", trace, case)
+                    self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+                    self.assertTrue(result.get("needs_judge"), result)
+            for bounds in ({"limit": 5}, {"offset": 5}):
+                with self.subTest(partial=partial, bounds=bounds):
+                    limited = self.skipped("gpt-5.6-sol", same, reply, reads)
+                    limited["events"] += [{"seq": 40 + i, "kind": "tool_call", "name": "Read",
+                                           "input": {"file_path": f"/tmp/k/candidate-{i}/{partial}", **bounds}}
+                                          for i in range(1, 6)]
+                    result = grade("arena-lead-reads-rationales-and-base", limited, case)
+                    self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_full_candidate_reads_survive_unrelated_bounded_commands(self):
+        case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
+        reply = "Skipped the cross-judge: nothing runs on another model. Base: candidate 3."
+        for command in ("cat {root}/relay/cache.py {root}/rationale.md && tail -n 5 run.log",
+                        "cat {root}/relay/cache.py {root}/rationale.md; head run.log",
+                        "cat {root}/relay/cache.py {root}/rationale.md || tail run.log",
+                        "head run.log; cat {root}/relay/cache.py {root}/rationale.md",
+                        "tail run.log && cat {root}/relay/cache.py {root}/rationale.md",
+                        "head run.log\ncat {root}/relay/cache.py {root}/rationale.md",
+                        "cd {root} && cat relay/cache.py rationale.md && tail -n 5 run.log",
+                        "cat {root}/relay/cache.py && head run.log; cat {root}/rationale.md",
+                        "for f in {root}/relay/cache.py {root}/rationale.md; do cat $f; done; head run.log"):
+            with self.subTest(command=command):
+                reads = [command.format(root=f"/tmp/k/candidate-{i}") for i in range(1, 6)]
+                trace = self.skipped("gpt-5.6-sol", same, reply, reads)
+                result = grade("arena-lead-reads-rationales-and-base", trace, case)
+                self.assertEqual(result["verdict"], PASS, result)
+
+    def test_a_skipped_judge_requires_rationale_contents_not_just_paths(self):
+        case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
+        reply = "Skipped the cross-judge: nothing runs on another model. Base: candidate 3."
+        artifacts = [f"cat /tmp/k/candidate-{i}/relay/cache.py" for i in range(1, 6)]
+        # Arena Phase D requires reading every rationale, even when every artifact was read.
+        for command, ok, expected in (("ls -l", True, FAIL), ("rm", True, FAIL), ("cat", False, INCONCLUSIVE)):
+            with self.subTest(command=command, ok=ok):
+                rationales = [f"{command} /tmp/k/candidate-{i}/rationale.md" for i in range(1, 6)]
+                trace = self.skipped("gpt-5.6-sol", same, reply, artifacts)
+                trace["events"] += [e for i, cmd in enumerate(rationales) for e in bash(40 + 2 * i, cmd, ok=ok)]
+                result = grade("arena-lead-reads-rationales-and-base", trace, case)
+                self.assertEqual(result["verdict"], expected, result)
 
     def test_a_judge_with_no_model_inherits_the_leads_and_fails_when_the_run_used_another(self):
         result = self.judged_by("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], None)
@@ -4149,7 +4366,7 @@ class Issue133SpawnsAndVerdicts(unittest.TestCase):
 
     def test_n6_inherit_is_the_leads_model(self):
         self.assertEqual(self.judged("inherit", "claude-opus-5-5", ["opus", "sonnet"]), FAIL)
-        self.assertEqual(self.judged("opus", "claude-opus-5-5", ["inherit", "inherit"]), PASS)
+        self.assertEqual(self.judged("opus", "claude-opus-5-5", ["inherit", "inherit"]), FAIL)
 
     def test_n7_tierless_slugs_match_whole_or_by_vendor(self):
         self.assertEqual(self.judged("claude", "claude", ["gpt-6"]), FAIL)

@@ -26,7 +26,7 @@ A prompt states the intent and the check for done. The playbook supplies the ste
 ## Design before the plan
 
 - Never take the first design. Ask for prototypes of a few options, with screenshots or videos for UI, and pick from the evidence.
-- Let prototypes answer the open questions. Don't review an abstract plan adversarially, because reviewers invent risks that never happen.
+- Let prototypes answer the open questions. Don't review an abstract plan adversarially, because adversaries keep only findings a run proves, and a plan with no code behind it gives them little to break.
 - For a shared package or API, ask for the README or a tutorial first, then work back to the code. The doc becomes the target the agent checks itself against.
 - Ask for the plan only after the design is settled. Each step of the plan ends in a check.
 

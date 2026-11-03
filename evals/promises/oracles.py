@@ -61,6 +61,10 @@ SKILL_LOAD_TOOLS = {"skill_view", "Skill"}
 SHELL_TOOLS = {"Bash": "command", "exec_command": "cmd", "terminal": "command",
                "run_terminal_command": "command", "shell": "command", "bash": "command"}
 READ_VERBS = {"cat", "head", "tail", "sed", "less", "more", "nl", "bat", "awk", "grep", "rg", "python3", "python"}
+CONTENT_VERBS = READ_VERBS - {"head", "tail", "sed", "awk", "grep", "rg", "python3", "python"}
+BOUNDED_READ = re.compile(r"(?:^|\|)\s*(?:head|tail|sed|awk)\b")
+NOT_READS = {"ls", "tree", "stat", "du", "rm", "mkdir", "rmdir", "touch", "test", "[", "cd", "git worktree", "git branch", "git clean",
+             "git status", "git rev-parse", "Glob", "LS"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "patch", "write_file", "apply_patch",
               "edit_file", "create_file", "str_replace_editor", "str_replace_based_edit_tool",
               "edit", "write", "insert", "create", "replace_in_file", "search_replace", "FileChange"}
@@ -87,7 +91,7 @@ PROJECT_CLASSES = ("source", "test", "doc", "data")
 WHY_CATEGORIES = ("issue", "ticket", "document", "docs", "chat", "slack", "observability", "error tracking",
                   "sentry", "analytics", "warehouse")
 HOW_SECTIONS = ("overview", "key concepts", "how it works", "where things live", "gotchas")
-BUCKETS = ("act on", "consider", "noted", "dismissed")
+INTERROGATE_SECTIONS = ("findings", "dropped")
 STOP = {"the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "is", "it", "its", "this", "that",
         "with", "per", "as", "be", "by", "at", "from", "over", "into", "if", "then", "run", "use"}
 JUDGE_ROLE = re.compile(r"(?<![a-z])judges?\b")
@@ -304,17 +308,35 @@ def expand_assignments(command):
     return command
 
 
-def resolved_shell_paths(command):
+SHELL_SEGMENT = re.compile(r"&&|\|\||[;|\n]")
+SHELL_PIPELINE = re.compile(r"&&|\|\||[;\n]")
+
+
+def shell_verb(words):
+    if words[:1] != ["git"]:
+        return words[0] if words else ""
+    rest = words[1:]
+    while rest[:1] == ["-C"]:
+        rest = rest[2:]
+    return " ".join(["git", *rest[:1]])
+
+
+def shell_path_verbs(command):
     base, out = "", []
-    for segment in re.split(r"&&|\|\||[;|\n]", expand_assignments(command)):
-        words = segment.strip().split()
-        if words[:1] == ["cd"] and len(words) > 1:
-            target = words[1].strip("\"'")
-            base = target if target.startswith("/") or not base else f"{base}/{target}"
-            continue
-        for token in shell_paths(segment):
-            out.append(token if token.startswith("/") or not base else f"{base}/{token}")
+    for pipeline in SHELL_PIPELINE.split(expand_assignments(command)):
+        for segment in SHELL_SEGMENT.split(pipeline):
+            words = segment.strip().split()
+            if words[:1] == ["cd"] and len(words) > 1:
+                target = words[1].strip("\"'")
+                base = target if target.startswith("/") or not base else f"{base}/{target}"
+                continue
+            for token in shell_paths(segment):
+                out.append((shell_verb(words), token if token.startswith("/") or not base else f"{base}/{token}", pipeline))
     return out
+
+
+def resolved_shell_paths(command):
+    return [path for _, path, _ in shell_path_verbs(command)]
 
 
 def shell_paths(command):
@@ -1326,13 +1348,14 @@ def skipped_step(view):
 TRIVIAL = re.compile(r"^(cat|ls|cd|cp|mkdir|rm|wc|echo|printf|export|git (?:status|log|diff|show|add|switch|checkout|remote)|sed|head|tail|grep|rg|find|pwd|which|S=|V=)\b")
 
 
-def command_segments(command):
+def command_segments(command, paths=True):
     out = []
     for segment in re.split(r"&&|\|\||;|\||\n", command):
         core = " ".join(re.sub(r"\s*\d?>>?\s*\S+", "", segment).split())
         if len(core) >= 10 and not TRIVIAL.match(core):
             out.append(core)
-        out += [m for m in re.findall(r"(?:python3?|node|bash|sh)\s+(\S+\.(?:py|sh|ts|js))|^(\.?/\S+\.(?:py|sh))", core) for m in (m if isinstance(m, str) else next(x for x in m if x),) if len(m) >= 8]
+        if paths:
+            out += [m for m in re.findall(r"(?:python3?|node|bash|sh)\s+(\S+\.(?:py|sh|ts|js))|^(\.?/\S+\.(?:py|sh))", core) for m in (m if isinstance(m, str) else next(x for x in m if x),) if len(m) >= 8]
     return out
 
 
@@ -1875,7 +1898,7 @@ def reviewer_arms(view):
         given = calls.get(spawn.get("seq")) or {}
         label = " ".join([view.spawn_text(spawn)] + [str(given.get(k) or "") for k in ("task_name", "description", "name")]).lower()
         sealed = bool(spawn.get("x_prompt_encrypted")) or str(given.get("message") or "").startswith("gAAAA")
-        if "review" in label or "adversarial" in label:
+        if "review" in label or "adversar" in label:
             picked.append(spawn)
         elif sealed and entry == "interrogate":
             picked.append(spawn)
@@ -1902,7 +1925,7 @@ def interrogate_readonly(view):
 def interrogate_multi(view):
     reviewers = reviewer_spawns(view)
     evidence = [f"reviewer spawns: {len(reviewers)}", f"one message: {view.one_message(reviewers)}",
-                f"reply has a verdict section: {'verdict' in view.final_reply.lower() or 'act on' in view.final_reply.lower()}",
+                f"reply has a verdict section: {'verdict' in view.final_reply.lower() or 'findings' in view.final_reply.lower()}",
                 *reviewer_evidence(view)]
     if len(reviewers) < 2:
         if view.killed and not view.spawns:
@@ -1925,7 +1948,7 @@ def interrogate_models(view):
     evidence = [f"reviewer models: {models}", *reviewer_evidence(view)]
     if len(distinct) >= 2:
         return passed(*evidence)
-    labels = {hit.group(0) for hit in (re.search(r"reviewer [a-c]\b", (s.get("prompt_head") or "").lower()) for s in reviewers) if hit}
+    labels = {hit.group(0) for hit in (re.search(r"(?:reviewer|adversary) [a-c]\b", (s.get("prompt_head") or "").lower()) for s in reviewers) if hit}
     if not any(models):
         if len(labels) >= 2:
             return passed(*evidence, f"no model field on this harness; arms differentiated by label: {len(labels)}")
@@ -1935,17 +1958,71 @@ def interrogate_models(view):
     return failed("all reviewers on one model with identical arms", *evidence)
 
 
-@oracle("interrogate-sorts-four-buckets-no-auto-apply")
-def interrogate_buckets(view):
+FINDINGS_END = re.compile(r"\n\W*(?:intent|threats|dropped)\b")
+NO_FINDINGS = re.compile(r"^\W*(?:no (?:verified )?findings|none)\b")
+FINDING_ITEM = re.compile(r"(?m)^([ \t]*)(?:[-*•]|\d+[.)])[ \t]+")
+FINDING_HEADING = re.compile(r"(?m)^[ \t]*#{1,6}[ \t]+")
+NUMBERED_HEADING = re.compile(r"[ \t]*#{1,6}[ \t]+\d+[.)]")
+
+
+def reported_findings(low):
+    head = re.search(r"(?:^|\n)\W*findings\b", low)
+    body = low[head.end():] if head else ""
+    end = FINDINGS_END.search(body)
+    body = body[:end.start()] if end else body
+    if NO_FINDINGS.search(body) or not re.search(r"\w", body):
+        return []
+    starts = [m.start() for m in FINDING_HEADING.finditer(body)]
+    if not starts:
+        return finding_items(body)
+    sections = [body[a:b] for a, b in zip(starts, starts[1:] + [len(body)])]
+    # A numbered heading is one finding; a heading like "High" groups the findings listed under it.
+    return [item for section in sections
+            for item in ([" ".join(section.split())] if NUMBERED_HEADING.match(section) else finding_items(section.split("\n", 1)[-1]))
+            if re.search(r"\w", item)]
+
+
+def finding_items(body):
+    items = list(FINDING_ITEM.finditer(body))
+    indent = min((len(m.group(1)) for m in items), default=0)
+    starts = [m.start() for m in items if len(m.group(1)) == indent] or [0]
+    return [" ".join(body[a:b].split()) for a, b in zip(starts, starts[1:] + [len(body)])]
+
+
+def quotes(command, text):
+    return any(re.search(re.escape(p.lower()) + r"(?![\w./-])", text)
+               for p in command_segments(command, paths=False) + [" ".join(command.split())] if len(p) >= 10)
+
+
+@oracle("interrogate-keeps-run-proven-findings")
+def interrogate_proven_findings(view):
     gate = completion_gate(view)
     if gate:
         return gate
     low = view.final_reply.lower()
-    present = [b for b in BUCKETS if re.search(rf"(?:^|\n)\W*{b}\b", low)]
+    present = [s for s in INTERROGATE_SECTIONS if re.search(rf"(?:^|\n)\W*{s}\b", low)]
     failures, evidence = no_edits_verdict(view)
-    evidence.append(f"buckets present: {present}")
-    if len(present) < 4:
-        failures.append(f"missing buckets: {[b for b in BUCKETS if b not in present]}")
+    evidence.append(f"sections present: {present}")
+    if len(present) < len(INTERROGATE_SECTIONS):
+        failures.append(f"missing sections: {[s for s in INTERROGATE_SECTIONS if s not in present]}")
+    findings = reported_findings(low)
+    if findings and not failures:
+        adversaries = reviewer_spawns(view)
+        anchor = min((s.get("seq") or 0 for s in adversaries), default=0)
+        reruns = [c for seq, c, _, _ in view.commands() if seq > anchor]
+        quoted = [c for c in reruns if any(quotes(c, f) for f in findings)]
+        unmatched = [n for n, f in enumerate(findings, 1) if not any(quotes(c, f) for c in reruns)]
+        delegates = [s for s in view.spawns if (s.get("seq") or 0) > anchor and s not in adversaries]
+        evidence.append(f"lead commands after the first adversary spawn: {len(reruns)}, quoted in Findings: {len(quoted)}; "
+                        f"findings: {len(findings)}, quoting no rerun: {unmatched}; "
+                        f"later non-adversary spawns: {len(delegates)} (adversary runs are not in the trace)")
+        if not view.tool_calls:
+            return inconclusive("the trace carries no tool calls, so no run evidence for the reported findings", *evidence)
+        if unmatched and (reruns or delegates):
+            return inconclusive("a finding quotes no command the lead reran after the adversaries; a judge must match it",
+                                *evidence, needs_judge=True, excerpt=excerpt_of(view.final_reply))
+        if unmatched:
+            failures.append("the reply reports a finding but the lead reran no command after the adversaries spawned")
     return failed(failures, *evidence) if failures else passed(*evidence)
 
 
@@ -2983,6 +3060,7 @@ def arm_dirs(command):
 
 
 ARENA_DIRS = (".worktrees/", ".arena/")
+ARM_PATH = re.compile(r"(/[\w./-]+(?:worktree|candidate|arm|attempt)[\w./-]*)", re.I)
 GIT_DIRTY = re.compile(r'(?m)(?:^|")[ \t]?(?:[MADRCU][MADRCU ]?[ \t]+\S|\?\? (?:"([^"\n]+)"|([^\s"]+)))|^[ \t]*(?:modified|deleted|new file|both \w+):\s')
 
 
@@ -3036,7 +3114,7 @@ def parent_written(view, candidates):
 def arena_worktrees(view):
     candidates = candidate_spawns(view)
     made = len(set().union(*(arm_dirs(c[1]) for c in view.commands() if c[2] is not False)))
-    paths = {m.rstrip("/") for brief in map(view.spawn_brief, candidates) for m in re.findall(r"(/[\w./-]+(?:worktree|candidate|arm|attempt)[\w./-]*)", brief, re.I)}
+    paths = {m.rstrip("/") for brief in map(view.spawn_brief, candidates) for m in ARM_PATH.findall(brief)}
     evidence = [f"candidate directories created: {made}", f"distinct output paths named in briefs: {len(paths)}", f"worktrees on disk: {len(view.worktrees() or [])}"]
     if not candidates:
         return inconclusive("no candidate spawns", *evidence)
@@ -3112,6 +3190,31 @@ def same_model(spawned, lead):
     return None
 
 
+JUDGE_SKIPPED = re.compile(r"\bskip\w*\b[^.\n]{0,40}\b(?:cross-?)?judge\b|\b(?:cross-?)?judge\b[^.\n]{0,20}\bskipped\b|\b(?:no|without an?)\s+(?:cross-?)?judge\b", re.I)
+MODEL_CHECK_SKIPPED = re.compile(r"model check (?:did not|didn't|was not|wasn't) run|did(?: not|n't) run the model check", re.I)
+JUDGE_POOL = "arena cross-judge pool"
+PARENT_MODELS = {"auto", "inherit-parent"}
+RESULT_HEAD = 400
+
+
+def resolved_pool(view):
+    for _, command, ok, head in reversed(view.commands()):
+        if ok is False or "check-models-config" not in command:
+            continue
+        rows = []
+        for line in filter(str.strip, head.splitlines()):
+            try:
+                row = json.loads(line)
+            except ValueError:
+                row = None
+            rows.append(row if isinstance(row, dict) else None)
+        pool = [r.get("model") for r in rows if r and r.get("role") == JUDGE_POOL]
+        if pool:
+            cut = None in rows or (len(head) >= RESULT_HEAD and rows[-1].get("role") == JUDGE_POOL)
+            return pool, not cut
+    return None, False
+
+
 @oracle("arena-readonly-cross-judge")
 def arena_judge(view):
     candidates, judges = candidate_spawns(view), judge_spawns(view)
@@ -3120,7 +3223,23 @@ def arena_judge(view):
     if not judges:
         if view.encrypted():
             return inconclusive("briefs encrypted; the judge cannot be told from the candidates", *evidence)
-        return inconclusive("run killed before the judge", *evidence) if view.killed else failed("no cross-judge spawned", *evidence)
+        if view.killed:
+            return inconclusive("run killed before the judge", *evidence)
+        if not JUDGE_SKIPPED.search(view.final_reply):
+            if re.search(r"\bjudge", view.final_reply, re.I):
+                return inconclusive("no judge spawned and the reply's judge wording neither confirms nor rules out a skip", *evidence,
+                                    needs_judge=True, excerpt=excerpt_of(view.final_reply))
+            return failed("no cross-judge spawned and the reply does not say Phase C skipped it", *evidence)
+        pool, complete = resolved_pool(view)
+        evidence.append(f"resolved cross-judge pool: {pool}, every arm shown: {complete}")
+        if pool is None:
+            return inconclusive("judge skipped, and no resolver output in the trace shows the cross-judge pool", *evidence)
+        pool_same = [True if m in PARENT_MODELS else same_model(m, view.model) for m in pool]
+        if view.model and False in pool_same:
+            return failed("judge skipped although a cross-judge pool entry runs on a model other than the lead's", *evidence)
+        if not view.model or None in pool_same or not complete:
+            return inconclusive("judge skipped, but the pool's models cannot all be compared with the lead's", *evidence)
+        return passed(*evidence, "judge skipped: every cross-judge pool entry runs on the lead's model")
     judge = judges[-1]
     readonly = bool(re.search(r"read[- ]only|do not (?:edit|write|modify)", judge.get("prompt_head") or "", re.I))
     evidence.append(f"judge brief marked read-only: {readonly}")
@@ -3128,18 +3247,20 @@ def arena_judge(view):
         return failed("judge spawned before the candidates", *evidence)
     judge_model = judge.get("model") or view.model
     judge_same = same_model(judge_model, view.model)
-    spawned_same = [same_model(s["model"], view.model) for s in view.spawns if s.get("model") and s is not judge]
+    unchecked = bool(MODEL_CHECK_SKIPPED.search(view.final_reply))
     failures = []
-    if view.model and judge_same and False in spawned_same:
-        failures.append("judge runs on the lead's model although the run used another")
+    if view.model and judge_same and not unchecked:
+        failures.append("judge runs on the lead's model")
     if judge.get("prompt_head") and not readonly:
         failures.append("judge brief is not read-only")
     if failures:
         return failed(failures, *evidence)
     if not view.model:
         return inconclusive("the lead's model is unknown, so the judge's model cannot be compared with it", *evidence)
-    if judge_same is None or (judge_same and None in spawned_same):
+    if judge_same is None:
         return inconclusive("a model slug names no tier, so the judge's model cannot be compared with the lead's", *evidence)
+    if judge_same:
+        return inconclusive("judge runs on the lead's model, and the reply says the model check did not run", *evidence)
     return passed(*evidence)
 
 
@@ -3159,28 +3280,57 @@ def arena_lead_reads(view):
     for call in view.tool_calls:
         if call.get("seq", 0) <= after or call.get("name") in EDIT_TOOLS:
             continue
-        given = call.get("input") or {}
+        given, returned = call.get("input") or {}, view.read_returned(call)
         if call.get("name") in SHELL_TOOLS:
             command = str(given.get(SHELL_TOOLS[call["name"]]) or "")
             written = {os.path.normpath(w) for w in shell_writes(command) + python_writes(command)}
             found = []
-            for token in resolved_shell_paths(strip_heredocs(command)):
+            for verb, token, pipeline in shell_path_verbs(strip_heredocs(command)):
                 if ASSIGNMENT.fullmatch(" " + token):
                     continue
+                whole = returned and not BOUNDED_READ.search(pipeline)
+                kind = "listing" if verb in NOT_READS else "read" if verb in CONTENT_VERBS and whole else "other"
                 paths = re.findall(r"['\"]([^'\"]*[/.][^'\"]*)['\"]", token) if "(" in token else [token]
-                found += [p for p in paths if os.path.normpath(p.strip("\"'").lstrip("<>")) not in written]
-            reads += [(p, found[:n].count(p)) for n, p in enumerate(found)]
+                found += [(p, kind) for p in paths if os.path.normpath(p.strip("\"'").lstrip("<>")) not in written]
+            reads += [(p, [q for q, _ in found[:n]].count(p), k) for n, (p, k) in enumerate(found)]
         else:
-            reads += [(given[f], 0) for f in PATH_FIELDS if isinstance(given.get(f), str)]
+            name = call.get("name")
+            kind = ("listing" if name in NOT_READS else "read" if name in READ_TOOLS and name not in SKILL_LOAD_TOOLS and returned
+                    and not given.get("offset") and not given.get("limit") else "other")
+            reads += [(given[f], 0, kind) for f in PATH_FIELDS if isinstance(given.get(f), str)]
     named = rationale_pattern(view, candidates)
-    rationale_reads = [(p, copy) for p, copy in reads if named.search(p) and not skill_rel(p)]
-    others = [p for p, _ in reads if not named.search(p) and not skill_rel(p)]
+    rationale_reads = [(p, copy, kind) for p, copy, kind in reads if named.search(p) and not skill_rel(p)]
+    others = [p for p, _, _ in reads if not named.search(p) and not skill_rel(p)]
     # An unrolled loop repeats one unresolved path inside a command, and each copy can name a different file.
-    rationales = {(p, copy) if "$" in p else os.path.normpath(p.strip("\"'")) for p, copy in rationale_reads}
+    rationales = {(p, copy) if "$" in p else os.path.normpath(p.strip("\"'"))
+                  for p, copy, kind in rationale_reads if judges or kind == "read"}
+    possible_rationales = {(p, copy) if "$" in p else os.path.normpath(p.strip("\"'"))
+                          for p, copy, kind in rationale_reads if kind != "listing"}
     want = int((view.case.get("expect") or {}).get("candidates") or 2)
     evidence = [f"rationale files read after the last candidate spawn: {len(rationales)}", f"other candidate files read: {len(others)}"]
     if not judges:
-        return inconclusive("no judge spawn to anchor the read phase", *evidence)
+        if not JUDGE_SKIPPED.search(view.final_reply):
+            return inconclusive("no judge spawn to anchor the read phase", *evidence)
+        dirs = [{d.rstrip("/") for d in ARM_PATH.findall(view.spawn_brief(s))} for s in candidates]
+        artifacts = [(os.path.normpath(p.strip("\"'")), kind) for p, _, kind in reads if not named.search(p) and not skill_rel(p)]
+
+        def touched(kind):
+            return [n for n, named in enumerate(dirs, 1) if any(k == kind and (r == d or r.startswith(d + "/")) for d in named for r, k in artifacts)]
+        read = touched("read")
+        unread = [n for n in range(1, len(dirs) + 1) if n not in read]
+        unsure = [n for n in unread if n in touched("other")]
+        evidence.append(f"judge skipped; candidates with no file read outside the rationale: {unread}, "
+                        f"named by a command that is neither a file read nor a listing or cleanup: {unsure}")
+        if not all(dirs):
+            return inconclusive("judge skipped, but a candidate brief names no output directory", *evidence)
+        if len(rationales) >= want and not unread:
+            return passed(*evidence)
+        if view.killed:
+            return inconclusive("run killed during the read phase", *evidence)
+        if len(possible_rationales) >= want and unsure == unread:
+            return inconclusive("judge skipped; a command names a candidate artifact or rationale but is not a file read the grader recognizes",
+                                *evidence, needs_judge=True, excerpt=excerpt_of("\n".join(c for seq, c, _, _ in view.commands() if seq > after)))
+        return failed("judge skipped, and the lead did not read every rationale and every candidate's full artifact", *evidence)
     if len(rationales) >= want and others:
         return passed(*evidence)
     if view.killed:
