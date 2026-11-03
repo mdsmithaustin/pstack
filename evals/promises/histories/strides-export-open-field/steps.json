@@ -1,0 +1,15 @@
+{
+  "fixture": "strides",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "totals: read the log path from a club config file\n\n`totals --config club.conf` takes its log from the config's log key, so the tablet script stops hard-coding the path.",
+      "delete": []
+    },
+    {
+      "dir": "step-2",
+      "message": "docs: describe the export option",
+      "delete": []
+    }
+  ]
+}
