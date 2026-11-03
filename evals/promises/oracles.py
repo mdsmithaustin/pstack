@@ -62,6 +62,7 @@ SHELL_TOOLS = {"Bash": "command", "exec_command": "cmd", "terminal": "command",
                "run_terminal_command": "command", "shell": "command", "bash": "command"}
 READ_VERBS = {"cat", "head", "tail", "sed", "less", "more", "nl", "bat", "awk", "grep", "rg", "python3", "python"}
 CONTENT_VERBS = READ_VERBS - {"grep", "rg", "python3", "python"}
+BOUNDED_READ = re.compile(r"(?:^|[;&|]\s*)(?:head|tail)\b|\bsed\s+-n\b")
 NOT_READS = {"ls", "tree", "stat", "du", "rm", "mkdir", "rmdir", "touch", "test", "[", "cd", "git worktree", "git branch", "git clean",
              "git status", "git rev-parse", "Glob", "LS"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "patch", "write_file", "apply_patch",
@@ -3282,17 +3283,19 @@ def arena_lead_reads(view):
             command = str(given.get(SHELL_TOOLS[call["name"]]) or "")
             written = {os.path.normpath(w) for w in shell_writes(command) + python_writes(command)}
             listing = {shell_verb(segment.split()) for segment in SHELL_SEGMENT.split(strip_heredocs(command))} - {""} <= NOT_READS
+            whole = returned and not BOUNDED_READ.search(command)
             found = []
             for verb, token in shell_path_verbs(strip_heredocs(command)):
                 if ASSIGNMENT.fullmatch(" " + token):
                     continue
-                kind = "listing" if listing else "read" if verb in CONTENT_VERBS and returned else "other"
+                kind = "listing" if listing else "read" if verb in CONTENT_VERBS and whole else "other"
                 paths = re.findall(r"['\"]([^'\"]*[/.][^'\"]*)['\"]", token) if "(" in token else [token]
                 found += [(p, kind) for p in paths if os.path.normpath(p.strip("\"'").lstrip("<>")) not in written]
             reads += [(p, [q for q, _ in found[:n]].count(p), k) for n, (p, k) in enumerate(found)]
         else:
             name = call.get("name")
-            kind = "listing" if name in NOT_READS else "read" if name in READ_TOOLS and name not in SKILL_LOAD_TOOLS and returned else "other"
+            kind = ("listing" if name in NOT_READS else "read" if name in READ_TOOLS and name not in SKILL_LOAD_TOOLS and returned
+                    and not given.get("offset") and not given.get("limit") else "other")
             reads += [(given[f], 0, kind) for f in PATH_FIELDS if isinstance(given.get(f), str)]
     named = rationale_pattern(view, candidates)
     rationale_reads = [(p, copy, kind) for p, copy, kind in reads if named.search(p) and not skill_rel(p)]

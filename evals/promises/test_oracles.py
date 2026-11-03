@@ -795,6 +795,22 @@ class InterrogateSwarmArena(unittest.TestCase):
                                 for i in range(1, 6)]
         self.assertEqual(grade("arena-lead-reads-rationales-and-base", with_tool, case)["verdict"], PASS)
 
+    def test_copilot_after_a_skipped_judge_a_bounded_read_is_not_a_full_read(self):
+        case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
+        reply = "Skipped the cross-judge: nothing runs on another model. Base: candidate 3."
+        rationales = [f"cat /tmp/k/candidate-{i}/rationale.md" for i in range(1, 6)]
+        for per_candidate in ("head -n 1 /tmp/k/candidate-{i}/relay/cache.py", "sed -n 1,20p /tmp/k/candidate-{i}/relay/cache.py"):
+            with self.subTest(command=per_candidate):
+                trace = self.skipped("gpt-5.6-sol", same, reply, rationales + [per_candidate.format(i=i) for i in range(1, 6)])
+                result = grade("arena-lead-reads-rationales-and-base", trace, case)
+                self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+                self.assertTrue(result.get("needs_judge"), result)
+        limited = self.skipped("gpt-5.6-sol", same, reply, rationales)
+        limited["events"] += [{"seq": 40 + i, "kind": "tool_call", "name": "Read", "input": {"file_path": f"/tmp/k/candidate-{i}/relay/cache.py", "limit": 5}}
+                              for i in range(1, 6)]
+        result = grade("arena-lead-reads-rationales-and-base", limited, case)
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
     def test_a_skipped_judge_requires_rationale_contents_not_just_paths(self):
         case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
         reply = "Skipped the cross-judge: nothing runs on another model. Base: candidate 3."
