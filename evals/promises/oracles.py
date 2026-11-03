@@ -1937,6 +1937,7 @@ def interrogate_models(view):
 
 FINDINGS_END = re.compile(r"\n\W*(?:intent|threats|dropped)\b")
 NO_FINDINGS = re.compile(r"^\W*(?:no (?:verified )?findings|none)\b")
+FINDING_ITEM = re.compile(r"(?m)^([ \t]*)(?:[-*•]|\d+[.)])[ \t]+")
 
 
 def reported_findings(low):
@@ -1944,7 +1945,16 @@ def reported_findings(low):
     body = low[head.end():] if head else ""
     end = FINDINGS_END.search(body)
     body = body[:end.start()] if end else body
-    return "" if NO_FINDINGS.search(body) or not re.search(r"\w", body) else " ".join(body.split())
+    if NO_FINDINGS.search(body) or not re.search(r"\w", body):
+        return []
+    items = list(FINDING_ITEM.finditer(body))
+    indent = min((len(m.group(1)) for m in items), default=0)
+    starts = [m.start() for m in items if len(m.group(1)) == indent] or [0]
+    return [" ".join(body[a:b].split()) for a, b in zip(starts, starts[1:] + [len(body)])]
+
+
+def quotes(command, text):
+    return any(p.lower() in text for p in command_segments(command) + [" ".join(command.split())] if len(p) >= 10)
 
 
 @oracle("interrogate-keeps-run-proven-findings")
@@ -1963,16 +1973,18 @@ def interrogate_proven_findings(view):
         adversaries = reviewer_spawns(view)
         anchor = min((s.get("seq") or 0 for s in adversaries), default=0)
         reruns = [c for seq, c, _, _ in view.commands() if seq > anchor]
-        quoted = [c for c in reruns if any(p.lower() in findings for p in command_segments(c) + [" ".join(c.split())] if len(p) >= 10)]
+        quoted = [c for c in reruns if any(quotes(c, f) for f in findings)]
+        unmatched = [n for n, f in enumerate(findings, 1) if not any(quotes(c, f) for c in reruns)]
         delegates = [s for s in view.spawns if (s.get("seq") or 0) > anchor and s not in adversaries]
         evidence.append(f"lead commands after the first adversary spawn: {len(reruns)}, quoted in Findings: {len(quoted)}; "
+                        f"findings: {len(findings)}, quoting no rerun: {unmatched}; "
                         f"later non-adversary spawns: {len(delegates)} (adversary runs are not in the trace)")
         if not view.tool_calls:
             return inconclusive("the trace carries no tool calls, so no run evidence for the reported findings", *evidence)
-        if not quoted and (reruns or delegates):
-            return inconclusive("Findings quote no command the lead reran after the adversaries; a judge must match them",
+        if unmatched and (reruns or delegates):
+            return inconclusive("a finding quotes no command the lead reran after the adversaries; a judge must match it",
                                 *evidence, needs_judge=True, excerpt=excerpt_of(view.final_reply))
-        if not quoted:
+        if unmatched:
             failures.append("the reply reports a finding but the lead reran no command after the adversaries spawned")
     return failed(failures, *evidence) if failures else passed(*evidence)
 

@@ -601,6 +601,24 @@ class InterrogateSwarmArena(unittest.TestCase):
         clean = reply.replace("- duplicate kept: `python3 -m pytest -k dedupe` printed 2, the intent needs 1 (Adversary A)", "No verified findings.")
         self.assertEqual(verdict(spawned, clean)["verdict"], PASS)
 
+    def test_copilot_each_reported_finding_needs_its_own_rerun(self):
+        case = load_case("interrogate-run")
+        adversaries = [{"seq": s, "tool": "Agent", "model": m, "prompt_head": f"Break this change. Adversary {label}"}
+                       for s, m, label in ((1, "fable", "A"), (2, "opus", "B"))]
+        spawned = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {}} for s in (1, 2)]
+        reply = ("### Intent\n- dedupe\n### Findings (2 kept)\n"
+                 "1. duplicate kept: `python3 -m pytest -k dedupe` printed 2, the intent needs 1 (Adversary A)\n"
+                 "2. stale entry: `python3 scripts/expire.py --ttl 0` printed 1 row, the intent needs 0 (Adversary B)\n"
+                 "### Dropped\n- Adversary B: 0")
+
+        def verdict(*commands):
+            events = spawned + [e for n, c in enumerate(commands) for e in bash(5 + 2 * n, c, ok=False, head="1 failed")]
+            return grade("interrogate-keeps-run-proven-findings", minimal(events=events, spawns=adversaries, final_reply=reply), case)
+        one = verdict("python3 -m pytest -k dedupe")
+        self.assertEqual(one["verdict"], INCONCLUSIVE, one)
+        self.assertTrue(one.get("needs_judge"), one)
+        self.assertEqual(verdict("python3 -m pytest -k dedupe", "python3 scripts/expire.py --ttl 0")["verdict"], PASS)
+
     def test_swarm_statuses(self):
         case = load_case("swarm-run")
         reply = "| package | status |\n|---|---|\n| ingest | PASS |\n| shape | PASS |\n| render | ISSUES |\n| publish | PASS |\nGaps: none."
