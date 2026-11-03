@@ -115,6 +115,10 @@ Read `promises.feature-delivers-spec-edges.measures` in each run's `verdict.json
 
 The [2026-11-01 comparison](results/2026-11-01-feature-edge-pass.md) owns the skills pin, harness options, results, and limits for reproducing that comparison. Use its skills pin for both arms, since the committed overlays require the exact resulting files. The implied spec's case-folding interpretation is contested, as that record explains.
 
+`feature-edges-open-field` measures a different failure on the same fixture. A spec adds a new field and leaves part of its values open, and the lead copies a rule from the neighboring field and rejects values the spec allows. The history first commits a club config whose `log` key must start with `log://`. It then adds `docs/export.md`, the spec for an optional `export` key. The spec's one example is `report://weekly`, and no sentence restricts the scheme.
+
+Its held-out script checks that `export: other://x` exits 0 and prints the totals, both without `--out` (`open-scheme`) and with it (`open-scheme-out`). The `open-scheme-out` check rests on the spec defining the export path as what follows `://`. Four core checks cover the config's `log` key, the exported files, and that nothing is written without `--out`. One of them requires `log` to still exit 2 for another scheme, so a delivery cannot pass by deleting the config's validation. The case registers `feature-keeps-open-edges-open`, which runs the `feature-delivers-spec-edges` grader, and has its own `held_out.py` and `reference/strides`. The `open-scheme` mutant rejects the export scheme while the config loads and fails both edges. The `open-scheme-out` mutant rejects it when the files are written and fails only the second.
+
 ## Known oracle gaps
 
 These heuristic edges are open. Two have moved recorded verdicts.

@@ -3948,7 +3948,7 @@ def lead_test_files(view):
                   and _is_file(view.project / rel))
 
 
-@oracle("feature-delivers-spec-edges")
+@oracle("feature-delivers-spec-edges", "feature-keeps-open-edges-open")
 def feature_delivers_spec_edges(view):
     """Runs the case's held-out script against the delivered project. PASS needs every held-out check to pass.
     `measures` holds the counts an arm tally reads, such as which edges the delivered code and its own tests handle."""

@@ -3473,6 +3473,112 @@ class Optional(unittest.TestCase):
                 self.assertFalse([t for t in texts if sentence in t])
 
 
+class HeldOutOpenField(unittest.TestCase):
+    CASE = CASES / "feature-edges-open-field"
+    PID = "feature-keeps-open-edges-open"
+    OTHER_SCHEME = """\
+import contextlib
+import io
+import tempfile
+import unittest
+from pathlib import Path
+
+from strides.__main__ import main
+
+
+class ExportTest(unittest.TestCase):
+    def test_another_scheme_without_out_prints_the_totals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "runs.txt").write_text("2026-03-02 06:40 5.0 Ada Lim\\n", encoding="utf-8")
+            (Path(tmp) / "club.conf").write_text("log: log://runs.txt\\nexport: other://x\\n", encoding="utf-8")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = main(["totals", "--config", str(Path(tmp) / "club.conf")])
+        self.assertEqual((code, out.getvalue()), (0, "Ada Lim: 5.0 km\\n"))
+"""
+
+    def project(self, mutant=""):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name) / "strides"
+        live.make_project(live.load_case("feature-edges-open-field"), root)
+        shutil.rmtree(root / "strides")
+        shutil.copytree(self.CASE / "reference" / "strides", root / "strides")
+        if mutant:
+            config = root / "strides" / "config.py"
+            config.write_text(config.read_text().replace('os.environ.get("STRIDES_MUTANT", "")', repr(mutant)))
+        return root
+
+    def held_out(self):
+        spec = importlib.util.spec_from_file_location("held_out", self.CASE / "held_out.py")
+        module = importlib.util.module_from_spec(spec)
+        with mock.patch.object(sys, "dont_write_bytecode", True):
+            spec.loader.exec_module(module)
+        return module
+
+    def failing_checks(self, module, project):
+        with tempfile.TemporaryDirectory() as tmp:
+            return [c[0] for c in module.CHECKS if not module.run_check(project, Path(tmp), c)["ok"]]
+
+    def test_the_reference_passes_every_check_and_each_mutant_fails_the_checks_that_reach_its_rejection(self):
+        module = self.held_out()
+        self.assertEqual(self.failing_checks(module, self.project()), [])
+        self.assertEqual(module.EDGES, ["open-scheme", "open-scheme-out"])
+        self.assertEqual(self.failing_checks(module, self.project("open-scheme")), ["open-scheme", "open-scheme-out"])
+        self.assertEqual(self.failing_checks(module, self.project("open-scheme-out")), ["open-scheme-out"])
+
+    def test_the_reference_keeps_the_fixture_modules_byte_for_byte(self):
+        for name in ("__init__.py", "log.py", "totals.py"):
+            with self.subTest(module=name):
+                self.assertEqual((self.CASE / "reference" / "strides" / name).read_bytes(),
+                                 (FIXTURES / "strides" / "strides" / name).read_bytes())
+
+    def test_the_reference_passes_the_tests_the_history_committed(self):
+        root = self.project()
+        run = subprocess.run([sys.executable, "-B", "-m", "unittest", "discover", "-s", "tests"], cwd=root,
+                             capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0, run.stderr)
+
+    def test_both_promise_ids_run_the_same_grader(self):
+        self.assertIs(oracles.ORACLES[self.PID], oracles.ORACLES["feature-delivers-spec-edges"])
+
+    def test_a_delivery_that_keeps_the_export_open_passes(self):
+        result = grade(self.PID, minimal(events=[edit(1, "strides/export.py")]), load_case("feature-edges-open-field"), self.project())
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual((result["measures"]["edges_passed"], result["measures"]["core_passed"]), (2, 4))
+
+    def test_a_delivery_that_copies_the_log_rule_onto_export_fails_both_edges(self):
+        result = grade(self.PID, minimal(events=[edit(1, "strides/config.py")]), load_case("feature-edges-open-field"),
+                       self.project("open-scheme"))
+        self.assertEqual(result["verdict"], FAIL, result)
+        self.assertEqual([f.split(":")[0] for f in result["failures"]],
+                         ["held-out edge check open-scheme failed", "held-out edge check open-scheme-out failed"])
+        self.assertEqual(result["measures"]["core_passed"], 4)
+
+    def test_a_delivered_test_catches_the_mutants_whose_rejection_it_reaches(self):
+        root = self.project()
+        (root / "tests" / "test_export.py").write_text(self.OTHER_SCHEME)
+        events = [edit(1, str(root / "tests" / "test_export.py"))]
+        result = grade(self.PID, minimal(events=events), load_case("feature-edges-open-field"), root)
+        self.assertEqual(result["verdict"], PASS, result)
+        self.assertEqual(result["measures"]["delivered_catches"], {"open-scheme": True, "open-scheme-out": False})
+        self.assertEqual(result["measures"]["lead_catches"], {"open-scheme": True, "open-scheme-out": False})
+
+    def test_the_spec_leaves_the_export_scheme_open_and_holds_a_source_sentence_for_each_edge(self):
+        case = live.load_case("feature-edges-open-field")
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = Path(tmp.name) / "strides"
+        live.make_project(case, project)
+        spec = " ".join((project / "docs" / "export.md").read_text(encoding="utf-8").split())
+        self.assertEqual(set(re.findall(r"(\w+)://", spec)), {"report"})
+        self.assertEqual(sorted(case["edge_sources"]), self.held_out().EDGES)
+        for edge, sentence in case["edge_sources"].items():
+            with self.subTest(edge=edge):
+                self.assertIn(sentence, spec)
+        self.assertIn("It must start with `log://`", (project / "README.md").read_text(encoding="utf-8"))
+
+
 class CaseHygiene(unittest.TestCase):
     def words(self, text):
         return set(re.findall(r"[a-z]+", text.lower()))
