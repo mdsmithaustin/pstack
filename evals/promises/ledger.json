@@ -6687,15 +6687,6 @@
    ],
    "text": "It updates the verification from the code, reruns it, shows that each updated check can still fail, and tells you whether each failure is drift in the verification or a bug in the code."
   },
-  "41a3787d8ef6": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "arena-skips-judge-without-other-model",
-   "sources": [
-    "port"
-   ],
-   "text": "When no such model can run, the coordinator skips the judge and picks the base itself."
-  },
   "4201dba7448d": {
    "class": "substituted",
    "file": "03-understand.md",
@@ -9858,6 +9849,15 @@
    ],
    "text": "The same goes for adopting someone else's skill."
   },
+  "9b878a349774": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "arena-skips-judge-without-other-model",
+   "sources": [
+    "port"
+   ],
+   "text": "When no such model can run, the coordinator skips the judge, reads every candidate in full, and picks the base itself."
+  },
   "9b941ae22a44": {
    "class": "context",
    "file": "09-make-it-yours.md",
@@ -10773,7 +10773,7 @@
    "class": "substituted",
    "file": "04-design.md",
    "ported_as": [
-    "41a3787d8ef6"
+    "9b878a349774"
    ],
    "promise": "arena-skips-judge-without-other-model",
    "sources": [
@@ -12865,8 +12865,7 @@
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "**Polishing an abstract plan.** Adversarial review of a plan with no code behind it invents risks that will never happen. Settle the open questions with prototypes, then review what got built."
   },
@@ -13494,6 +13493,14 @@
     "upstream"
    ],
    "text": "Opus goes to `max`."
+  },
+  "fae075f9ac87": {
+   "class": "context",
+   "file": "10-recipes-and-pitfalls.md",
+   "sources": [
+    "port"
+   ],
+   "text": "**Polishing an abstract plan.** `/interrogate` keeps only findings a run proves, so a plan with no code behind it gives the adversaries little to break. Settle the open questions with prototypes, then review what got built."
   },
   "fae73ab94746": {
    "class": "context",
