@@ -726,6 +726,26 @@ class InterrogateSwarmArena(unittest.TestCase):
         base_only = grade("arena-lead-reads-rationales-and-base", self.skipped("gpt-5.6-sol", same, reply, rationales + artifacts[2:3]), case)
         self.assertEqual(base_only["verdict"], FAIL, base_only)
 
+    def test_copilot_after_a_skipped_judge_listing_or_removing_a_candidate_is_not_reading_it(self):
+        case, same = load_case("arena-run"), ["gpt-5.6-sol"] * 5
+        reply = "Skipped the cross-judge: nothing runs on another model. Base: candidate 3."
+        rationales = [f"cat /tmp/k/candidate-{i}/rationale.md" for i in range(1, 6)]
+
+        def verdict(per_candidate):
+            trace = self.skipped("gpt-5.6-sol", same, reply, rationales + [per_candidate.format(i=i) for i in range(1, 6)])
+            return grade("arena-lead-reads-rationales-and-base", trace, case)
+        listed = verdict("ls -la /tmp/k/candidate-{i}/relay")
+        self.assertEqual(listed["verdict"], FAIL, listed)
+        removed = verdict("git worktree remove --force /tmp/k/candidate-{i}")
+        self.assertEqual(removed["verdict"], FAIL, removed)
+        diffed = verdict("git -C /tmp/k/candidate-{i} diff HEAD")
+        self.assertEqual(diffed["verdict"], INCONCLUSIVE, diffed)
+        self.assertTrue(diffed.get("needs_judge"), diffed)
+        with_tool = self.skipped("gpt-5.6-sol", same, reply, rationales)
+        with_tool["events"] += [{"seq": 40 + i, "kind": "tool_call", "name": "Read", "input": {"file_path": f"/tmp/k/candidate-{i}/relay/cache.py"}}
+                                for i in range(1, 6)]
+        self.assertEqual(grade("arena-lead-reads-rationales-and-base", with_tool, case)["verdict"], PASS)
+
     def test_a_judge_with_no_model_inherits_the_leads_and_fails_when_the_run_used_another(self):
         result = self.judged_by("claude-opus-5-5", ["fable", "opus", "sonnet", "fable", "opus"], None)
         self.assertEqual(result["verdict"], FAIL, result)

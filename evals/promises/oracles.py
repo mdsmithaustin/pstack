@@ -61,6 +61,9 @@ SKILL_LOAD_TOOLS = {"skill_view", "Skill"}
 SHELL_TOOLS = {"Bash": "command", "exec_command": "cmd", "terminal": "command",
                "run_terminal_command": "command", "shell": "command", "bash": "command"}
 READ_VERBS = {"cat", "head", "tail", "sed", "less", "more", "nl", "bat", "awk", "grep", "rg", "python3", "python"}
+CONTENT_VERBS = READ_VERBS - {"grep", "rg", "python3", "python"}
+NOT_READS = {"ls", "tree", "stat", "du", "rm", "mkdir", "rmdir", "touch", "test", "[", "cd", "git worktree", "git branch", "git clean",
+             "git status", "git rev-parse", "Glob", "LS"}
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit", "patch", "write_file", "apply_patch",
               "edit_file", "create_file", "str_replace_editor", "str_replace_based_edit_tool",
               "edit", "write", "insert", "create", "replace_in_file", "search_replace", "FileChange"}
@@ -304,17 +307,33 @@ def expand_assignments(command):
     return command
 
 
-def resolved_shell_paths(command):
+SHELL_SEGMENT = re.compile(r"&&|\|\||[;|\n]")
+
+
+def shell_verb(words):
+    if words[:1] != ["git"]:
+        return words[0] if words else ""
+    rest = words[1:]
+    while rest[:1] == ["-C"]:
+        rest = rest[2:]
+    return " ".join(["git", *rest[:1]])
+
+
+def shell_path_verbs(command):
     base, out = "", []
-    for segment in re.split(r"&&|\|\||[;|\n]", expand_assignments(command)):
+    for segment in SHELL_SEGMENT.split(expand_assignments(command)):
         words = segment.strip().split()
         if words[:1] == ["cd"] and len(words) > 1:
             target = words[1].strip("\"'")
             base = target if target.startswith("/") or not base else f"{base}/{target}"
             continue
         for token in shell_paths(segment):
-            out.append(token if token.startswith("/") or not base else f"{base}/{token}")
+            out.append((shell_verb(words), token if token.startswith("/") or not base else f"{base}/{token}"))
     return out
+
+
+def resolved_shell_paths(command):
+    return [path for _, path in shell_path_verbs(command)]
 
 
 def shell_paths(command):
@@ -3243,22 +3262,26 @@ def arena_lead_reads(view):
     for call in view.tool_calls:
         if call.get("seq", 0) <= after or call.get("name") in EDIT_TOOLS:
             continue
-        given = call.get("input") or {}
+        given, returned = call.get("input") or {}, view.read_returned(call)
         if call.get("name") in SHELL_TOOLS:
             command = str(given.get(SHELL_TOOLS[call["name"]]) or "")
             written = {os.path.normpath(w) for w in shell_writes(command) + python_writes(command)}
+            listing = {shell_verb(segment.split()) for segment in SHELL_SEGMENT.split(strip_heredocs(command))} - {""} <= NOT_READS
             found = []
-            for token in resolved_shell_paths(strip_heredocs(command)):
+            for verb, token in shell_path_verbs(strip_heredocs(command)):
                 if ASSIGNMENT.fullmatch(" " + token):
                     continue
+                kind = "listing" if listing else "read" if verb in CONTENT_VERBS and returned else "other"
                 paths = re.findall(r"['\"]([^'\"]*[/.][^'\"]*)['\"]", token) if "(" in token else [token]
-                found += [p for p in paths if os.path.normpath(p.strip("\"'").lstrip("<>")) not in written]
-            reads += [(p, found[:n].count(p)) for n, p in enumerate(found)]
+                found += [(p, kind) for p in paths if os.path.normpath(p.strip("\"'").lstrip("<>")) not in written]
+            reads += [(p, [q for q, _ in found[:n]].count(p), k) for n, (p, k) in enumerate(found)]
         else:
-            reads += [(given[f], 0) for f in PATH_FIELDS if isinstance(given.get(f), str)]
+            name = call.get("name")
+            kind = "listing" if name in NOT_READS else "read" if name in READ_TOOLS and name not in SKILL_LOAD_TOOLS and returned else "other"
+            reads += [(given[f], 0, kind) for f in PATH_FIELDS if isinstance(given.get(f), str)]
     named = rationale_pattern(view, candidates)
-    rationale_reads = [(p, copy) for p, copy in reads if named.search(p) and not skill_rel(p)]
-    others = [p for p, _ in reads if not named.search(p) and not skill_rel(p)]
+    rationale_reads = [(p, copy) for p, copy, _ in reads if named.search(p) and not skill_rel(p)]
+    others = [p for p, _, _ in reads if not named.search(p) and not skill_rel(p)]
     # An unrolled loop repeats one unresolved path inside a command, and each copy can name a different file.
     rationales = {(p, copy) if "$" in p else os.path.normpath(p.strip("\"'")) for p, copy in rationale_reads}
     want = int((view.case.get("expect") or {}).get("candidates") or 2)
@@ -3267,15 +3290,24 @@ def arena_lead_reads(view):
         if not JUDGE_SKIPPED.search(view.final_reply):
             return inconclusive("no judge spawn to anchor the read phase", *evidence)
         dirs = [{d.rstrip("/") for d in ARM_PATH.findall(view.spawn_brief(s))} for s in candidates]
-        read = [os.path.normpath(p.strip("\"'")) for p in others]
-        unread = [n for n, named in enumerate(dirs, 1) if not any(r == d or r.startswith(d + "/") for d in named for r in read)]
-        evidence.append(f"judge skipped; candidates with no artifact read outside the rationale: {unread}")
+        artifacts = [(os.path.normpath(p.strip("\"'")), kind) for p, _, kind in reads if not named.search(p) and not skill_rel(p)]
+
+        def touched(kind):
+            return [n for n, named in enumerate(dirs, 1) if any(k == kind and (r == d or r.startswith(d + "/")) for d in named for r, k in artifacts)]
+        read = touched("read")
+        unread = [n for n in range(1, len(dirs) + 1) if n not in read]
+        unsure = [n for n in unread if n in touched("other")]
+        evidence.append(f"judge skipped; candidates with no file read outside the rationale: {unread}, "
+                        f"named by a command that is neither a file read nor a listing or cleanup: {unsure}")
         if not all(dirs):
             return inconclusive("judge skipped, but a candidate brief names no output directory", *evidence)
         if len(rationales) >= want and not unread:
             return passed(*evidence)
         if view.killed:
             return inconclusive("run killed during the read phase", *evidence)
+        if len(rationales) >= want and unsure == unread:
+            return inconclusive("judge skipped; a command names a candidate's directory but is not a file read the grader recognizes",
+                                *evidence, needs_judge=True, excerpt=excerpt_of("\n".join(c for seq, c, _, _ in view.commands() if seq > after)))
         return failed("judge skipped, and the lead did not read every rationale and every candidate's full artifact", *evidence)
     if len(rationales) >= want and others:
         return passed(*evidence)
