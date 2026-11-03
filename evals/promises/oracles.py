@@ -1957,6 +1957,7 @@ def interrogate_models(view):
 FINDINGS_END = re.compile(r"\n\W*(?:intent|threats|dropped)\b")
 NO_FINDINGS = re.compile(r"^\W*(?:no (?:verified )?findings|none)\b")
 FINDING_ITEM = re.compile(r"(?m)^([ \t]*)(?:[-*•]|\d+[.)])[ \t]+")
+FINDING_HEADING = re.compile(r"(?m)^[ \t]*#{1,6}[ \t]+")
 
 
 def reported_findings(low):
@@ -1966,9 +1967,11 @@ def reported_findings(low):
     body = body[:end.start()] if end else body
     if NO_FINDINGS.search(body) or not re.search(r"\w", body):
         return []
-    items = list(FINDING_ITEM.finditer(body))
-    indent = min((len(m.group(1)) for m in items), default=0)
-    starts = [m.start() for m in items if len(m.group(1)) == indent] or [0]
+    starts = [m.start() for m in FINDING_HEADING.finditer(body)]
+    if not starts:
+        items = list(FINDING_ITEM.finditer(body))
+        indent = min((len(m.group(1)) for m in items), default=0)
+        starts = [m.start() for m in items if len(m.group(1)) == indent] or [0]
     return [" ".join(body[a:b].split()) for a, b in zip(starts, starts[1:] + [len(body)])]
 
 

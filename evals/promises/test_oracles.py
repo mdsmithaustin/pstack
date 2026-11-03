@@ -619,6 +619,27 @@ class InterrogateSwarmArena(unittest.TestCase):
         self.assertTrue(one.get("needs_judge"), one)
         self.assertEqual(verdict("python3 -m pytest -k dedupe", "python3 scripts/expire.py --ttl 0")["verdict"], PASS)
 
+    def test_copilot_heading_delimited_findings_each_need_a_rerun(self):
+        case = load_case("interrogate-run")
+        adversaries = [{"seq": s, "tool": "Agent", "model": m, "prompt_head": f"Break this change. Adversary {label}"}
+                       for s, m, label in ((1, "fable", "A"), (2, "opus", "B"))]
+        spawned = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {}} for s in (1, 2)]
+        reply = ("### Intent\n- dedupe\n### Findings\n"
+                 "#### 1. Duplicate entries\n`python3 -m pytest -k dedupe` printed 2, the intent needs 1 (Adversary A)\n"
+                 "#### 2. Stale entries\n`python3 scripts/expire.py --ttl 0` printed 1 row, the intent needs 0 (Adversary B)\n"
+                 "### Dropped\n- Adversary B: 0")
+        bulleted = reply.replace("`python3 scripts/expire.py --ttl 0` printed 1 row", "- command: `python3 scripts/expire.py --ttl 0`\n- output: 1 row")
+
+
+        def verdict(*commands, final_reply=reply):
+            events = spawned + [e for n, c in enumerate(commands) for e in bash(5 + 2 * n, c, ok=False, head="1 failed")]
+            return grade("interrogate-keeps-run-proven-findings", minimal(events=events, spawns=adversaries, final_reply=final_reply), case)
+        one = verdict("python3 -m pytest -k dedupe")
+        self.assertEqual(one["verdict"], INCONCLUSIVE, one)
+        self.assertTrue(one.get("needs_judge"), one)
+        for final_reply in (reply, bulleted):
+            self.assertEqual(verdict("python3 -m pytest -k dedupe", "python3 scripts/expire.py --ttl 0", final_reply=final_reply)["verdict"], PASS)
+
     def test_swarm_statuses(self):
         case = load_case("swarm-run")
         reply = "| package | status |\n|---|---|\n| ingest | PASS |\n| shape | PASS |\n| render | ISSUES |\n| publish | PASS |\nGaps: none."
