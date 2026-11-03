@@ -640,6 +640,27 @@ class InterrogateSwarmArena(unittest.TestCase):
         for final_reply in (reply, bulleted):
             self.assertEqual(verdict("python3 -m pytest -k dedupe", "python3 scripts/expire.py --ttl 0", final_reply=final_reply)["verdict"], PASS)
 
+    def test_copilot_a_rerun_matches_a_finding_only_with_its_arguments(self):
+        case = load_case("interrogate-run")
+        adversaries = [{"seq": s, "tool": "Agent", "model": m, "prompt_head": f"Break this change. Adversary {label}"}
+                       for s, m, label in ((1, "fable", "A"), (2, "opus", "B"))]
+        spawned = [{"seq": s, "kind": "tool_call", "name": "Agent", "input": {}} for s in (1, 2)]
+        reply = ("### Intent\n- dedupe\n### Findings\n"
+                 "1. duplicate kept: `python3 scripts/repro.py --case duplicate` printed 2, the intent needs 1 (Adversary A)\n"
+                 "2. stale entry: `python3 scripts/repro.py --case stale` printed 1 row, the intent needs 0 (Adversary B)\n"
+                 "### Dropped\n- Adversary B: 0")
+
+        def verdict(*commands):
+            events = spawned + [e for n, c in enumerate(commands) for e in bash(5 + 2 * n, c, ok=False, head="1 failed")]
+            return grade("interrogate-keeps-run-proven-findings", minimal(events=events, spawns=adversaries, final_reply=reply), case)
+        for commands in (("python3 scripts/repro.py --case duplicate",),
+                         ("python3 scripts/repro.py --case dup", "python3 scripts/repro.py --case stale")):
+            partial = verdict(*commands)
+            self.assertEqual(partial["verdict"], INCONCLUSIVE, partial)
+            self.assertTrue(partial.get("needs_judge"), partial)
+        self.assertEqual(verdict("cd /repo && python3 scripts/repro.py --case duplicate 2>&1",
+                                 "python3 scripts/repro.py --case stale | tail -5")["verdict"], PASS)
+
     def test_swarm_statuses(self):
         case = load_case("swarm-run")
         reply = "| package | status |\n|---|---|\n| ingest | PASS |\n| shape | PASS |\n| render | ISSUES |\n| publish | PASS |\nGaps: none."

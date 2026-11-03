@@ -1345,13 +1345,14 @@ def skipped_step(view):
 TRIVIAL = re.compile(r"^(cat|ls|cd|cp|mkdir|rm|wc|echo|printf|export|git (?:status|log|diff|show|add|switch|checkout|remote)|sed|head|tail|grep|rg|find|pwd|which|S=|V=)\b")
 
 
-def command_segments(command):
+def command_segments(command, paths=True):
     out = []
     for segment in re.split(r"&&|\|\||;|\||\n", command):
         core = " ".join(re.sub(r"\s*\d?>>?\s*\S+", "", segment).split())
         if len(core) >= 10 and not TRIVIAL.match(core):
             out.append(core)
-        out += [m for m in re.findall(r"(?:python3?|node|bash|sh)\s+(\S+\.(?:py|sh|ts|js))|^(\.?/\S+\.(?:py|sh))", core) for m in (m if isinstance(m, str) else next(x for x in m if x),) if len(m) >= 8]
+        if paths:
+            out += [m for m in re.findall(r"(?:python3?|node|bash|sh)\s+(\S+\.(?:py|sh|ts|js))|^(\.?/\S+\.(?:py|sh))", core) for m in (m if isinstance(m, str) else next(x for x in m if x),) if len(m) >= 8]
     return out
 
 
@@ -1976,7 +1977,8 @@ def reported_findings(low):
 
 
 def quotes(command, text):
-    return any(p.lower() in text for p in command_segments(command) + [" ".join(command.split())] if len(p) >= 10)
+    return any(re.search(re.escape(p.lower()) + r"(?![\w./-])", text)
+               for p in command_segments(command, paths=False) + [" ".join(command.split())] if len(p) >= 10)
 
 
 @oracle("interrogate-keeps-run-proven-findings")
