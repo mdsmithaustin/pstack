@@ -16,7 +16,7 @@ The second case tests whether the word "required" triggers the extra check, beca
 
 - Skills pin: `f17b6305` (main after #393). Command: `python3 evals/promises/live.py run --harness <claude-code|codex> --model <claude-sonnet-5-5|gpt-6.1-sol> --effort high --runs <3|2> --skills-at f17b6305 --case <case> --out <dir>`.
 
-At the time of these runs, `open-scheme-out` checked the exit status and printed totals but did not check exported files. The current check also verifies those files. The grades below are the original results, not reruns with the stricter check.
+At the time of these runs, `open-scheme-out` checked the exit status and printed totals but did not check exported files. The current check also verifies those files. The grades below are the original results. A recheck ran the current `held_out.py` directly against each run's project, using the worktree for the two Claude Code runs that delivered there. All 9 delivered implementations passed every check, and the undelivered Codex run failed both edges.
 
 ## Results
 
