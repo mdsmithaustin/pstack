@@ -1,13 +1,15 @@
 ---
 name: pstack-harness
-description: Maps pstack's delegation and portable resource primitives to the current CLI (Claude Code, Codex, Hermes, Grok Build, or any other harness). Covers how to locate installed skills and fresh trunk resources, spawn a subagent, set a per-subagent model, parallelize arms, go read-only, ask a structured question (AskQuestion), track a worklist, loop, and locate the transcript store. Read whenever a pstack skill says spawn, Task tool, subagent_type, per-subagent model, AskQuestion, or worklist, names a sibling skill you cannot find, or runs a path from a playbook. Every primitive is named differently per harness, so read this before concluding your harness has no such capability or resource.
+description: Maps pstack's delegation and portable resource primitives to the current CLI (Claude Code, Codex, Hermes, Grok Build, or any other harness). Covers how to locate installed skills and fresh trunk resources, spawn a subagent, set a per-subagent model, parallelize arms, go read-only, ask a structured question (AskQuestion), track a worklist, loop, locate the transcript store, write shell commands, and inspect running processes. Read whenever a pstack skill says spawn, Task tool, subagent_type, per-subagent model, AskQuestion, or worklist, names a sibling skill you cannot find, or runs a path from a playbook. Every primitive is named differently per harness, so read this before concluding your harness has no such capability or resource.
 ---
 
 # Harness adapters
 
-Use this skill when a pstack workflow names a delegation action, worklist, question, loop, transcript, or portable resource.
+Use this skill when a pstack workflow names a delegation action, worklist, question, loop, transcript, portable resource, shell command, or process inspection.
 
 pstack tool names describe intent. Satisfy that intent with the live session's capabilities. Your tool inventory and CLI help are authoritative. Never invent a tool. Report the mechanism when it affects execution or evidence. For worklists, report item state rather than the carrier.
+
+Before executing shell commands or answering what is running, read [shell commands and running processes](references/shell-and-processes.md). This applies to every action and runtime.
 
 ## Select the action
 
