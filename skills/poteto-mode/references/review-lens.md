@@ -12,6 +12,7 @@ The Code review playbook opens this file at its intent, design, and deslop check
 
 ## Shared code and its callers (**principle-model-the-domain**)
 
+- **Does the diff change an output, schema, or wire format consumed outside the repo?** Use integration docs, deployment configuration, and contract tests to list known external consumers and the contract each enforces. Check compatibility across the deployed versions and rollout order. Flag a contract or ordering break with evidence, even when in-repo tests pass. Leave it when contracts and rollout preserve compatibility. If consumer evidence is unavailable, name the verification gap.
 - **Does the diff change shared code for one caller?** List every caller of each changed function, type, or constant with grep, or, when `.gitnexus/` exists and `gitnexus` is on `PATH`, refresh it with `gitnexus analyze --index-only` and run `gitnexus impact <symbol>`. For each caller outside the PR's intent, decide whether its output changes. Flag a behavior change that reaches a caller serving a different business function with no test and no mention in the PR. The fix direction is to fork the piece and change only the requester's path. Leave it when every caller wants the new behavior, or the PR says so and a test covers it.
 - **Does the diff merge look-alike code?** Find who changes each copy. Read `git log` on each, the owners file, and the README. Flag the merge when different business functions change the copies. Leave it when the copies change for the same reasons.
 
