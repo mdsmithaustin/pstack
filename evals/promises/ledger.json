@@ -2786,19 +2786,19 @@
   },
   "poteto-mode-triggers-architect-on-boundary-crossing": {
    "check": "static",
-   "claim": "poteto-mode's triggers send any code crossing a function boundary to architect without the user naming it.",
+   "claim": "poteto-mode sends boundary-crossing code to architect, except when runtime evidence confirms a bug's root cause and identifies one localized repair.",
    "evidence": [
     {
      "file": "skills/poteto-mode/references/task-triggers.md",
-     "quote": "Code crossing a function boundary → call the Skill tool with `architect` for parallel design exploration before implementing."
+     "quote": "Code crossing a function boundary → call the Skill tool with `architect` for parallel design exploration before implementing. For a bug fix, skip architect when runtime evidence confirms the root cause and identifies one localized repair, even across a function boundary. Go straight to the failing reproducer, then repair it. Keep architect when design choices or repair scope remain unresolved."
     },
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
-     "quote": "Plan the fix. If it crosses a function boundary, call the Skill tool with `architect` first."
+     "quote": "Plan the fix. When runtime evidence confirms the root cause and identifies one localized repair, go straight to the failing reproducer, then repair it. This applies even across a function boundary. If design choices or repair scope remain unresolved, call the Skill tool with `architect` first."
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "2. `architect` for parallel design exploration when the change crosses a function boundary or admits several valid shapes."
+     "quote": "2. `architect` for feature design exploration when the change crosses a function boundary or admits several valid shapes."
     }
    ],
    "harness_sensitive": false,
@@ -5884,8 +5884,7 @@
    "file": "04-design.md",
    "promise": "architect-runs-arena-for-sketches",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "A change that crosses function boundaries or moves ownership earns `/architect`, which brings `/arena` with it."
   },
@@ -9671,6 +9670,14 @@
    ],
    "text": "Before a Feature run delegates code, the agent settles acceptance tests from the spec's worked examples and from the edges each requirement raises, such as empty input or an exact boundary, and its reply lists each edge that neither the spec nor the current code settles."
   },
+  "94abf5e9dc8f": {
+   "class": "context",
+   "file": "04-design.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Reach for these directly when you want more or less scrutiny than the default."
+  },
   "951f7a84026f": {
    "class": "promise",
    "file": "03-understand.md",
@@ -9829,6 +9836,15 @@
     "port"
    ],
    "text": "\"don't change any code yet\" pins this one to Investigation."
+  },
+  "9a9cac62d609": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
+   "sources": [
+    "port"
+   ],
+   "text": "Boundary-crossing work triggers `/architect` on its own, except for a confirmed bug with one localized repair."
   },
   "9acd67f502da": {
    "class": "context",
@@ -11621,6 +11637,15 @@
    ],
    "text": "**Looping before you trust the loop.** A loop that can't verify its own work only makes unchecked work faster. Get the verification skill working first."
   },
+  "c7761e9fc81b": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
+   "sources": [
+    "port"
+   ],
+   "text": "Unresolved design choices or repair scope still need architecture work."
+  },
   "c782fc8a53e9": {
    "class": "context",
    "file": "01-setup.md",
@@ -12020,8 +12045,7 @@
    "file": "04-design.md",
    "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "Boundary-crossing work triggers `/architect` on its own, so you reach for these directly mainly when you want more or less scrutiny than the default."
   },
@@ -12915,6 +12939,15 @@
     "port"
    ],
    "text": "An agent that can check its own work keeps going until the check passes."
+  },
+  "ea58a58f42fb": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
+   "sources": [
+    "port"
+   ],
+   "text": "A change that crosses function boundaries or moves ownership earns `/architect`, which brings `/arena` with it. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary."
   },
   "ea6975bcbf53": {
    "class": "context",
