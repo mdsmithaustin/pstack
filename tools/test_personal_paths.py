@@ -62,7 +62,7 @@ class PersonalPathsCLI(unittest.TestCase):
                         home_path("Users", "${ACCOUNT}") + "/project\n")
         done = self.scan()
         self.assertEqual((done.returncode, done.stdout, done.stderr),
-                         (0, "PASS personal paths: checked 6 tracked text files\n", ""))
+                         (0, "PASS personal paths: checked 5 tracked text files\n", ""))
 
     def test_both_root_kinds_spaces_punctuation_and_terminal_roots_are_redacted(self):
         self.track("notes.txt", "(" + home_path("Users", "private person") + "/project), " +
@@ -76,7 +76,7 @@ class PersonalPathsCLI(unittest.TestCase):
         (self.root / "new.txt").write_text(home_path("home", "untracked-person"))
         before = self.scan()
         self.assertEqual((before.returncode, before.stdout),
-                         (0, "PASS personal paths: checked 5 tracked text files\n"))
+                         (0, "PASS personal paths: checked 4 tracked text files\n"))
         self.git("add", "new.txt")
         after = self.scan()
         self.assertEqual((after.returncode, after.stdout),
@@ -122,16 +122,16 @@ class PersonalPathsCLI(unittest.TestCase):
                          (2, "", "ERROR: cannot inspect tracked file notes/Users/<redacted>/record.txt\n"))
 
     def test_unused_exception_is_an_acquisition_failure(self):
-        (self.root / "PORTING.md").write_text("symbolic home only")
+        (self.root / "tools/test_effort_transcripts.py").write_text("symbolic home only")
         done = self.scan()
         self.assertEqual((done.returncode, done.stdout, done.stderr),
-                         (2, "", "ERROR: unused personal-path exception for PORTING.md\n"))
+                         (2, "", "ERROR: unused personal-path exception for tools/test_effort_transcripts.py\n"))
 
     def test_binary_is_skipped_and_non_utf8_text_still_detects_paths(self):
         self.track("binary.bin", b"\0" + home_path("Users", "binary-person").encode())
         done = self.scan()
         self.assertEqual((done.returncode, done.stdout),
-                         (0, "PASS personal paths: checked 5 tracked text files\n"))
+                         (0, "PASS personal paths: checked 4 tracked text files\n"))
         self.track("legacy.txt", b"\xff\n" + home_path("home", "legacy-person").encode())
         done = self.scan()
         self.assertEqual((done.returncode, done.stdout, done.stderr),
@@ -146,7 +146,7 @@ class PersonalPathsCLI(unittest.TestCase):
             self.git("add", "linked.txt")
             done = self.scan()
             self.assertEqual((done.returncode, done.stdout, done.stderr),
-                             (0, "PASS personal paths: checked 6 tracked text files\n", ""))
+                             (0, "PASS personal paths: checked 5 tracked text files\n", ""))
             link.unlink()
             link.symlink_to(home_path("home", "linked-person") + "/missing")
             done = self.scan()
@@ -217,36 +217,36 @@ class PersonalPathsCLI(unittest.TestCase):
         done = self.scan(source="index")
         self.assertEqual((done.returncode, done.stdout, done.stderr),
                          (0, "PASS personal paths: checked 1 tracked text files\n", ""))
-        self.track("PORTING.md", home_path("Users", "you") + "/fixture")
+        self.track("tools/test_effort_transcripts.py", home_path("Users", "me") + "/fixture")
         done = self.scan(source="index")
         self.assertEqual((done.returncode, done.stdout, done.stderr),
                          (0, "PASS personal paths: checked 2 tracked text files\n", ""))
         done = self.scan()
         self.assertEqual(done.returncode, 2)
         self.assertIn("ERROR: unused personal-path exception", done.stderr)
-        self.track("PORTING.md", home_path("Users", "you-private") + "/project")
+        self.track("tools/test_effort_transcripts.py", home_path("Users", "me-private") + "/project")
         done = self.scan(source="index")
         self.assertEqual((done.returncode, done.stdout, done.stderr),
-                         (1, "PORTING.md:1: personal home path /Users/<redacted>\n", ""))
+                         (1, "tools/test_effort_transcripts.py:1: personal home path /Users/<redacted>\n", ""))
 
     def test_push_allows_older_and_multiple_tips_with_missing_fixtures(self):
         self.git("rm", "-r", "--cached", ".")
         self.track("clean.txt", "clean")
         older = self.commit()
-        self.track("PORTING.md", home_path("Users", "you") + "/fixture")
+        self.track("tools/test_effort_transcripts.py", home_path("Users", "me") + "/fixture")
         partial = self.commit()
         for tips in ((older,), (older, partial)):
             done = self.scan(source="pre-push", input=self.push_input(*tips))
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertEqual(done.stderr, "")
             self.assertEqual(done.stdout.count("PASS personal paths:"), len(tips))
-        self.track("PORTING.md", home_path("Users", "you-private") + "/project")
+        self.track("tools/test_effort_transcripts.py", home_path("Users", "me-private") + "/project")
         leaking = self.commit()
         done = self.scan(source="pre-push", input=self.push_input(older, partial, leaking))
         self.assertEqual(done.returncode, 1, done.stderr)
-        self.assertIn("PORTING.md:1: personal home path /Users/<redacted>", done.stdout)
+        self.assertIn("tools/test_effort_transcripts.py:1: personal home path /Users/<redacted>", done.stdout)
         self.assertEqual(done.stderr, "")
-        self.assertNotIn("you-private", done.stdout)
+        self.assertNotIn("me-private", done.stdout)
 
     def test_filename_paths_at_root_and_nested_are_checked_in_every_mode(self):
         for kind in ("Users", "home"):
