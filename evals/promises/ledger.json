@@ -5880,9 +5880,11 @@
    "text": "For a project that spans many days, you can commit the plan to the repo for a while so other agents see the work in progress."
   },
   "2dee704a0086": {
-   "class": "promise",
+   "class": "substituted",
    "file": "04-design.md",
-   "promise": "architect-runs-arena-for-sketches",
+   "ported_as": [
+    "ea58a58f42fb"
+   ],
    "sources": [
     "upstream"
    ],
@@ -12041,9 +12043,13 @@
    "text": "No."
   },
   "d30ea081316c": {
-   "class": "promise",
+   "class": "substituted",
    "file": "04-design.md",
-   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
+   "ported_as": [
+    "9a9cac62d609",
+    "c7761e9fc81b",
+    "94abf5e9dc8f"
+   ],
    "sources": [
     "upstream"
    ],
@@ -12941,6 +12947,9 @@
    "text": "An agent that can check its own work keeps going until the check passes."
   },
   "ea58a58f42fb": {
+   "also": [
+    "architect-runs-arena-for-sketches"
+   ],
    "class": "promise",
    "file": "04-design.md",
    "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
