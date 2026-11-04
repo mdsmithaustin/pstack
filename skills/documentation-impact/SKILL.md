@@ -18,9 +18,12 @@ The calling workflow owns delegation, model selection, continuation, and human g
 
 Use the accepted request, issue, or existing work brief. Do not require a new spec, ticket, docs tree, or work ledger.
 
+For a repair recheck, use the retained coverage and repair rules below to scope the reader mapping and inspection steps. Reopen the original full-review diff only when those rules require a full review.
+
 Bind the pass to what you actually examine:
 
-- For committed work, resolve and record the fixed base and head. Inspect the base-to-head diff and the surrounding implementation and documentation at those revisions.
+- For a full review of committed work, resolve and record the fixed base and head. Inspect the base-to-head diff and the surrounding implementation and documentation at those revisions.
+- For a repair recheck, record the original full-review span as lineage. Use the previously reviewed artifact as the comparison base and inspect its delta to the resulting artifact.
 - For local work, also inspect staged and unstaged changes and relevant untracked files. Record a content fingerprint or retained snapshot of those inputs. A clean-looking HEAD or a filename list does not identify dirty file contents.
 - Outside Git, record an explicit content snapshot of the scoped implementation and docs. If a relevant input is unavailable, name the gap instead of claiming coverage.
 
