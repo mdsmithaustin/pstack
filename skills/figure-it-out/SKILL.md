@@ -16,6 +16,7 @@ Open a worklist whose first item is to read the Principles section of the **pote
 Ground first, then commit. Don't start the run until you can state:
 
 - The definition of done as a falsifiable predicate. Call the Skill tool with `principle-prove-it-works`.
+- The operation's recorded verification set. Read available memory, runbooks, and deploy scripts that name it. Include every applicable check in the minimum done predicate. Report each skipped item and its reason. An unavailable required check leaves the predicate unmet.
 - A `worth doing` or `won't do` verdict for each requested item, with a brief reason tied to the project's design and the user's goal. Make these calls before sizing. A fit judgment does not cancel an explicit requirement. Record proposed exclusions and authorized scope changes separately.
 - Scope, quantified for the accepted items. Size compared options on the same basis, including implementation, tests, documentation, generated files, and verification effort. Name exclusions and uncertainty, plus the blockers grounding surfaced.
 - The rigor level, biased high. One-way doors and high blast radius get more. Reversible low-stakes steps get less. Rigor is gates and artifacts, not "try harder".
