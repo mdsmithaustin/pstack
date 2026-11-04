@@ -65,7 +65,15 @@ An author pass returns exactly one result:
 
 `independent review not required` is invalid for a public workflow or documentation change. Record the evidence that supports the author result with the examined artifact. A completion or shipping workflow can start an independent review only when the author result is `independent review required`.
 
-When independent review is required, a different agent reviews the resulting artifact without editing it. The independent review verdict is `pass`, `needs changes`, or `unverified`. After repairs, the reviewer checks the resulting artifact before returning `pass`. Reuse the verdict only while its examined change, docs, and relevant surrounding context still match. A matching stable patch-id after a rebase does not establish that the documentation context is unchanged. Recheck that context or rerun the pass.
+When independent review is required, a different agent reviews the resulting artifact without editing it. The first review covers the full accepted scope. Return `pass`, `needs changes`, or `unverified`, and batch the findings from that review.
+
+After a repair, retain the previous review, its examined artifact, findings, and valid coverage. The repairer records the repair delta and searches for other copies of each corrected claim. Retain the search terms, searched paths, and matches read in context, including a search with no matches.
+
+For wording-only repairs, give the next reviewer that evidence and the resulting artifact identity. Recheck the repair delta and the repairer's search, with the context needed to judge them. Carry forward coverage of unchanged prose instead of reviewing it again. Resolve every outstanding finding before returning `pass` on the resulting artifact.
+
+Run a full review when a repair changes behavior or contract claims, or when that effect is uncertain. Missing prior coverage or repair-search evidence leaves the recheck `unverified` until supplied or replaced by a full review. Do not infer a pass from a round count.
+
+Bind every recheck to the resulting revision or content snapshot and the accepted scope. Verify that the carried coverage still matches the unchanged inputs and relevant surrounding context. Concurrent edits or changed context invalidate the affected coverage. Refresh those checks or run a full review before returning `pass`. A matching stable patch-id after a rebase does not establish unchanged documentation context.
 
 ## Verify and return the result
 
