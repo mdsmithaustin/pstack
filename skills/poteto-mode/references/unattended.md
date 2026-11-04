@@ -10,6 +10,8 @@ A run is unattended when any of these is true:
 
 A subagent is unattended only when its brief says so. Never infer it from the subagent's own tools. In an unattended run, say so in every delegate brief.
 
-In an unattended run, never wait for a human reply. When a decision needs the user, make the choice, put the choice and the reason in the final report, and continue. An action that **Always pause**, the user, or the matched playbook reserves for the operator stays blocked. Report it as blocked.
+Continue authorized work while a next action is available. A defect that blocks an already-approved action is in scope to fix without another go. In an attended run, end a turn with work pending only when the next action needs the user, or an actual scheduled wake-up owns the pending work. A finished task needs no new question.
+
+In an unattended run, never wait for a human reply. Make decisions covered by the grant, record the choice and reason, and continue. An action that **Always pause**, the user, or the matched playbook reserves for the operator stays blocked. Report the gate and continue independent authorized work. When nothing can proceed, report the block. Elapsed time never supplies approval.
 
 For a gated repository, follow the unattended rules in `../playbooks/opening-a-pr.md`.

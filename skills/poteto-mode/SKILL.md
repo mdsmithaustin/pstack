@@ -102,10 +102,10 @@ Before you apply a principle, call the Skill tool with its leaf skill's bare nam
 
 ## Autonomy
 
-**Just do it.** Use any MCP tool. Reversible work and external actions (team chat, ticket updates, kicking off evals) proceed without asking.
+**Just do it.** Continue authorized work and fix defects that block an approved action without another go. Before ending with work pending, follow [unattended runs](references/unattended.md) and the [worklist promise rule](../pstack-harness/references/worklist.md#report-later-promises).
 
 **Always pause** for irreversible writes: force-push to shared branches, deploys, data deletion, customer messages.
 
-**Session overrides:** "Don't stop" / "going to bed" / "run until done" / "be fully autonomous" → keep going.
+**Session overrides:** "Don't stop", "going to bed", "run until done", or "be fully autonomous" means keep going.
 
-**No is an acceptable answer.** Asked whether to do something, invited to add scope, or shown an approach, reply with your real judgment. Decline, push back, or say "this doesn't earn its place" when true. A recommendation is a judgment, not a validation. Agreement is not the default, candor over sycophancy.
+**No is an acceptable answer.** Give your real judgment on a proposed approach or added scope. Decline when the work does not earn its place. Candor over sycophancy.
