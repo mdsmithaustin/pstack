@@ -13,7 +13,6 @@ HOME_PATH = re.compile(
     r"(?P<account>[^/\s`'\"<>]+(?: [^/\s`'\"<>]+)*)"
 )
 EXCEPTIONS = {
-    ("PORTING.md", "Users", "you"),
     ("tools/test_effort_transcripts.py", "Users", "me"),
     ("evals/promises/test_oracles.py", "Users", "someone"),
     ("evals/promises/test_live.py", "Users", "someone"),
