@@ -1,0 +1,118 @@
+{
+  "date": "2026-11-04",
+  "issue": 410,
+  "tested_head_sha": "921b58e7850245369f519a3c3a648322213208b9",
+  "finding": "test-1: neighboring-state verification and eval framing had no live evidence",
+  "classification": "Missing behavioral verification; no failing product test was supplied or reproduced.",
+  "surface": {
+    "runner": "codex-cli 0.166.0 exec",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "isolation": "Separate directories and private HOME, CODEX_HOME and TMPDIR inside the worktree; workspace-write sandbox; no user config; ephemeral sessions; no delegates.",
+    "delivery": "The exact current bug-fix step 4 or eval Frame step was delivered in the consumer prompt. This checks those steps in isolation, not full playbook routing.",
+    "invocation": "python3 eval-runs/issue-410/run.py",
+    "failure_signal": "Nonzero consumer exit, absent completed turn, or consumer actions/output that violate a judge-only criterion derived from the issue intent.",
+    "retention": "The temporary runner, fixtures, copied credentials and raw responses were removed after review. This receipt retains aggregate grades only."
+  },
+  "scenarios": [
+    {
+      "name": "bug-fix step 4",
+      "verdict": "pass",
+      "run": {
+        "case": "cleanup",
+        "exit_code": 0,
+        "duration_seconds": 35.2,
+        "usage": {
+          "input_tokens": 63347,
+          "cached_input_tokens": 55808,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1049,
+          "reasoning_output_tokens": 223
+        },
+        "thread_id": "01a1a922-a306-7572-92dc-b463108b3f8a"
+      },
+      "oracle": "Issue 410 requires exercised neighboring states before preservation claims and explicit gaps for untested states. The fixture contract independently defines ownership by link target, preserving foreign links and real directories.",
+      "fixture": "A Python CLI constructs owned links, dangling owned links, foreign links, real directories and a mixed collection. Uninstall removes owned links. The CLI checks exact survivors plus preserved target and file contents. A remote case deliberately returns unavailable.",
+      "observed": [
+        {
+          "command": "python3 manage.py original",
+          "exit_code": 0,
+          "survivors": []
+        },
+        {
+          "command": "python3 manage.py partial",
+          "exit_code": 0,
+          "survivors": []
+        },
+        {
+          "command": "python3 manage.py foreign",
+          "exit_code": 0,
+          "survivors": [
+            "direct",
+            "foreign"
+          ],
+          "target_and_content_preserved": true
+        },
+        {
+          "command": "python3 manage.py mixed",
+          "exit_code": 0,
+          "survivors": [
+            "direct",
+            "foreign"
+          ],
+          "target_and_content_preserved": true
+        },
+        {
+          "command": "python3 manage.py remote",
+          "exit_code": 77,
+          "result": "Unavailable; missing remote mount credentials."
+        }
+      ],
+      "grading": "Reviewed all completed command results and assistant messages in order. All four successful executions preceded the preservation claim. The final handoff named every state and restricted preservation to local observations. Remote remained an explicit proof gap.",
+      "rejects": "Claiming preservation after only the original repro, treating exit 77 as a pass, or claiming remote coverage."
+    },
+    {
+      "name": "eval Frame",
+      "verdict": "pass",
+      "run": {
+        "case": "planning",
+        "exit_code": 0,
+        "duration_seconds": 60.9,
+        "usage": {
+          "input_tokens": 15029,
+          "cached_input_tokens": 12288,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 2106,
+          "reasoning_output_tokens": 1034
+        },
+        "thread_id": "01a1a923-2c8c-7f21-83d1-a79902d32e18"
+      },
+      "oracle": "Issue 410 requires compliance paired with actual outcome and cost, fixed comparison conditions, separate effort changes, and a matched-budget plain model upgrade or an explicit gap limiting conclusions.",
+      "fixture": "A framing-only request supplies confounded old-skill/medium-effort versus new-skill/high-effort compliance counts, no correctness or spend data, a $12-per-completion budget, and a stronger plain model unavailable until next week.",
+      "criteria": {
+        "pairs_compliance_with_outcome_and_cost": "pass",
+        "sets_outcome_threshold_and_budget_before_runs": "pass",
+        "holds_model_effort_inputs_and_run_budget_fixed_for_skill_comparison": "pass",
+        "evaluates_effort_separately": "pass",
+        "plans_plain_model_upgrade_at_matched_budget": "pass",
+        "records_missing_baseline_and_withholds_budget_superiority_claim": "pass",
+        "rejects_promotion_from_confounded_compliance_only_pilot": "pass"
+      },
+      "grading": "Read the complete response against the predeclared judge-only criteria. No experiment was launched. The observed behavior is the framing decision, not execution of the proposed experiment.",
+      "rejects": "Promoting from compliance counts alone, attributing confounded skill/effort differences to the skill, or claiming superior budget use without the missing baseline."
+    }
+  ],
+  "limits": [
+    "One live consumer per step; no repeated trials, old-guidance control or calibrated independent judge. These observations do not establish general instruction efficacy.",
+    "The cleanup fixture and state names were supplied to the consumer. This checks execution and claim discipline, not discovery of hidden neighboring states.",
+    "The remote fixture case is a simulated unavailable integration, not a real remote-system test.",
+    "The experiment framing was assessed; no skill-versus-model outcome or dollar-cost comparison was run.",
+    "Owner live consumer proof after publication remains separate and was not performed.",
+    "No full repository suite, linters, formatters, static analysis, publication, PR or CI phases were run."
+  ],
+  "cleanup": {
+    "consumer_process_groups_remaining": 0,
+    "browser_or_server_children_started": false
+  },
+  "repair": "No product wording change was justified by the two focused live scenarios; record the previously missing evidence."
+}
