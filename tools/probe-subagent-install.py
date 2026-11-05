@@ -20,6 +20,84 @@ def run(command: list[str], project: Path, environment: dict[str, str]) -> str:
     return result.stdout
 
 
+def probe_formatter(script: Path, project: Path, environment: dict[str, str], receipt: Path) -> dict:
+    command = [sys.executable, str(script)]
+    report = {
+        "status": "started",
+        "argv": command,
+        "cwd": str(project),
+        "path": environment["PATH"],
+        "invocations": [],
+    }
+    receipt.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    for name, arguments, document, expected_exit, expected_kind, expected_text in (
+        (
+            "accepted",
+            [],
+            b'{"work":{"verb":"publish","target":"status-page"},"evidence":[{"source":"publication check","value":"review-token is required"}],"dependency":{"kind":"operator_action","verb":"provide","target":"review-token"}}',
+            0,
+            "reply",
+            'My work to publish "status-page" remains pending.\n'
+            'Observed evidence:\n'
+            '- The value from "publication check" was "review-token is required".\n'
+            '\nWill you provide "review-token"?\n',
+        ),
+        (
+            "invalid",
+            [],
+            b'{"work":{"verb":"publish","target":"status-page"},"evidence":[{"source":"publication check","value":"review-token is required"}],"dependency":{"kind":"operator_action","verb":"provide or replace","target":"review-token"}}',
+            2,
+            "invalid",
+            "INVALID: dependency.verb must match [a-z]+(?:-[a-z]+)*\n",
+        ),
+        ("help", ["--help"], None, 0, "help", None),
+    ):
+        invocation = [*command, *arguments]
+        stdin = {"stdin": subprocess.DEVNULL} if document is None else {"input": document}
+        result = subprocess.run(
+            invocation, **stdin, cwd=project, env=environment,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180,
+        )
+        captured = {
+            "name": name,
+            "argv": invocation,
+            "stdin_hex": None if document is None else document.hex(),
+            "stdin_source": "devnull" if document is None else "input",
+            "exit": result.returncode,
+            "stdout_hex": result.stdout.hex(),
+            "stderr_hex": result.stderr.hex(),
+        }
+        report["invocations"].append(captured)
+        receipt.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        if result.returncode != expected_exit or result.stderr:
+            raise AssertionError(f"{script} formatter {name} returned incorrect status or stderr; see {receipt}")
+        generated = json.loads(result.stdout.decode("ascii"))
+        captured["generated_data"] = generated
+        receipt.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        if (
+            not isinstance(generated, dict)
+            or set(generated) != {"kind", "text"}
+            or generated["kind"] != expected_kind
+            or not isinstance(generated["text"], str)
+            or not generated["text"].endswith("\n")
+            or any(0xD800 <= ord(character) <= 0xDFFF for character in generated["text"])
+        ):
+            raise AssertionError(f"{script} formatter {name} returned an invalid generated record; see {receipt}")
+        expected_record = {"kind": expected_kind, "text": generated["text"] if expected_text is None else expected_text}
+        expected_stdout = (json.dumps(expected_record, ensure_ascii=True, separators=(",", ":")) + "\n").encode("ascii")
+        if result.stdout != expected_stdout:
+            raise AssertionError(f"{script} formatter {name} returned incorrect record or body; see {receipt}")
+        if name == "help" and (
+            "--help" not in generated["text"]
+            or "PSTACK_SKILLS_ROOT" not in generated["text"]
+            or generated["text"].count("```sh\n") < 3
+        ):
+            raise AssertionError(f"{script} formatter help lacks executable usage examples; see {receipt}")
+    report["status"] = "passed"
+    receipt.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    return {"status": "passed", "receipt": str(receipt)}
+
+
 def probe_case(run_root: Path, copy: bool, source_skills: list[str]) -> dict:
     case = run_root / ("copy" if copy else "symlink")
     project = case / "consumer project"
@@ -43,6 +121,13 @@ def probe_case(run_root: Path, copy: bool, source_skills: list[str]) -> dict:
     actual = sorted(path.parent.name for path in installed.glob("*/SKILL.md"))
     if actual != source_skills:
         raise AssertionError(f"installed skill mismatch: expected {source_skills!r}, found {actual!r}")
+    formatter = {}
+    runtime_cwd = case / "unrelated runtime cwd"
+    runtime_cwd.mkdir()
+    for harness, skills in (("codex", installed), ("claude-code", project / ".claude/skills"), ("hermes-agent", project / ".hermes/skills")):
+        formatter[harness] = probe_formatter(
+            skills / "poteto-mode/scripts/operator-request.py", runtime_cwd, environment, case / f"formatter-{harness}.json",
+        )
     script = installed / "pstack-harness/scripts/subagents.py"
     base = [sys.executable, str(script)]
     check = json.loads(run([*base, "check"], project, environment))
@@ -74,7 +159,7 @@ def probe_case(run_root: Path, copy: bool, source_skills: list[str]) -> dict:
         brief = run([sys.executable, str(logical_script), "brief", "poteto-agent"], project, environment)
         if str(project / directory / "skills/poteto-mode/SKILL.md") not in brief:
             raise AssertionError(f"{directory} briefing lost the logical sibling path")
-    return {"mode": case.name, "skills": len(actual), "payload": "ready", "native_files": "current", "native_activation": "unverified", "log": str(case / "install.log")}
+    return {"mode": case.name, "skills": len(actual), "payload": "ready", "native_files": "current", "native_activation": "unverified", "formatter": formatter, "log": str(case / "install.log")}
 
 
 def main() -> int:
