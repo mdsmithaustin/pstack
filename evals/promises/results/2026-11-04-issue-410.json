@@ -1,4 +1,7 @@
 {
+  "proof_status": "historical-unaccepted",
+  "accepted_validation_evidence": false,
+  "superseded_by": "Current compliant owner and independent verifier observations, reported separately.",
   "date": "2026-11-04",
   "issue": 410,
   "tested_head_sha": "921b58e7850245369f519a3c3a648322213208b9",
@@ -12,7 +15,7 @@
     "delivery": "The exact current bug-fix step 4 or eval Frame step was delivered in the consumer prompt. This checks those steps in isolation, not full playbook routing.",
     "invocation": "python3 eval-runs/issue-410/run.py",
     "failure_signal": "Nonzero consumer exit, absent completed turn, or consumer actions/output that violate a judge-only criterion derived from the issue intent.",
-    "retention": "The temporary runner, fixtures, copied credentials and raw responses were removed after review. This receipt retains aggregate grades only."
+    "retention": "The temporary runner, fixtures, and raw responses were removed after review. This receipt retains aggregate grades only."
   },
   "scenarios": [
     {
