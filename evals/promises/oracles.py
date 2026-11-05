@@ -1334,12 +1334,13 @@ def skipped_step(view):
         if gone:
             return failed(f"skipped items vanished from the final list: {gone}", *evidence)
         evidence.append(f"example: {skipped[0][1].get('state', '')[:100]!r} on {skipped[0][1].get('text', '')[:60]!r}")
-        return passed(*evidence)
     opening = opening_worklist(view)
     dropped = [i["text"][:60] for i in (opening or {}).get("items", [])
-               if not any(norm(i["text"])[:40] == norm(f["text"])[:40] for f in final)]
+               if not any(title(i["text"]) == title(f["text"]) for f in final)]
     if dropped:
         return failed(f"steps dropped from the worklist without a skipped marker: {dropped}", *evidence)
+    if skipped:
+        return passed(*evidence)
     if view.killed:
         return inconclusive("run killed; no step reached a skip decision", *evidence)
     return inconclusive("no step was skipped or dropped; promise not exercised", *evidence)
