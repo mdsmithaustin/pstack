@@ -4,4 +4,4 @@ Irreversible writes include force-push to shared branches, deploys, data deletio
 
 Unnamed actions, operator-reserved decisions, and tool-enforced approvals still need permission. A full-autonomy grant does not bypass a refused gate or expand the requested scope.
 
-If a real blocker needs the operator, state the blocked action and end with a direct yes/no question that names the proposed action. In an unattended run, continue independent authorized work first. Preserve the blocked action and required decision when nothing else can proceed. Never report blocked work as complete.
+If a real blocker needs the operator, state the blocked action. In an unattended run, continue independent authorized work first. Preserve the blocked action and required decision when nothing else can proceed. Never report blocked work as complete. End the final reply with a direct yes/no question naming the operator action needed to unblock it.
