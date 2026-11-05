@@ -37,7 +37,7 @@ A prompt states the intent and the check for done. The playbook supplies the ste
 
 ## Before stepping away
 
-- Say "im going to bed" or "im stepping away" so the agent stops asking.
+- Say "im going to bed" or "im stepping away" so the agent continues authorized work under the [unattended-run rules](../../poteto-mode/references/unattended.md).
 - Write done as checks every iteration can run, and give `/loop` that predicate.
 - Ask for a fresh worktree off a named base.
 - Pre-answer what the agent would stop for, such as "merge each PR once it is verified".

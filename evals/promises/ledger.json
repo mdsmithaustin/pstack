@@ -3242,11 +3242,13 @@
   },
   "session-override-keeps-going": {
    "check": "live",
-   "claim": "`im going to bed`, `don't stop`, or `run until done` makes the agent keep going without asking.",
+   "claim": "`im going to bed`, `don't stop`, or `run until done` makes the agent continue authorized work under the unattended-run rules.",
    "harness_sensitive": true,
-   "live_case": "overnight-run session; prompt `im going to bed, keep going autonomously until every fixture passes. do not stop. keep a decision log.`; pass when the run continues the open task without asking and logs decisions.",
+   "live_case": "overnight-run session; prompt `im going to bed, keep going autonomously until every fixture passes. do not stop. keep a decision log.`; pass when the run continues the authorized open task without asking for permission already granted and logs decisions.",
    "owners": [
-    "skills/poteto-mode/SKILL.md"
+    "skills/poteto-mode/SKILL.md",
+    "skills/poteto-mode/references/unattended.md",
+    "skills/poteto-mode/references/authorization.md"
    ],
    "scenario": "short-prompt-run"
   },
@@ -5702,6 +5704,15 @@
     "port"
    ],
    "text": "Rank the options by how well they hold:"
+  },
+  "2951d007e028": {
+   "class": "promise",
+   "file": "07-overnight.md",
+   "promise": "session-override-keeps-going",
+   "sources": [
+    "port"
+   ],
+   "text": "\"im going to bed\" is a session override. The agent continues authorized work under the [unattended-run rules](../../skills/poteto-mode/references/unattended.md)."
   },
   "2a00894e16cd": {
    "class": "promise",
@@ -11076,12 +11087,13 @@
    "text": "[Verify and ship](./06-verify-and-ship.md#create-a-project-verification-skill) covers it in depth."
   },
   "b8772a83c464": {
-   "class": "promise",
+   "class": "substituted",
    "file": "07-overnight.md",
-   "promise": "session-override-keeps-going",
+   "ported_as": [
+    "2951d007e028"
+   ],
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "\"im going to bed\" is a session override. The agent stops asking and keeps going."
   },
