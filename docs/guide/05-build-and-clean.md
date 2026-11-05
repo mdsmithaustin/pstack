@@ -16,7 +16,7 @@ A feature prompt states the behavior and what must not change:
 /poteto-mode add a --json flag. text output stays byte-identical. verify both forms.
 ```
 
-Before a Feature run delegates code, the agent settles acceptance tests from the spec's worked examples and from the edges each requirement raises, such as empty input or an exact boundary, and its reply lists each edge that neither the spec nor the current code settles. Every delegate brief names the original spec by path, not a summary of it, and no delegate writes the only test of its own code.
+[Feature step 4](../../skills/poteto-mode/playbooks/feature.md) defines when the lead implements or delegates, what the worklist records, and the acceptance-test and specification-edge duties for both paths.
 
 A refactoring prompt pins behavior before structure moves:
 
