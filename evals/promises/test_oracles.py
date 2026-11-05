@@ -12,7 +12,7 @@ from unittest import mock
 
 import live
 import oracles
-from harnesses import grok
+from harnesses import claude_code, codex, grok
 from oracles import FAIL, INCONCLUSIVE, PASS
 
 HERE = Path(__file__).resolve().parent
@@ -80,6 +80,14 @@ def feature_items(skills_root=ROOT / "skills"):
 
 
 class ProbeTraces(unittest.TestCase):
+    def setUp(self):
+        playbook_shape = oracles.playbook_shape
+
+        def recorded_shape(name, skills_root):
+            return playbook_shape(name, HERE / "testdata" / "feature-before-408" if name == "feature" else skills_root)
+
+        self.enterContext(mock.patch.object(oracles, "playbook_shape", side_effect=recorded_shape))
+
     def verdicts(self, name, case=None):
         trace = load_trace(name)
         case = case or feature_case()
@@ -347,6 +355,81 @@ class WorklistOracle(unittest.TestCase):
                                   {"seq": 5, "carrier": "TodoWrite", "items": marked},
                                   {"seq": 9, "carrier": "TodoWrite", "items": marked[:2] + marked[3:]}])
         self.assertEqual(grade("skipped-step-stays-in-worklist", trace, feature_case())["verdict"], FAIL)
+
+    def test_retained_skip_cannot_hide_another_dropped_item(self):
+        for carrier in ("TodoWrite", "TaskCreate", "update_plan", "text"):
+            for skip in ({"text": "Design", "state": "skipped: one file"},
+                         {"text": "Design skipped: one file", "state": "completed"},
+                         {"text": 'Record "skipped: below threshold" when implementing directly.', "state": "pending"}):
+                with self.subTest(carrier=carrier, skip=skip):
+                    items = [skip, {"text": "Verify the executable", "state": "pending"}]
+                    trace = minimal(worklist=[{"seq": 1, "carrier": carrier, "items": items},
+                                              {"seq": 9, "carrier": carrier, "items": [skip]}])
+                    result = grade("skipped-step-stays-in-worklist", trace, feature_case())
+                    self.assertEqual(result["verdict"], FAIL, result)
+                    self.assertIn("Verify the executable", result["failures"][0])
+
+    def test_retained_items_allow_skip_annotations(self):
+        items = [{"text": "Design", "state": "pending"}, {"text": "Verify the executable", "state": "pending"}]
+        for skip in ({"text": "Design", "state": "skipped: one file"},
+                     {"text": "Design skipped: one file", "state": "completed"}):
+            with self.subTest(skip=skip):
+                trace = minimal(worklist=[{"seq": 1, "carrier": "TodoWrite", "items": items},
+                                          {"seq": 9, "carrier": "TodoWrite", "items": [skip, items[1]]}])
+                result = grade("skipped-step-stays-in-worklist", trace, feature_case())
+                self.assertEqual(result["verdict"], PASS, result)
+
+    def test_canonical_instruction_copies_do_not_exercise_a_skip(self):
+        for state, mark in (("pending", "[ ]"), ("in_progress", "[~]"), ("completed", "[x]")):
+            items = feature_items()
+            todos = {"todos": [{"content": item["text"], "status": state} for item in items]}
+            events = [{"seq": 1, "turn": 0, "kind": "tool_call", "name": "TodoWrite", "input": todos, "id": "todos"}]
+            tasks = []
+            for index, item in enumerate(items, 1):
+                tasks += [{"seq": index * 2, "turn": 0, "kind": "tool_call", "name": "TaskCreate",
+                           "input": {"subject": item["text"]}, "id": f"create-{index}"},
+                          {"seq": index * 2 + 1, "kind": "tool_result", "id": f"create-{index}",
+                           "output_head": f"Task #{index} created"}]
+            tasks += [{"seq": 30 + index, "turn": 0, "kind": "tool_call", "name": "TaskUpdate",
+                       "input": {"taskId": str(index), "status": state}, "id": f"update-{index}"}
+                      for index in range(1, len(items) + 1)]
+            plan = {"plan": [{"step": item["text"], "status": state} for item in items]}
+            body = "\n".join(f"{index}. {mark} {item['text']}" for index, item in enumerate(items, 1))
+            snapshots = {
+                "TodoWrite": claude_code.native_worklist(events),
+                "TaskCreate": claude_code.native_worklist(tasks),
+                "update_plan": [{"seq": 1, "carrier": "update_plan", "items": codex.plan_items(plan)}],
+                "text": [{"seq": 1, "carrier": "text", "items": live.chat_worklist(body)}],
+            }
+            for carrier, worklist in snapshots.items():
+                with self.subTest(state=state, carrier=carrier):
+                    self.assertEqual(len(worklist[-1]["items"]), len(items))
+                    trace = minimal(worklist=worklist)
+                    result = grade("skipped-step-stays-in-worklist", json.loads(json.dumps(trace)), feature_case())
+                    self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_completed_native_plan_can_record_a_real_inline_skip(self):
+        for step in ("Delegate implementation. skipped: one workstream",
+                     "Delegate implementation. `skipped: one workstream`"):
+            with self.subTest(step=step):
+                items = codex.plan_items({"plan": [{"step": step, "status": "completed"}]})
+                trace = minimal(harness="codex", worklist=[{"seq": 1, "carrier": "update_plan", "items": items}])
+                result = grade("skipped-step-stays-in-worklist", trace, feature_case())
+                self.assertEqual(result["verdict"], PASS, result)
+
+    def test_native_status_updates_retain_worklist_items(self):
+        trace = load_trace("oracle-edges/codex-status-retention.json")
+        result = grade("skipped-step-stays-in-worklist", trace, feature_case())
+        self.assertEqual(result["verdict"], PASS, result)
+
+    def test_native_status_updates_cannot_hide_dropped_items(self):
+        original = load_trace("oracle-edges/codex-status-retention.json")
+        for index in range(len(original["worklist"][-1]["items"])):
+            with self.subTest(index=index):
+                trace = json.loads(json.dumps(original))
+                del trace["worklist"][-1]["items"][index]
+                result = grade("skipped-step-stays-in-worklist", trace, feature_case())
+                self.assertEqual(result["verdict"], FAIL, result)
 
 
 class ReplyOracles(unittest.TestCase):

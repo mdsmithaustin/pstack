@@ -993,8 +993,12 @@ def history_subjects(name):
     return [s.get("message", "").split("\n", 1)[0] for s in history_steps(name)]
 
 
-def title(item_text):
-    return norm(re.split(r"skipped:", item_text or "", flags=re.I)[0])[:40]
+def title(item):
+    text = re.split(r"skipped:", item["text"] or "", flags=re.I)[0]
+    state = item.get("state") or ""
+    if state:
+        text = re.sub(rf":\s*{re.escape(state)}\.?\s*$", "", text, flags=re.I)
+    return norm(text)[:40]
 
 
 def opening_worklist(view):
@@ -1322,24 +1326,36 @@ def worklist_fallback(view):
 def skipped_step(view):
     if not view.worklist:
         return inconclusive("no worklist to inspect")
+
+    def instruction_text(text):
+        while (normalized := norm(text)) != text:
+            text = normalized
+        return text
+
+    want = (view.case.get("expect") or {}).get("playbook")
+    shape = playbook_shape(want, view.skills_root) if want else None
+    instructions = {instruction_text(step["text"]) for step in (shape or {}).get("steps", [])}
     skipped = []
     for snap in view.worklist:
         for item in snap.get("items", []):
-            if (item.get("state") or "").lower().startswith("skipped") or SKIP_MARK.search(item.get("text") or ""):
+            state = (item.get("state") or "").lower()
+            text = item.get("text") or ""
+            if state.startswith("skipped") or (state != "pending" and instruction_text(text) not in instructions and SKIP_MARK.search(text)):
                 skipped.append((snap.get("seq"), item))
     final = view.worklist[-1].get("items", [])
     evidence = [f"skip markers seen: {len(skipped)}", f"final worklist has {len(final)} items"]
     if skipped:
-        gone = [i["text"][:60] for _, i in skipped if not any(title(i["text"]) == title(f["text"]) for f in final)]
+        gone = [i["text"][:60] for _, i in skipped if not any(title(i) == title(f) for f in final)]
         if gone:
             return failed(f"skipped items vanished from the final list: {gone}", *evidence)
         evidence.append(f"example: {skipped[0][1].get('state', '')[:100]!r} on {skipped[0][1].get('text', '')[:60]!r}")
-        return passed(*evidence)
     opening = opening_worklist(view)
     dropped = [i["text"][:60] for i in (opening or {}).get("items", [])
-               if not any(norm(i["text"])[:40] == norm(f["text"])[:40] for f in final)]
+               if not any(title(i) == title(f) for f in final)]
     if dropped:
         return failed(f"steps dropped from the worklist without a skipped marker: {dropped}", *evidence)
+    if skipped:
+        return passed(*evidence)
     if view.killed:
         return inconclusive("run killed; no step reached a skip decision", *evidence)
     return inconclusive("no step was skipped or dropped; promise not exercised", *evidence)

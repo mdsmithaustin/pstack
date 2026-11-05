@@ -275,4 +275,6 @@ Claude Code and Codex cases exclude account MCP servers. The parallel half of `w
 
 `testdata/traces/` holds reduced traces that `test_oracles.py` grades. `python3 evals/promises/reduce_trace.py <trace.json> --case feature-run --case route-feature` rewrites a raw trace down to the events and fields that keep every verdict and failure reason. Add `--exact <promise>` to keep that promise's evidence lines too, as `test_claude_high_reply_quotes_executed_commands_with_outputs` needs for `claude-code-feature-2.json`. `testdata/traces/skill-loads/` holds the reduced skill-load and compaction traces, apart from the feature traces that every-trace tests grade.
 
+`ProbeTraces` grades the recorded Feature traces against `testdata/feature-before-408/`, which preserves the Feature playbook from commit `75efe21e4cf6f71b2983753d6f210551a090b6b8`. Their reduced step labels depend on that wording. This fixture is historical evaluator input, not evidence that agents follow the current Feature instructions. Synthetic worklist tests continue to use the current playbook.
+
 `cases/<id>/case.json` sets the cases. `deferred` marks a case this suite records but does not run yet, with the reason. Prompts follow the blinding rules in `skills/poteto-mode/playbooks/eval.md`, and `test_oracles.py` rejects meta words in prompts and fixtures.
