@@ -9246,6 +9246,19 @@
    ],
    "text": "`changed` means one PR of proven corrections, confined to the verification skill's own directory."
   },
+  "88e1272496b5": {
+   "also": [
+    "delegate-brief-passes-source",
+    "delegate-never-writes-only-test"
+   ],
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "feature-settles-acceptance-tests-and-edges",
+   "sources": [
+    "port"
+   ],
+   "text": "[Feature step 4](../../skills/poteto-mode/playbooks/feature.md) defines when the lead implements or delegates, what the worklist records, and the acceptance-test and specification-edge duties for both paths."
+  },
   "8921b1eb1ee6": {
    "class": "promise",
    "file": "02-poteto-mode.md",
@@ -9662,15 +9675,6 @@
     "port"
    ],
    "text": "Either way, the comment comes out."
-  },
-  "938b4f1379ec": {
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "feature-settles-acceptance-tests-and-edges",
-   "sources": [
-    "port"
-   ],
-   "text": "Before a Feature run delegates code, the agent settles acceptance tests from the spec's worked examples and from the edges each requirement raises, such as empty input or an exact boundary, and its reply lists each edge that neither the spec nor the current code settles."
   },
   "94abf5e9dc8f": {
    "class": "context",
@@ -13522,18 +13526,6 @@
     "port"
    ],
    "text": "Say \"no PR\" or \"don't commit\" in the prompt to stop it earlier."
-  },
-  "f9980a66097c": {
-   "also": [
-    "delegate-never-writes-only-test"
-   ],
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "delegate-brief-passes-source",
-   "sources": [
-    "port"
-   ],
-   "text": "Every delegate brief names the original spec by path, not a summary of it, and no delegate writes the only test of its own code."
   },
   "f9b43d345e9f": {
    "class": "substituted",
