@@ -104,7 +104,7 @@ Before you apply a principle, call the Skill tool with its leaf skill's bare nam
 
 **[Just do it](references/unattended.md).** Use any MCP tool. Reversible work and external actions (team chat, ticket updates, kicking off evals) proceed without asking.
 
-**Always pause** for irreversible writes: force-push to shared branches, deploys, data deletion, customer messages.
+**Irreversible writes.** Named requests authorize that scope. Apply [authorization](references/authorization.md).
 
 **Keep going:** "Don't stop", "going to bed", "run until done", or "be fully autonomous".
 
