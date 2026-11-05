@@ -1,0 +1,58 @@
+{
+ "harness": "codex",
+ "exit_code": 0,
+ "worklist": [
+  {
+   "seq": 31,
+   "carrier": "text",
+   "items": [
+    {
+     "text": "Step 4 acceptance tests and edge cases: in progress.",
+     "state": "in progress"
+    },
+    {
+     "text": "Step 4 implementation delegation: skipped: implementation delegation below threshold. Two hand-edited files, including tests, no documentation edits, and one workstream for the function and its tests.",
+     "state": "skipped: implementation delegation below threshold. Two hand-edited files, including tests, no documentation edits, and one workstream for the function and its tests."
+    },
+    {
+     "text": "Step 4 implementation: pending.",
+     "state": "pending"
+    },
+    {
+     "text": "Integrated behavior verification: pending.",
+     "state": "pending"
+    }
+   ],
+   "turn": 0
+  },
+  {
+   "seq": 56,
+   "carrier": "text",
+   "items": [
+    {
+     "text": "Step 4 acceptance tests and edge cases: completed.",
+     "state": "completed"
+    },
+    {
+     "text": "Step 4 implementation delegation: skipped: implementation delegation below threshold. Two hand-edited files, one coupled workstream.",
+     "state": "skipped: implementation delegation below threshold. Two hand-edited files, one coupled workstream."
+    },
+    {
+     "text": "Step 4 implementation: completed.",
+     "state": "completed"
+    },
+    {
+     "text": "Integrated behavior verification: completed.",
+     "state": "completed"
+    }
+   ],
+   "turn": 0
+  }
+ ],
+ "x_provenance": {
+  "native_record_sha256": "27f5bb5e71ed1c145d6766666acf2450a6aa19747bd9b815fecea95f2e90412c",
+  "source": "Independent issue408 head-small native Codex replay",
+  "producer": "harnesses.codex.harvest_rollout",
+  "retained": "Only first and last normalized worklist snapshots"
+ }
+}
