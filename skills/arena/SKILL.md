@@ -32,9 +32,11 @@ After all Phase B candidates complete, choose one arm of the `arena cross-judge 
 
 Read every candidate's rationale end to end before picking. Read a candidate's full artifact only when it is the base, or where you and the cross-judge disagree on a criterion. The cross-judge reads every artifact in full. When Phase C skipped the judge, read every candidate's full artifact.
 
-Score each candidate against the rubric criterion by criterion, not on holistic feel, from its rationale and the cross-judge's evidence for that criterion. Where those cannot settle a criterion, read that part of the artifact. Compare against the cross-judge when Phase C ran one. Agreement on the base confirms the pick. Name the models you, the runners, and the cross-judge ran on before you call any agreement or convergence confirmation, because arms on one model are one opinion. Disagreement means one of you is biased or the rubric was ambiguous. Read both rationales before deciding.
+Score each candidate against the rubric criterion by criterion, not on holistic feel, from its rationale and the cross-judge's evidence for that criterion. Where those cannot settle a criterion, read that part of the artifact. Compare against the cross-judge when Phase C ran one. Wait for its verdict before you pick. If it recommends a base other than the one it scored highest, treat the verdict as unresolved: send it back once to explain the gap, and read that explanation before you pick. Your own explanation does not replace the judge's. Agreement on the base confirms the pick. Name the models you, the runners, and the cross-judge ran on before you call any agreement or convergence confirmation, because arms on one model are one opinion. Disagreement means one of you is biased or the rubric was ambiguous. Read both rationales before deciding. If you still pick a different base, record the criterion that decided it.
 
 Pick the base a future maintainer can extend most easily without breaking invariants. When two feel tied, prefer the cleaner boundary or smaller API, per the Laziness Protocol.
+
+Start no graft, and spawn no implementation of the result, before you pick the base.
 
 ## Phase E: Graft
 
@@ -48,4 +50,4 @@ Verify the synthesized artifact like any other output. Call the Skill tool with 
 
 ## Outputs
 
-One synthesized artifact, saved where the calling task says. Code the calling task ships goes onto the branch it works on. A sketch awaiting the caller's sign-off is not yet code the task ships, so it stays outside the project until sign-off. Any other artifact whose task names no place goes in a fresh `mktemp -d` outside the project. Give a short synthesis note in your reply rather than as a file, naming the base and why, the cross-judge's verdict or that Phase C skipped the judge, each graft with its source candidate, what was rejected and why, any convergence or dropouts, and the verification result.
+One synthesized artifact, saved where the calling task says. Code the calling task ships goes onto the branch it works on. A sketch awaiting the caller's sign-off is not yet code the task ships, so it stays outside the project until sign-off. Any other artifact whose task names no place goes in a fresh `mktemp -d` outside the project. Give a short synthesis note in your reply rather than as a file, naming the base and why, the cross-judge's verdict and the criterion that decided any pick against it, or that Phase C skipped the judge, each graft with its source candidate, what was rejected and why, any convergence or dropouts, and the verification result.

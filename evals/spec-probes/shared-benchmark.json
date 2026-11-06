@@ -322,6 +322,180 @@
       "tags": ["population:headline-behavior", "source-grounding", "open-choice"]
     },
     {
+      "id": "pos-variant-coverage",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "requirements",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Review settings-spec.md before implementation. List the acceptance tests you would write for each requirement and the decisions it still leaves open. Use a Markdown table, bullets, or prose. Do not choose unstated product behavior.",
+      "files": ["fixtures/settings-spec.md"],
+      "expected_behavior": [
+        "For SL-501, preserves the inclusive 1 through 300 range and the rejection of values outside it as settled.",
+        "For SL-501, checks the empty-value edge in each of YAML, TOML, and JSON, such as a bare YAML key or `~`, TOML having no null at all, and JSON `null` or an empty string, instead of once for the settings file.",
+        "For SL-501, checks the integer edge per format, such as `300.0`, a quoted `\"30\"`, or a format-specific integer spelling, or states why checking one format covers the others.",
+        "For SL-502, treats the example's read order as illustration and proposes a test that reads the user file first and still expects the user value, as the override rule states. The example's use of TOML for both files may become an open question or a test under a stated assumption.",
+        "Leaves unstated behavior open, such as whether an empty user value falls back to the default or keeps the project value."
+      ],
+      "assertions": [
+        {
+          "name": "edges-per-variant",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "variant-coverage",
+              "scale": "1-5",
+              "rubric": "5 = SL-501's empty-value and integer edges are each checked in YAML, TOML, and JSON, with at least one format-specific difference named, such as TOML having no null, or the response gives a sound reason why checking one format covers the others. 4 = Every format is checked for one of the two edges, and the other edge is raised once with no wrong claim about any format. 3 = The edges are raised once for the settings file, with no per-format check. 2 = Formats are named, but no edge is tied to a format. 1 = No SL-501 edge is raised, a format behavior is misstated, or the response chooses unstated behavior."
+            },
+            {
+              "name": "example-restraint",
+              "scale": "1-5",
+              "rubric": "5 = SL-502's read order is treated as a property of the example, not a rule, and a proposed test reads the user file first and still expects the user value. The single format may be tested under a stated assumption or left open. 4 = The read-order test is present but conditional or vaguely worded. 3 = No proposed test breaks an incidental property of the example, and the tests only replay or generalize it. 2 = The response makes read order or the example's format a rule. 1 = SL-502 is ignored, its override rule is contradicted, or the response chooses unstated behavior."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "source-grounding", "variant-coverage"]
+    },
+    {
+      "id": "pos-new-field-unrequested-rejection",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "capability",
+      "domain": "requirements",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "We're about to build the job config loader that sync-job-spec.md describes. Write out its acceptance criteria before implementation starts. A Markdown table, bullets, or prose is fine.",
+      "files": ["fixtures/sync-job-spec.md"],
+      "expected_behavior": [
+        "Keeps SJ-101's missing-field rejection, SJ-102's relative-path rejection, and SJ-104's 1 through 90 range and its rejection as settled.",
+        "Adds no criterion that expects a rejection, error, or rewrite that no requirement states, such as one on a `destination` form, an unknown key, or a duplicate key. The `backup://` scheme appears only in SJ-103's example, and SJ-102's absolute-path rule names only `source`.",
+        "Leaves the supported `destination` forms open, or states that no requirement restricts them. A criterion that the example value loads is fine."
+      ],
+      "assertions": [
+        {
+          "name": "rejections-need-requirements",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "unrequested-rejection",
+              "scale": "1-5",
+              "rubric": "5 = Every rejection, error, or rewrite that a proposed test or criterion expects traces to a stated rule: SJ-101's missing fields, SJ-102's requirement that `source` be an absolute path, or SJ-104's integer range. Inputs that no requirement restricts stay open questions or are stated as unrestricted. Examples are a `destination` without the `backup://` scheme, a relative `destination`, an empty or null `destination`, an unknown key, and a duplicate key. Rejecting a `source` value because it is not an absolute path counts as traced to SJ-102. Rejecting a file that is empty, does not parse as YAML, or has no mapping at the top level counts as traced to SJ-101, because it has neither field. An open policy question explicitly excluded from tests or criteria is unresolved, even if it recommends an answer; it is not an expected rejection. 4 = Every expected rejection traces to a stated rule, but the open question about `destination` forms is missing or vague. 3 = One or two untraced rejections appear as criteria, including ones marked as proposals for the spec owner to confirm. 2 = Three or more untraced rejections appear as criteria. 1 = A stated rejection is reversed, or a criterion rejects a `destination` form, such as one taken from SJ-102's rule or the `backup://` example."
+            }
+          ]
+        },
+        {
+          "name": "stated-rejections-kept",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "stated-rejections-kept",
+              "scale": "1-5",
+              "rubric": "5 = SJ-101's missing-field rejection, SJ-102's relative-path rejection, and SJ-104's range rejection are all covered, with `keep` checked at 0, 1, 90, and 91 or an equivalent boundary set. 4 = All three rejections are covered, with one `keep` boundary missing. 3 = One stated rejection is missing. 2 = Several stated rejections are missing. 1 = A stated rejection is contradicted or left open as undecided."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "source-grounding", "unrequested-rejection"]
+    },
+    {
+      "id": "pos-extension-keeps-accepted-input",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "capability",
+      "domain": "requirements",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Before we add the archive settings in sync-job-archive.md to the loader in sync_job_loader.py, write the acceptance criteria for them. sync-job-spec.md is the original spec, and nightly.yaml is one of the job configs that runs today. A Markdown table, bullets, or prose is fine.",
+      "files": ["fixtures/sync-job-archive.md", "fixtures/sync-job-spec.md", "fixtures/sync_job_loader.py", "fixtures/nightly.yaml"],
+      "expected_behavior": [
+        "Keeps nightly.yaml loading as it does today, including its `destination`, which is a plain path rather than a `backup://` URL.",
+        "Adds no rejection that no requirement states: none on the form of `archive_destination` or `destination`, such as an absolute-path rule copied from `source` or a `backup://` rule taken from the examples, none on an `archive_destination` equal to `destination`, none on `archive_after_days` set without `archive_destination`, and none on an unknown key. These stay open or unrestricted.",
+        "Covers SJ-202's 1 through 365 range at its boundaries and the rejection of `archive_destination` without `archive_after_days`."
+      ],
+      "assertions": [
+        {
+          "name": "rejections-need-requirements",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "unrequested-rejection",
+              "scale": "1-5",
+              "rubric": "5 = Every rejection, error, or rewrite that a proposed test or criterion expects traces to a stated rule: SJ-202's integer range, SJ-202's rejection of `archive_destination` without `archive_after_days`, or a rule the current loader already enforces. Inputs that no requirement restricts stay open questions or are stated as unrestricted. Examples are an `archive_destination` or `destination` form, such as an absolute-path rule copied from `source` or a `backup://` rule taken from the examples, an `archive_destination` equal to `destination`, `archive_after_days` set without `archive_destination`, and an unknown key. An open policy question explicitly excluded from tests or criteria is unresolved, even if it recommends an answer; it is not an expected rejection. 4 = Every expected rejection traces to a stated rule, but the open choices are missing or vague. 3 = One or two untraced rejections appear as criteria, including ones marked as proposals for the spec owner to confirm. 2 = Three or more untraced rejections appear as criteria. 1 = A proposed rule would reject nightly.yaml, or a stated rejection is reversed."
+            }
+          ]
+        },
+        {
+          "name": "accepted-input-kept",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "accepted-input-kept",
+              "scale": "1-5",
+              "rubric": "5 = A test or criterion loads nightly.yaml, or an equivalent config with a plain-path `destination` and no archive fields, and expects the same result as today. SJ-202's range is covered at 0, 1, 365, and 366 or an equivalent boundary set, and so is the rejection of `archive_destination` without `archive_after_days`. 4 = nightly.yaml is kept working and both SJ-202 rejections are covered, but one SJ-202 boundary is missing. 3 = Neither nightly.yaml nor an equivalent config is covered, though nothing proposed would break it. 2 = A proposed rule would break nightly.yaml under some reading. 1 = A proposed rule rejects nightly.yaml, or a stated SJ-202 rejection is dropped."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "source-grounding", "unrequested-rejection"]
+    },
+    {
       "id": "neg-deployed-incident-restraint",
       "split": "tune",
       "kind": "adversarial",

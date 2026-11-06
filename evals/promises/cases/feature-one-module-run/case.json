@@ -1,0 +1,23 @@
+{
+ "promises": [
+  "prove-it-works-checks-real-artifact",
+  "design-ladder-spares-small-changes"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "add a --pairs option that counts adjacent word pairs instead of single words. default output stays byte-identical. verify both."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "feature",
+  "artifact_command": "-m\\s+tally\\b"
+ },
+ "note": "an additive change that crosses a function boundary inside tally's one module; the design ladder must still skip the fan-out",
+ "env": {
+  "todo_tools": true
+ }
+}

@@ -9,6 +9,8 @@ reminder: New task? Playbook match or rigor needed -> apply /poteto-mode. Casual
 
 # Poteto mode
 
+Once this whole entry is in your context, do not read its file again, except to recover.
+
 ## Recover after compaction or truncation
 
 After a known compaction, context summary, or truncation notice, read this entry on its own, then read and apply [recovery](references/recovery.md) before the next governed action. It restores the active playbook and step from the worklist, requires complete returned guidance, and names the exact missing file when guidance is unavailable.
@@ -17,7 +19,7 @@ After a known compaction, context summary, or truncation notice, read this entry
 
 Open a worklist whose first items are the matched playbook's opening prose and then its steps, before any task-specific items. Call the Skill tool with `pstack-harness` to choose the carrier. Match the task to a playbook below and open its file. Record the playbook path and the start commit (`git rev-parse HEAD`, or `no commits` in a new project) with that item; the in-progress item is the current step. Each step opens with its outcome in bold and the sentence that defines it. That much is the item, verbatim. A skill named in the outcome line loads before the step's first edit. Mark a step `completed` only when its outcome holds, with the evidence in the item. Every `Call the Skill tool with` sentence in a step runs before the step closes. Its other sentences are the default route; another that reaches the outcome with evidence is fine. Where a script or another agent reads a step's output (Babysit, Shipping, Orchestrate, the Autopilots, Multi-phase plan, Session pickup, Pause safely, Worktree cleanup), the procedure is the outcome. Carry out every step in order, even on a small or greenfield task. Run the commit, push, and PR steps without being asked. Before every commit, run `python3 "${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/preserve.py" --since <start commit>`. It runs the start commit's test files, unedited, against the working tree. Each failure needs a code fix or the playbook's allowed reason before the commit. In an existing repository, commit on a branch off trunk. Never commit credential files such as `.env`, or the user's own notes and data they did not ask to version. Skip a step only where its own text allows it, the user says no, or the project lacks what it needs, such as a git remote, and keep it in the list with a one-line `skipped: <reason>`. The reason says why the outcome does not apply, never what the route costs. A skip waives only the actions its reason rules out. The Principles and Autonomy sections shape the work's design and scope, not whether a step runs.
 
-For a large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, call the Skill tool with `figure-it-out` even when a narrower playbook like Feature fits. Call the Skill tool with `figure-it-out` whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead. figure-it-out designs one bespoke run, orchestrate runs the program.
+For a large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, call the Skill tool with `figure-it-out` even when a narrower playbook like Feature fits. Call the Skill tool with `figure-it-out` whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead.
 
 - **Investigation.** Read-only question about current code or its history: how does X work, why was Y built this way, are we sure about Z, should we do X or Y. A pull request review starts in Code review, which calls `how` for the investigation it needs. `playbooks/investigation.md`.
 - **Code review.** Reviewing someone else's pull request, branch, or diff before it merges ("review this PR", "code review", "look over this diff"). `playbooks/code-review.md`.
@@ -52,12 +54,12 @@ Start every task a playbook matches with that worklist, before you read the code
 The Principles section below grounds every trigger. Name each principle that changed a decision in the reply and state the choice it changed.
 
 - On every invocation, resume, and task scope change, read and apply [task triggers](references/task-triggers.md). Each individual trigger governs when its named sibling skill runs.
-- Before spawning, briefing, recovering, or reviewing a delegate, read [delegation](references/delegation.md). A `poteto-agent` still reads this entire entry file, including the inline Principles index, before work.
+- Before spawning, briefing, recovering, or reviewing a delegate, read [delegation](references/delegation.md).
 - Before writing a reply, documentation, a PR description, or code comments, read [writing](references/writing.md). Call the Skill tool with `unslop` on every prose surface.
 
 ## Principles
 
-Before you apply a principle, call the Skill tool with its leaf skill's bare name. Each entry names when it applies. Use every leaf and sibling skill this suite names yourself, even when the listing shows only the name. The **pstack-harness** skill maps the Skill tool on every CLI.
+Before you apply a principle, call the Skill tool with its leaf skill's bare name. Each entry names when it applies. Load each skill this suite names yourself when its step or trigger arrives, not up front, even when the listing shows only the name. The **pstack-harness** skill maps the Skill tool on every CLI.
 
 **Core**
 

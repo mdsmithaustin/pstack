@@ -72,6 +72,12 @@ def text(seq, body):
     return {"seq": seq, "kind": "text", "text": body}
 
 
+def open_delegation_step(skills_root=ROOT / "skills"):
+    """The Feature step that records the source-file count, as an item whose text is its first sentence."""
+    step = next(s for s in oracles.playbook_shape("feature", skills_root)["steps"] if "below threshold" in s["text"])
+    return f"{step['n']}. {oracles.first_sentence(step['text'])}"
+
+
 def feature_items(skills_root=ROOT / "skills"):
     shape = oracles.playbook_shape("feature", skills_root)
     items = [{"text": shape["prose"][0], "state": "pending"}]
@@ -430,6 +436,282 @@ class WorklistOracle(unittest.TestCase):
                 del trace["worklist"][-1]["items"][index]
                 result = grade("skipped-step-stays-in-worklist", trace, feature_case())
                 self.assertEqual(result["verdict"], FAIL, result)
+
+
+class SourceFileCount(unittest.TestCase):
+    CHANGE = ("roster/__main__.py", "tests/test_json.py", "README.md", ".gitignore")
+    BELOW = "Step 4 implementation delegation: skipped: implementation delegation below threshold. One source file, one workstream."
+    DONE = [{"text": BELOW, "state": "completed"}]
+    STEP_FOUR_CLOSED = [{"text": "4. Implement or delegate", "state": "completed"}]
+
+    def verdict(self, changed, items, spawns=(), harness="claude-code", events=(), exit_code=0):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"roster/__main__.py": "x = 0\n", "README.md": "# roster\n"})
+        for rel in changed:
+            (project / rel).parent.mkdir(parents=True, exist_ok=True)
+            (project / rel).write_text("changed\n")
+        trace = minimal(harness=harness, events=events, worklist=[{"seq": 1, "carrier": "text", "items": items}], spawns=spawns,
+                        exit_code=exit_code)
+        return grade("feature-counts-only-source-files", trace, load_case("feature-source-count-run"), project)
+
+    def test_direct_change_closed_below_threshold_passes(self):
+        for harness, items in (("claude-code", self.DONE),
+                               ("codex", codex.plan_items({"plan": [{"step": self.BELOW, "status": "completed"}]}))):
+            with self.subTest(harness=harness):
+                result = self.verdict(self.CHANGE, items, harness=harness)
+                self.assertEqual(result["verdict"], PASS, result)
+
+    def test_implementation_delegates_fail(self):
+        feature = "You are the `feature` role delegate. One small fix in a tiny Python repo."
+        call = {"seq": 5, "turn": 0, "kind": "tool_call", "name": "Agent", "id": "a",
+                "input": {"description": "Fix load header check for status", "subagent_type": "general-purpose", "prompt": feature}}
+        sealed_events, sealed = codex_spawn(5, "implement_json", "persona: poteto-agent\n\nI'm applying poteto-mode to the scoped CLI and README changes.")
+        rows = [([], {"persona": "poteto-agent", "prompt_head": "Add the --json flag."}),
+                ([call], {"persona": "general-purpose", "prompt_head": feature}),
+                ([], {"persona": "general-purpose", "prompt_head": "Implementation of the --json flag in roster/__main__.py, plus tests and README."}),
+                ([], {"persona": "general-purpose", "prompt_head": "Add the --json flag to roster/__main__.py, tests/test_json.py and README.md."}),
+                ([], {"persona": "poteto-agent", "prompt_head": "Add the --json flag in roster/__main__.py with tests. The lead will review the diff."}),
+                ([], {"persona": "poteto-agent", "prompt_head": "Add the --json flag in roster/__main__.py. Check the preview output before delivery."}),
+                ([], {"persona": "poteto-agent", "description": "Fix review findings in roster", "prompt_head": "Role: `feature` implementation owner."}),
+                (sealed_events, dict(sealed, persona="poteto-agent"))]
+        for events, spawn in rows:
+            with self.subTest(spawn=spawn["prompt_head"] or spawn["x_child_first_reply"]):
+                result = self.verdict(self.CHANGE, self.DONE, spawns=[dict({"seq": 5, "tool": "Agent"}, **spawn)], events=events)
+                self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_spawns_that_do_not_implement_pass(self):
+        design_events, design = codex_spawn(5, "design_ordered", "persona: poteto-agent\n\nI am using the architect and poteto-mode skills for this "
+                                                                 "sketch. I will compare the sorted-record design with per-member date sets.")
+        sicko_events, sicko = codex_spawn(5, "comments_implementation", "Yes... Ha ha ha... Yes!")
+        docs_events, docs = codex_spawn(5, "docs_review", "persona: poteto-agent\nI’m applying the documentation-impact and technical-writing skills "
+                                                          "to check the README against the requested behavior and implementation.\n")
+        tests = {"seq": 5, "tool": "Agent", "persona": "poteto-agent",
+                 "prompt_head": "Write the failing tests for the --json flag from the spec. Write tests only; do not touch roster/__main__.py."}
+        explore = {"seq": 5, "tool": "Agent", "persona": "Explore", "subagent_type": "Explore",
+                   "prompt_head": "Read-only search: find where team counts are printed so I can implement a --json flag."}
+        test_role = {"seq": 5, "tool": "Agent", "persona": "general-purpose",
+                     "prompt_head": "Role: `feature` test delegate. Write the failing tests for the --json flag from README.md."}
+        for events, spawn in ((design_events, dict(design, persona="poteto-agent")), (sicko_events, dict(sicko, persona="comment-sicko")),
+                              (docs_events, dict(docs, persona="poteto-agent")), ([], tests), ([], explore), ([], test_role)):
+            with self.subTest(spawn=spawn["prompt_head"] or spawn["x_child_first_reply"]):
+                result = self.verdict(self.CHANGE, self.DONE, spawns=[spawn], events=events)
+                self.assertEqual(result["verdict"], PASS, result)
+
+    @staticmethod
+    def hermes_delegate(goal, context, persona=None):
+        call = {"seq": 5, "turn": 0, "kind": "tool_call", "name": "delegate_task", "id": "d", "input": {"tasks": [{"goal": goal, "context": context}]}}
+        return [call], {"seq": 5, "tool": "delegate_task", "persona": persona, "prompt_head": f"{goal}\n{context}"[:300]}
+
+    def test_recorded_non_implementer_spawns_pass(self):
+        poteto = "Put the exact line `persona: poteto-agent` on its own line in your first reply.\n\n# Poteto subagent\n\n"
+        hermes = (
+            ("Produce candidate architecture 1 for the retry-policy change. Start with caller usage. Give concrete Python type sketches and signatures "
+             "with not-implemented bodies, module ownership, data flow, tradeoffs, alternatives, and the first verifiable implementation step. Save the "
+             "complete candidate at the assigned output path. Return only the path and a six-line rationale summary.",
+             "Architect runner role resolved to inherit the Hermes parent model and effort. Do not edit repository files.", None),
+            ("Produce a design package for adding `--json` to this CLI without implementing it. Start with callers' usage. Name the output data shape "
+             "and organizing structure under Model the Domain. Include a type/signature sketch with not-implemented bodies where applicable, module map, "
+             "exact proposed JSON schema and newline/Unicode policy.",
+             poteto + "Role: architect runners, arm 1, model and effort inherit parent. You are one candidate in architect Phase B. "
+                      "Source files are read-only.", "poteto-agent"),
+            ("Independently score each candidate 1-5 on every rubric criterion with concrete evidence, identify design-red-flag failures, recommend one "
+             "base, and name at most two grafts from each loser. Also identify unresolved semantic decisions that must be surfaced to the user before "
+             "implementation.",
+             "You are the arena cross-judge. Read all four files in full.\n\nUser priority: caller usage is most important. No implementation now. "
+             "Read-only: do not edit/write files.", None),
+            ("Remove unnecessary comments from the current retry feature diff and flag any code whose required explanation indicates a design problem.",
+             "Pstack installed skill paths\n\nUse these local files when the persona below requires a skill read. Read each required SKILL.md in full; "
+             "follow its relative references from its directory.\n\n# Comment Sicko\n\nMy first output when spawned is exactly this.\n\n"
+             "Yes... Ha ha ha... Yes!\n\nI touch comments and identify refactor targets. I never write application code.\n\nReview the complete "
+             "current diff against main, including new tests and README. Touch only comments. Do not edit application code.", None),
+            ("Answer the user's narrow codebase question by directly exploring the implementation: \"do we lowercase words before counting? is there a "
+             "second pass over the file?\" Trace the entry point and relevant counting/data flow. Return a concise grounded explanation with exact "
+             "file:line references, using only applicable sections among Overview, Key Concepts, How It Works, Where Things Live, Gotchas. Do not pad "
+             "the answer.",
+             "Read-only: do not edit or write files. Locate the entry point, read the implementation, and trace relevant calls/data flow before "
+             "answering. Model/effort inherit the parent per resolved `how explainer` role.", None),
+            ("Synthesize a concise architectural grounding for implementing the feature. Resolve any uncertainty by reading source. Return sections "
+             "Overview, Key Concepts, How It Works, Where Things Live, Gotchas. Include a clear recommended ownership boundary and name the data shape "
+             "that should represent retry policy and attempt-aware results.",
+             "Role: how explainer. No persona. Model and effort inherit the Hermes parent because configured Opus is unavailable.\n\nRead-only. "
+             "Do not edit or write files.", None),
+            ("Add the smallest behavior-level regression test that reproduces duplicate rows after a mid-run retry, and prove it fails before the "
+             "production fix.",
+             poteto + "You own only tests/test_export.py in the current checkout. This is the `bug-fix` role, resolved to inherit the parent model and "
+                      "effort. Do not edit production code. Edit the file, then run the new test and confirm it fails for duplicate rows. Do not fix "
+                      "production code. Do not commit.", "poteto-agent"))
+        explorer = ("You are exploring a codebase to understand how something works. Gather facts. Trace code paths, read implementations, map components. "
+                    "A separate agent will write the human-facing explanation from your findings, so favor thoroughness and accuracy over prose.\n\n"
+                    "Other explorers are investigating different slices of the same subsystem in parallel.\n\nRead-only: do not edit or write files.")
+        rows = [("grok", [{"seq": 5, "turn": 0, "kind": "tool_call", "name": "spawn_subagent", "id": "g",
+                           "input": {"description": "Explore ingest stage", "prompt": explorer}}],
+                 {"seq": 5, "tool": "spawn_subagent", "persona": None, "prompt_head": explorer[:300]})]
+        rows += [("hermes", *self.hermes_delegate(goal, context, persona)) for goal, context, persona in hermes]
+        rows += [("claude-code", [{"seq": 5, "turn": 0, "kind": "tool_call", "name": "Agent", "id": "a", "input": {"subagent_type": kind, "prompt": prompt}}],
+                  {"seq": 5, "tool": "Agent", "persona": kind, "subagent_type": kind, "prompt_head": prompt[:300]}) for kind, prompt in (
+            ("general-purpose", "You are the `feature` role delegate. Write the failing tests for the --json flag from the spec at /tmp/spec.md. "
+                                "Do not write implementation code."),
+            ("Explore", "Find where team counts are printed and read the existing implementations of other flags so I can follow the same pattern."),
+            ("general-purpose", "Run python3 -m roster data.csv --json and the text mode against the implementation in roster/__main__.py and report "
+                                "any mismatch with the user's request."),
+            ("general-purpose", "Write the acceptance tests for the --json flag from README.md. " + "Keep the existing text output unchanged. " * 8
+                                + "Role: `feature` test delegate. Edit tests only; do not touch roster/__main__.py."))]
+        for harness, events, spawn in rows:
+            with self.subTest(harness=harness, spawn=spawn["prompt_head"][:60]):
+                result = self.verdict(self.CHANGE, self.DONE, spawns=[spawn], events=events, harness=harness)
+                self.assertEqual(result["verdict"], PASS, result)
+
+    def test_review_word_does_not_clear_an_implementation_order(self):
+        goal = ("Implement the --json flag and black-box CLI tests in the current checkout. Run the new tests and both direct CLI modes. Review your diff. "
+                "Return a thin report naming changed files and exact command results. Do not commit.")
+        context = ("Put the exact line `persona: poteto-agent` on its own line in your first reply.\n\n# Poteto subagent\n\nRole: feature. The role "
+                   "resolved to inherit-parent model and effort under Hermes.\nYou own the coupled edits to tally/__main__.py and a new standard-library "
+                   "unittest file under tests/. Do not edit README.md. Do not commit.")
+        labeled = "Task: Implement the --json flag in roster/__main__.py, tests and README.md. Review your diff before returning."
+        for harness, events, spawn in (("hermes", *self.hermes_delegate(goal, context, "poteto-agent")),
+                                       ("claude-code", [], {"seq": 5, "tool": "Agent", "persona": "poteto-agent", "prompt_head": goal}),
+                                       ("claude-code", [], {"seq": 5, "tool": "Agent", "persona": "general-purpose", "prompt_head": labeled})):
+            with self.subTest(harness=harness, head=spawn["prompt_head"][:20]):
+                result = self.verdict(self.CHANGE, self.DONE, spawns=[spawn], events=events, harness=harness)
+                self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_sealed_poteto_agent_spawn_without_a_role_is_inconclusive(self):
+        for task, reply in (("docs_check", "persona: poteto-agent\n\nI'm using documentation-impact to check the README against the CLI."),
+                            ("json_flag", "persona: poteto-agent\n\nI'll add the --json flag to roster/__main__.py, then tests and the README.")):
+            events, spawn = codex_spawn(5, task, reply)
+            with self.subTest(task=task):
+                result = self.verdict(self.CHANGE, self.DONE, spawns=[dict(spawn, x_persona_line="poteto-agent")], events=events, harness="codex")
+                self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_verbatim_step_copy_is_not_a_below_threshold_record(self):
+        step = next(item for item in feature_items() if "below threshold" in item["text"])["text"]
+        quoted = step[:step.index(". ", step.index("below threshold")) + 1]
+        record = "\nskipped: implementation delegation below threshold. Source count 1."
+        for text, state, verdict in ((step, "completed", FAIL), (quoted, "completed", FAIL), (step + "\nImplemented directly.", "completed", FAIL),
+                                     (step + record, "completed", PASS), (step + record, "pending", FAIL)):
+            with self.subTest(text=text[-40:], state=state):
+                result = self.verdict(self.CHANGE, [{"text": text, "state": state}])
+                self.assertEqual(result["verdict"], verdict, result)
+
+    def test_below_threshold_record_needs_an_executed_close(self):
+        for items in ([{"text": "4. Implement directly and close this item with skipped: implementation delegation below threshold, the counts, "
+                                "and the reason the work is one workstream.", "state": "pending"}],
+                      [{"text": "4. Count source files; <3 and 1 workstream -> implement directly, skipped: implementation delegation below threshold",
+                        "state": "pending"}],
+                      [{"text": "2. architect: skipped: design delegation below threshold for a one-function change", "state": "completed"},
+                       *self.STEP_FOUR_CLOSED],
+                      [{"text": "3. Smallest safe decomposition: skipped: test delegation below threshold", "state": "completed"},
+                       *self.STEP_FOUR_CLOSED]):
+            with self.subTest(item=items[0]["text"]):
+                result = self.verdict(self.CHANGE, items)
+                self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_negated_note_or_note_beside_open_step_four_fails(self):
+        for items in ([{"text": "4. 3 source files: not below the delegation threshold, delegate to feature role", "state": "completed"}],
+                      [{"text": "3. Independent workstreams: skipped: one workstream, below delegation threshold", "state": "completed"},
+                       {"text": open_delegation_step(), "state": "pending"}]):
+            with self.subTest(items=[item["text"][:50] for item in items]):
+                result = self.verdict(self.CHANGE, items)
+                self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_task_update_description_records_the_skip_once_its_task_closes(self):
+        item = {"text": "4. Record counts, settle tests, implement or delegate", "state": "completed"}
+        record = "Counts: 1 source file, 1 workstream (skipped: implementation delegation below threshold)."
+        for task, description, closes, verdict in (("5", record, True, PASS), ("5", "Counts: 1 source file, 1 workstream.", True, FAIL),
+                                                   ("2", record, False, FAIL)):
+            with self.subTest(task=task, description=description, closes=closes):
+                updates = [{"seq": 3, "turn": 0, "kind": "tool_call", "name": "TaskUpdate", "id": "u3",
+                            "input": {"taskId": task, "status": "in_progress", "description": description}}]
+                updates += [{"seq": 4, "turn": 0, "kind": "tool_call", "name": "TaskUpdate", "id": "u4",
+                             "input": {"taskId": task, "status": "completed"}}] if closes else []
+                result = self.verdict(self.CHANGE, [item], events=updates)
+                self.assertEqual(result["verdict"], verdict, result)
+
+    def test_ordinary_below_threshold_wording_passes(self):
+        for phrase in ("Below the delegation threshold: 1 source file, 1 workstream.",
+                       "Skipped: implementation delegation under threshold (1 source file, 1 workstream).",
+                       "skipped: implementation delegation below the three-file threshold. One source file, one workstream.",
+                       "skipped: below delegation threshold. One source file.",
+                       "skipped: implementation-delegation below-threshold"):
+            with self.subTest(phrase=phrase):
+                result = self.verdict(self.CHANGE, [{"text": "4. " + phrase, "state": "completed"}])
+                self.assertEqual(result["verdict"], PASS, result)
+
+    def test_plan_explanation_counts_when_its_update_closes_step_four(self):
+        for status, verdict in (("completed", PASS), ("pending", FAIL), ("in_progress", FAIL)):
+            plan = {"explanation": "skipped: implementation delegation below threshold; 1 source file",
+                    "plan": [{"step": "4. Implement or delegate", "status": status}]}
+            code = 'await tools.update_plan({explanation: "skipped: implementation delegation below threshold; 1 source file", ' \
+                   f'plan: [{{step: "4. Implement or delegate", status: "{status}"}}]}});'
+            for name, given in (("update_plan", plan), ("exec", {"code": code})):
+                with self.subTest(carrier=name, status=status):
+                    call = {"seq": 1, "turn": 0, "kind": "tool_call", "name": name, "id": "p", "input": given}
+                    result = self.verdict(self.CHANGE, codex.plan_items(plan), harness="codex", events=[call])
+                    self.assertEqual(result["verdict"], verdict, result)
+
+    def test_exec_plan_explanations_with_escapes_pass(self):
+        for quote in ('"', "'", '`'):
+            for prefix in (r'\a' * 40, '\\' + quote, '\\\\', r'first line\nsecond line'):
+                with self.subTest(quote=quote, prefix=prefix):
+                    code = 'await tools.update_plan({explanation: ' + quote + prefix + self.BELOW + quote + '});'
+                    call = {"seq": 1, "kind": "tool_call", "name": "exec", "input": {"code": code}}
+                    result = self.verdict(self.CHANGE, self.STEP_FOUR_CLOSED, harness="codex", events=[call])
+                    self.assertEqual(result["verdict"], PASS, result)
+
+    def test_exec_plan_explanations_reject_unterminated_escapes(self):
+        probe = '''
+import json
+import sys
+from test_oracles import SourceFileCount
+
+test = SourceFileCount()
+try:
+    result = test.verdict(test.CHANGE, test.STEP_FOUR_CLOSED, harness="codex", events=json.load(sys.stdin))
+    print(json.dumps(result))
+finally:
+    test.doCleanups()
+'''
+        for quote in ('"', "'", '`'):
+            for ending in ('', '\\' + quote):
+                with self.subTest(quote=quote, ending=ending):
+                    code = 'await tools.update_plan({explanation: ' + quote + self.BELOW + r'\a' * 40 + ending
+                    call = {"seq": 1, "kind": "tool_call", "name": "exec", "input": {"code": code}}
+                    run = subprocess.run([sys.executable, '-c', probe], cwd=HERE, input=json.dumps([call]),
+                                         text=True, capture_output=True, check=True, timeout=10)
+                    result = json.loads(run.stdout)
+                    self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_killed_run_without_a_record_is_inconclusive(self):
+        items = [{"text": "4. Record counts, settle tests, implement or delegate", "state": "in progress"}]
+        for exit_code, verdict in ((124, INCONCLUSIVE), (-9, INCONCLUSIVE), (1, INCONCLUSIVE), (0, FAIL)):
+            with self.subTest(exit_code=exit_code):
+                result = self.verdict(self.CHANGE, items, events=bash(2, "python3 -m unittest discover -s tests", head="OK"), exit_code=exit_code)
+                self.assertEqual(result["verdict"], verdict, result)
+
+    def test_chat_copy_of_step_four_is_not_a_record(self):
+        steps = feature_items()[1:]
+        step = next(item["text"] for item in steps if item["text"].startswith("4. "))
+        for body, verdict in (("1. Design: pending.\n" + step + ": pending.", FAIL),
+                              ("\n".join(item["text"] + ": pending." for item in steps), FAIL),
+                              ("1. Design: done.\n2. Step 4: skipped: implementation delegation below threshold. One source file.", PASS)):
+            with self.subTest(body=body[:60]):
+                result = self.verdict(self.CHANGE, live.chat_worklist(body))
+                self.assertEqual(result["verdict"], verdict, result)
+
+    def test_below_threshold_note_must_name_delegation(self):
+        for note, verdict in (("Architect exploration is below threshold.", FAIL),
+                              ("Implementation delegation skipped below threshold. One source file.", PASS)):
+            with self.subTest(note=note):
+                result = self.verdict(self.CHANGE, [{"text": "4. Implement or delegate", "state": "completed"},
+                                                    {"text": note, "state": "completed"}])
+                self.assertEqual(result["verdict"], verdict, result)
+
+    def test_change_without_companion_files_is_inconclusive(self):
+        for changed in (self.CHANGE[:2], self.CHANGE + ("roster/report.py",), ("tests/test_json.py", "README.md")):
+            with self.subTest(changed=changed):
+                result = self.verdict(changed, self.DONE)
+                self.assertEqual(result["verdict"], INCONCLUSIVE, result)
 
 
 class ReplyOracles(unittest.TestCase):
@@ -5031,7 +5313,7 @@ class LinearTime(unittest.TestCase):
                           "[" * LONG + "pass", "](" * (LONG // 2) + "pass", "\n" * LONG + "Review: pass", "Review: " + "(" * LONG + "pass",
                           "no " * (LONG // 3) + "findings pass", "Review: pass" + " with" * (LONG // 5), "a_" * (LONG // 2) + " pass",
                           "a" + "_" * LONG + "b pass", "no" + " " * (LONG // 2) + " pass" * (LONG // 10),
-                          "no edits " * (LONG // 9) + "pass", "Docs review (did not run): pass " * (LONG // 31))
+                          "no edits " * (LONG // 9) + "pass", "Docs review (did not run): pass " * (LONG // 31), "pending " * (LONG // 8))
 
     def test_a_long_run_of_relative_cds_tracks_the_checkout_in_linear_time(self):
         events = [{"seq": 50 + 2 * n + k, "kind": kind, "name": "Bash", "id": f"cd{n}", "input": {"command": f"cd d{n}"}, "ok": True}
@@ -5056,9 +5338,10 @@ class LinearTime(unittest.TestCase):
         self.assert_quick(loop_verdict, "ssh " * (LONG // 4), "tmux new " * (LONG // 9), "x.ssh " * (LONG // 6), "ssh /ssh " * (LONG // 9))
 
 
-def review_line(line):
-    trace = minimal(events=[dict(text(1, f"Done. Author result: independent review required. {line}"), turn=0), dict(text(3, "Review mode run."), turn=1)],
-                    spawns=[{"seq": 1, "tool": "Agent", "prompt_head": "Role: trail reviewer. Independent review of the docs.", "turn": 0}])
+def review_line(line, lead="Done. ", reviewed=True):
+    reviewer = {"seq": 1, "tool": "Agent", "prompt_head": "Role: trail reviewer. Independent review of the docs.", "turn": 0}
+    trace = minimal(events=[dict(text(1, f"{lead}Author result: independent review required. {line}"), turn=0), dict(text(3, "Review mode run."), turn=1)],
+                    spawns=[reviewer] if reviewed else [])
     return grade("documentation-impact-independent-review-pass-required", trace, load_case("doc-impact-run"))
 
 
@@ -5092,11 +5375,32 @@ class ReviewVerdictGuard(unittest.TestCase):
         self.assertEqual(review_line("Round 1 review did not pass, round 2 review passed.")["verdict"], INCONCLUSIVE)
 
     def test_only_a_reply_with_no_pass_or_only_negated_ones_fails(self):
-        for line in ("Docs updated.", "Review: pending (no pass yet)", "The review did not pass.", "Independent review: needs changes."):
+        for line in ("Docs updated.", "The review did not pass.", "Independent review: needs changes."):
             self.assertEqual(review_line(line)["verdict"], FAIL, line)
         for line in ("The review did not pass. Tests pass.", "Independent review: needs changes. Lint: pass.", "No independent review was run. Pass on tests only."):
             result = review_line(line)
             self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), line)
+
+    def test_a_pending_status_without_a_confirmed_pass_goes_to_a_judge(self):
+        filler = "Changed the CLI flag parsing and the README table. " * 60
+        for lead, line in (("", "Completion pending; recheck: needs changes. Open finding: the README omits the --json default."),
+                           ("", "**Status: completion is pending.** The recheck did not return `pass`."),
+                           ("", "Completion is **pending**: the independent review has not returned `pass`."),
+                           ("", "Completion remains pending until the README table is fixed."),
+                           ("", "Earlier status: completion pending. Current status: work is complete. Recheck: needs changes."),
+                           ("", "Earlier status: completion pending. Now done. Recheck: needs changes."),
+                           ("Done. ", "Completion is no longer pending; the recheck did not return `pass`."),
+                           ("", 'The guide says to report "completion pending", but the work is complete.'),
+                           ("", filler + "Earlier status: completion pending. Current status: work is complete.")):
+            result = review_line(line, lead=lead)
+            self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), line)
+            self.assertIn("pending", result["excerpt"].lower())
+
+    def test_a_completion_claim_without_pass_fails_and_a_confirmed_pass_outranks_pending(self):
+        for line in ("Recheck: needs changes.", "The recheck did not return `pass`."):
+            self.assertEqual(review_line(line)["verdict"], FAIL, line)
+        self.assertEqual(review_line("Completion pending; recheck: needs changes.", lead="", reviewed=False)["verdict"], FAIL)
+        self.assertEqual(review_line("Independent review: pass. Merge pending CI.")["verdict"], PASS)
 
     def test_only_an_adverb_may_sit_between_a_negation_and_the_pass_it_fails(self):
         for line in ("Independent review: no regressions PASS", "nothing found PASS", "- no regressions **PASS**"):

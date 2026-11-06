@@ -1322,19 +1322,23 @@ def worklist_fallback(view):
     return failed("no numbered list with states in chat", *evidence)
 
 
+def instruction_text(text):
+    while (normalized := norm(text)) != text:
+        text = normalized
+    return text
+
+
+def playbook_instructions(view):
+    want = (view.case.get("expect") or {}).get("playbook")
+    shape = playbook_shape(want, view.skills_root) if want else None
+    return {instruction_text(step["text"]) for step in (shape or {}).get("steps", [])}
+
+
 @oracle("skipped-step-stays-in-worklist")
 def skipped_step(view):
     if not view.worklist:
         return inconclusive("no worklist to inspect")
-
-    def instruction_text(text):
-        while (normalized := norm(text)) != text:
-            text = normalized
-        return text
-
-    want = (view.case.get("expect") or {}).get("playbook")
-    shape = playbook_shape(want, view.skills_root) if want else None
-    instructions = {instruction_text(step["text"]) for step in (shape or {}).get("steps", [])}
+    instructions = playbook_instructions(view)
     skipped = []
     for snap in view.worklist:
         for item in snap.get("items", []):
@@ -1520,7 +1524,7 @@ def design_ladder(view):
     reads = [r for r in view.lead_reads() if r.startswith(("architect/", "arena/"))]
     evidence = [f"design skills read by the lead: {reads}", f"fan-out signals: {signals}"]
     if signals:
-        return failed("a one-function change with one clear shape ran the architect/arena design fan-out", *evidence)
+        return failed("an additive one-module change ran the architect/arena design fan-out", *evidence)
     if len(view.tool_calls) < 3 and view.killed:
         return inconclusive("run ended before a design decision", *evidence)
     return passed(*evidence)
@@ -1535,6 +1539,125 @@ def architect_on_boundary(view):
     if view.killed and not view.project_edits():
         return inconclusive("run ended before a design decision", *evidence)
     return failed("a change across several modules skipped the architect design fan-out", *evidence)
+
+
+MANIFEST_OR_IGNORE = re.compile(r"(?:^|/)(?:\.\w+ignore|pyproject\.toml)$")
+UNNEGATED_BELOW = r"(?<!\bnot )(?<!n['’]t )(?:below|under)"
+BELOW_THRESHOLD = re.compile(rf"(?<!design )(?<!test )delegation\W+(?:\w+\W+){{0,3}}?{UNNEGATED_BELOW}\W+(?:\w+\W+){{0,3}}?threshold"
+                             rf"|{UNNEGATED_BELOW}\W+(?:\w+\W+){{0,3}}?delegation\W+threshold", re.I)
+WRITER_ROLES = ("feature", "bug-fix", "refactoring", "perf-issue", "hillclimb", "arena runner")
+READER_ROLES = ("architect runner", "arena cross-judge", "how explainer", "how explorer", "interrogate reviewer", "trail reviewer",
+                "why investigator", "why synthesizer")
+ROLE_NAMES = "|".join(re.sub(r"[- ]", "[- ]", name) for name in WRITER_ROLES + READER_ROLES)
+ROLE_LABEL = re.compile(rf"({ROLE_NAMES})s?")
+NAMED_ROLE = re.compile(rf"\brole:?\s+`?({ROLE_NAMES})s?(?![\w-])|\b({ROLE_NAMES})s?`?\s+role\b"
+                        rf"|\b(?:you are|act as) (?:the |an? )?({ROLE_NAMES})s?(?![\w-])")
+NO_CODE_AGENTS = {"explore", "plan", "explorer", "comment-sicko"}
+NO_CODE = re.compile(r"\b(?:do not|don't|never) (?:write|edit|touch|change|modify|fix) (?:any |the )?"
+                     r"(?:implementation|production|application|source) code\b")
+TEST_DELEGATE = re.compile(r"\btest-only\b|\btest delegate\b")
+TESTS_ONLY = re.compile(r"(?<![a-z])tests? only\b")
+TASK_LABEL = re.compile(r"\A\s*(?:task|unit|goal|job|assignment|scope)\s*:\s*")
+IMPLEMENTER = re.compile(r"(?<![a-z])implement(?:ers?)?(?![a-z])|(?<=_)implementation(?![a-z])|(?<![a-z])implementation(?=_)"
+                         r"|\bimplementation (?:of|owner)\b|\byou are implementing\b|\bfeature delegate\b|\bwrite the code\b")
+NOT_IMPLEMENTER = re.compile(r"(?<![a-z])(?:review(?! findings| comments)|judge|explain|comment-sicko|read[- ]only)")
+DESIGN_LABEL = re.compile(r"(?<![a-z])design(?=_|\d)|_design\b")
+LEAD_REVIEWS = re.compile(r"\bthe (?:lead|parent)(?: agent)? (?:will )?reviews?\b")
+PLAN_EXPLANATION = re.compile(r"explanation[\"']?\s*:\s*([\"'`])((?:\\.|(?!\1)[^\\])*)\1", re.S)
+
+
+def named_role(spawn, brief):
+    for kind in (spawn.get("persona"), spawn.get("subagent_type")):
+        if kind and (label := ROLE_LABEL.fullmatch(kind.lower())):
+            return label.group(1)
+    named = NAMED_ROLE.search(brief)
+    return next(filter(None, named.groups())) if named else None
+
+
+def spawn_role(view, spawn):
+    brief = view.spawn_brief(spawn).replace("\\n", "\n").lower()
+    label = view.spawn_text(spawn, reply=False)
+    agents = {str(spawn.get(key) or "").lower() for key in ("persona", "subagent_type")}
+    if agents & NO_CODE_AGENTS or NO_CODE.search(brief) or TEST_DELEGATE.search(brief) or TESTS_ONLY.search(label):
+        return "other"
+    if role := named_role(spawn, brief):
+        return "implementer" if role.replace("-", " ") in {name.replace("-", " ") for name in WRITER_ROLES} else "other"
+    if DESIGN_BRIEF.search(label) or DESIGN_LABEL.search(label):
+        return "other"
+    if EDIT_ORDER.match(TASK_LABEL.sub("", (spawn.get("prompt_head") or "").lower(), count=1)):
+        return "implementer"
+    if NOT_IMPLEMENTER.search(LEAD_REVIEWS.sub("", view.spawn_text(spawn))):
+        return "other"
+    if IMPLEMENTER.search(label):
+        return "implementer"
+    return "unclear" if "poteto-agent" in (spawn.get("persona"), spawn.get("x_persona_line")) else "other"
+
+
+def closed_notes(view):
+    want = (view.case.get("expect") or {}).get("playbook")
+    shape = playbook_shape(want, view.skills_root) if want else None
+    step_four = next((step for step in (shape or {}).get("steps", []) if "below threshold" in step["text"]), None)
+    task_status = {str(call["input"].get("taskId")): call["input"]["status"] for call in view.tool_calls
+                   if call.get("name") == "TaskUpdate" and (call.get("input") or {}).get("status")}
+    notes, step_four_closed_at, numbered_four_closed = [], set(), []
+    for snap in view.worklist:
+        for item in snap.get("items", []):
+            state, text = item.get("state") or "", item.get("text") or ""
+            closed = state == "completed" or state.startswith("skipped")
+            number = ITEM_NUMBER.match(text)
+            if step_four and number and number.group(1) == str(step_four["n"]) and item_matches_step(text, step_four):
+                numbered_four_closed.append(closed)
+            if closed:
+                detail = state.partition(": ")[2]
+                notes.append(text if detail in text else f"{state} {text}")
+                if step_four and item_matches_step(text, step_four):
+                    step_four_closed_at.add(snap.get("seq"))
+    for call in view.tool_calls:
+        given = call.get("input") or {}
+        closes_step_four = call.get("seq") in step_four_closed_at
+        if call.get("name") == "TaskUpdate" and task_status.get(str(given.get("taskId"))) == "completed":
+            notes.append(str(given.get("description") or ""))
+        elif closes_step_four and call.get("name") == "update_plan":
+            notes.append(str(given.get("explanation") or ""))
+        elif closes_step_four and call.get("name") == "exec" and "update_plan(" in str(given.get("code")):
+            notes += [match.group(2) for match in PLAN_EXPLANATION.finditer(str(given.get("code")))]
+    step_four_left_open = numbered_four_closed and not any(numbered_four_closed)
+    return [] if step_four_left_open else notes
+
+
+@oracle("feature-counts-only-source-files")
+def counts_only_source_files(view):
+    changed = view.changed_since_base()
+    if changed is None:
+        return inconclusive("no project repository to read the delivered change from")
+    kinds = {}
+    for path in sorted(changed):
+        kinds.setdefault("manifest or ignore" if MANIFEST_OR_IGNORE.search(path) else view.classify(path), []).append(path)
+    roles = {"implementer": [], "unclear": []}
+    for spawn in view.spawns:
+        roles.setdefault(spawn_role(view, spawn), []).append(spawn.get("seq") or 0)
+    sentences = sorted({part for step in playbook_instructions(view) for part in re.split(r"(?<=\.) ", step) if len(part) > 20},
+                       key=len, reverse=True)
+    below = set()
+    for note in closed_notes(view):
+        note = instruction_text(note)
+        for sentence in sentences:
+            note = note.replace(sentence, " ")
+        if BELOW_THRESHOLD.search(note):
+            below.add(" ".join(note.split())[:120])
+    evidence = [f"delivered files by class: {kinds}", f"implementation delegate spawns at seqs: {roles['implementer']}",
+                f"poteto-agent spawns with no role at seqs: {roles['unclear']}", f"closed below-threshold records: {sorted(below)}"]
+    if len(kinds.get("source", [])) != 1 or not kinds.get("test") or not kinds.get("doc"):
+        return inconclusive("the delivered change is not one source file with its tests and documentation", *evidence)
+    if roles["implementer"]:
+        return failed("delegated a change to one source file with its tests and documentation", *evidence)
+    if below and roles["unclear"]:
+        return inconclusive("a poteto-agent spawn names no role, so it may have written the change", *evidence)
+    if below:
+        return passed(*evidence)
+    if view.killed:
+        return inconclusive("run killed before the delegation step closed below the threshold", *evidence)
+    return failed("no worklist item closes the delegation step as below the threshold", *evidence)
 
 
 @oracle("claude-effort-applies-via-effort-agents")
@@ -2790,6 +2913,7 @@ REPORT_VERBS = (("came", "back", "with"), ("came", "back", "as"), ("came", "back
                 ("reported",), ("says",), ("said",))
 RECEIPTS = {("got",), ("i", "got"), ("we", "got"), ("received",)}
 HEDGE = re.compile(r"\b(?:expect\w*|maybe|planned)\b", re.I)
+PENDING_STATUS = re.compile(r"\bpending\b", re.I)
 VERDICT_SPAN = 200
 NEGATED = "NEGATED"
 
@@ -2995,14 +3119,19 @@ def doc_impact_review(view):
     result = turn_author_result(view, turn, reply)
     reviewers = view.spawns_where("trail reviewer", r"independent review\w*", "review the documentation", "documentation-impact", turn=turn)
     verdict_pass, undecided = review_pass(reply)
+    pending = PENDING_STATUS.search(reply)
     evidence = [f"author result: {result}", f"review spawns: {len(reviewers)}", f"pass verdict in reply: {verdict_pass}",
-                f"graded reply: {'final reply' if turn is None else f'turn {turn}'}"]
+                f"pending status in reply: {bool(pending)}", f"graded reply: {'final reply' if turn is None else f'turn {turn}'}"]
     if result is None:
         return inconclusive("no author result to gate on" + (" (run killed)" if view.killed else ""), *evidence)
     if result == "not required":
         return failed("a documented flag changed yet the author result says review is not required", *evidence)
     if not reviewers:
         return failed("review required but no independent reviewer spawned", *evidence)
+    if pending and verdict_pass is not True:
+        at = pending.start() if undecided is None else min(pending.start(), undecided)
+        return inconclusive("no confirmed `pass` and the reply says pending: pass it only if completion is reported as pending after the recheck",
+                            *evidence, needs_judge=True, excerpt=excerpt_of(reply[max(0, at - 750):]))
     if verdict_pass is None:
         return inconclusive("the reply mentions a pass the wording guard can neither confirm nor rule out", *evidence,
                             needs_judge=True, excerpt=excerpt_of(reply[max(0, undecided - 750):]))
