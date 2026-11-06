@@ -478,6 +478,14 @@ class SourceFileCount(unittest.TestCase):
                 result = self.verdict(self.CHANGE, [item], events=[update])
                 self.assertEqual(result["verdict"], verdict, result)
 
+    def test_below_threshold_note_must_name_delegation(self):
+        for note, verdict in (("Architect exploration is below threshold.", FAIL),
+                              ("Implementation delegation skipped below threshold. One source file.", PASS)):
+            with self.subTest(note=note):
+                result = self.verdict(self.CHANGE, [{"text": "4. Implement or delegate", "state": "completed"},
+                                                    {"text": note, "state": "completed"}])
+                self.assertEqual(result["verdict"], verdict, result)
+
     def test_change_without_companion_files_is_inconclusive(self):
         for changed in (self.CHANGE[:2], self.CHANGE + ("roster/report.py",), ("tests/test_json.py", "README.md")):
             with self.subTest(changed=changed):

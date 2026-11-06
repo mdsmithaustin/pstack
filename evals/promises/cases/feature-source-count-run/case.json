@@ -1,8 +1,7 @@
 {
  "promises": [
   "feature-counts-only-source-files",
-  "poteto-mode-routes-to-playbook",
-  "skipped-step-stays-in-worklist"
+  "poteto-mode-routes-to-playbook"
  ],
  "fixture": "roster",
  "entry": "poteto-mode",

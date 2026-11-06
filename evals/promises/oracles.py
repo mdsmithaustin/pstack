@@ -1542,7 +1542,7 @@ def architect_on_boundary(view):
 
 
 MANIFEST_OR_IGNORE = re.compile(r"(?:^|/)(?:\.\w+ignore|pyproject\.toml)$")
-BELOW_THRESHOLD = re.compile(r"below\s+(?:the\s+)?threshold", re.I)
+BELOW_THRESHOLD = re.compile(r"delegation\W+(?:\w+\W+){0,2}below\s+(?:the\s+)?threshold", re.I)
 
 
 @oracle("feature-counts-only-source-files")
