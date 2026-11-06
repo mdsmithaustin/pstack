@@ -542,12 +542,15 @@ class SourceFileCount(unittest.TestCase):
                            "input": {"description": "Explore ingest stage", "prompt": explorer}}],
                  {"seq": 5, "tool": "spawn_subagent", "persona": None, "prompt_head": explorer[:300]})]
         rows += [("hermes", *self.hermes_delegate(goal, context, persona)) for goal, context, persona in hermes]
-        rows += [("claude-code", [], {"seq": 5, "tool": "Agent", "persona": kind, "subagent_type": kind, "prompt_head": prompt}) for kind, prompt in (
+        rows += [("claude-code", [{"seq": 5, "turn": 0, "kind": "tool_call", "name": "Agent", "id": "a", "input": {"subagent_type": kind, "prompt": prompt}}],
+                  {"seq": 5, "tool": "Agent", "persona": kind, "subagent_type": kind, "prompt_head": prompt[:300]}) for kind, prompt in (
             ("general-purpose", "You are the `feature` role delegate. Write the failing tests for the --json flag from the spec at /tmp/spec.md. "
                                 "Do not write implementation code."),
             ("Explore", "Find where team counts are printed and read the existing implementations of other flags so I can follow the same pattern."),
             ("general-purpose", "Run python3 -m roster data.csv --json and the text mode against the implementation in roster/__main__.py and report "
-                                "any mismatch with the user's request."))]
+                                "any mismatch with the user's request."),
+            ("general-purpose", "Write the acceptance tests for the --json flag from README.md. " + "Keep the existing text output unchanged. " * 8
+                                + "Role: `feature` test delegate. Edit tests only; do not touch roster/__main__.py."))]
         for harness, events, spawn in rows:
             with self.subTest(harness=harness, spawn=spawn["prompt_head"][:60]):
                 result = self.verdict(self.CHANGE, self.DONE, spawns=[spawn], events=events, harness=harness)
@@ -559,9 +562,11 @@ class SourceFileCount(unittest.TestCase):
         context = ("Put the exact line `persona: poteto-agent` on its own line in your first reply.\n\n# Poteto subagent\n\nRole: feature. The role "
                    "resolved to inherit-parent model and effort under Hermes.\nYou own the coupled edits to tally/__main__.py and a new standard-library "
                    "unittest file under tests/. Do not edit README.md. Do not commit.")
+        labeled = "Task: Implement the --json flag in roster/__main__.py, tests and README.md. Review your diff before returning."
         for harness, events, spawn in (("hermes", *self.hermes_delegate(goal, context, "poteto-agent")),
-                                       ("claude-code", [], {"seq": 5, "tool": "Agent", "persona": "poteto-agent", "prompt_head": goal})):
-            with self.subTest(harness=harness):
+                                       ("claude-code", [], {"seq": 5, "tool": "Agent", "persona": "poteto-agent", "prompt_head": goal}),
+                                       ("claude-code", [], {"seq": 5, "tool": "Agent", "persona": "general-purpose", "prompt_head": labeled})):
+            with self.subTest(harness=harness, head=spawn["prompt_head"][:20]):
                 result = self.verdict(self.CHANGE, self.DONE, spawns=[spawn], events=events, harness=harness)
                 self.assertEqual(result["verdict"], FAIL, result)
 

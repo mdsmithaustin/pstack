@@ -1555,7 +1555,9 @@ NAMED_ROLE = re.compile(rf"\brole:?\s+`?({ROLE_NAMES})s?(?![\w-])|\b({ROLE_NAMES
 NO_CODE_AGENTS = {"explore", "plan", "explorer", "comment-sicko"}
 NO_CODE = re.compile(r"\b(?:do not|don't|never) (?:write|edit|touch|change|modify|fix) (?:any |the )?"
                      r"(?:implementation|production|application|source) code\b")
-TESTS_ONLY = re.compile(r"(?<![a-z])tests? only\b|\btest[- ]only\b|\btest delegate\b")
+TEST_DELEGATE = re.compile(r"\btest-only\b|\btest delegate\b")
+TESTS_ONLY = re.compile(r"(?<![a-z])tests? only\b")
+TASK_LABEL = re.compile(r"\A\s*(?:task|unit|goal|job|assignment|scope)\s*:\s*")
 IMPLEMENTER = re.compile(r"(?<![a-z])implement(?:ers?)?(?![a-z])|(?<=_)implementation(?![a-z])|(?<![a-z])implementation(?=_)"
                          r"|\bimplementation (?:of|owner)\b|\byou are implementing\b|\bfeature delegate\b|\bwrite the code\b")
 NOT_IMPLEMENTER = re.compile(r"(?<![a-z])(?:review(?! findings| comments)|judge|explain|comment-sicko|read[- ]only)")
@@ -1576,13 +1578,13 @@ def spawn_role(view, spawn):
     brief = view.spawn_brief(spawn).replace("\\n", "\n").lower()
     label = view.spawn_text(spawn, reply=False)
     agents = {str(spawn.get(key) or "").lower() for key in ("persona", "subagent_type")}
-    if agents & NO_CODE_AGENTS or NO_CODE.search(brief) or TESTS_ONLY.search(label):
+    if agents & NO_CODE_AGENTS or NO_CODE.search(brief) or TEST_DELEGATE.search(brief) or TESTS_ONLY.search(label):
         return "other"
     if role := named_role(spawn, brief):
         return "implementer" if role.replace("-", " ") in {name.replace("-", " ") for name in WRITER_ROLES} else "other"
     if DESIGN_BRIEF.search(label) or DESIGN_LABEL.search(label):
         return "other"
-    if EDIT_ORDER.match((spawn.get("prompt_head") or "").lower()):
+    if EDIT_ORDER.match(TASK_LABEL.sub("", (spawn.get("prompt_head") or "").lower(), count=1)):
         return "implementer"
     if NOT_IMPLEMENTER.search(LEAD_REVIEWS.sub("", view.spawn_text(spawn))):
         return "other"
