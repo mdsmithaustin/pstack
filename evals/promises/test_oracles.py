@@ -551,6 +551,38 @@ class SourceFileCount(unittest.TestCase):
                 result = self.verdict(self.CHANGE, codex.plan_items(plan), harness="codex", events=[call])
                 self.assertEqual(result["verdict"], PASS, result)
 
+    def test_exec_plan_explanations_with_escapes_pass(self):
+        for quote in ('"', "'", '`'):
+            for prefix in (r'\a' * 40, '\\' + quote, '\\\\', r'first line\nsecond line'):
+                with self.subTest(quote=quote, prefix=prefix):
+                    code = 'await tools.update_plan({explanation: ' + quote + prefix + self.BELOW + quote + '});'
+                    call = {"seq": 3, "kind": "tool_call", "name": "exec", "input": {"code": code}}
+                    result = self.verdict(self.CHANGE, [], harness="codex", events=[call])
+                    self.assertEqual(result["verdict"], PASS, result)
+
+    def test_exec_plan_explanations_reject_unterminated_escapes(self):
+        probe = '''
+import json
+import sys
+from test_oracles import SourceFileCount
+
+test = SourceFileCount()
+try:
+    result = test.verdict(test.CHANGE, [], harness="codex", events=json.load(sys.stdin))
+    print(json.dumps(result))
+finally:
+    test.doCleanups()
+'''
+        for quote in ('"', "'", '`'):
+            for ending in ('', '\\' + quote):
+                with self.subTest(quote=quote, ending=ending):
+                    code = 'await tools.update_plan({explanation: ' + quote + self.BELOW + r'\a' * 40 + ending
+                    call = {"seq": 3, "kind": "tool_call", "name": "exec", "input": {"code": code}}
+                    run = subprocess.run([sys.executable, '-c', probe], cwd=HERE, input=json.dumps([call]),
+                                         text=True, capture_output=True, check=True, timeout=10)
+                    result = json.loads(run.stdout)
+                    self.assertEqual(result["verdict"], FAIL, result)
+
     def test_killed_run_without_a_record_is_inconclusive(self):
         items = [{"text": "4. Record counts, settle tests, implement or delegate", "state": "in progress"}]
         for exit_code, verdict in ((124, INCONCLUSIVE), (-9, INCONCLUSIVE), (1, INCONCLUSIVE), (0, FAIL)):

@@ -1548,7 +1548,7 @@ IMPLEMENTER = re.compile(r"(?<![a-z])implement|\bfeature\W+(?:role|delegate)\b|\
 NOT_IMPLEMENTER = re.compile(r"\b(?:review(?! findings| comments)|judge|explain|comment-sicko|read[- ]only|tests? only|test delegate)")
 DESIGN_LABEL = re.compile(r"(?<![a-z])design(?=_|\d)|_design\b")
 LEAD_REVIEWS = re.compile(r"\bthe (?:lead|parent)(?: agent)? (?:will )?reviews?\b")
-PLAN_EXPLANATION = re.compile(r"explanation[\"']?\s*:\s*([\"'`])((?:\\.|(?!\1).)*)\1", re.S)
+PLAN_EXPLANATION = re.compile(r"explanation[\"']?\s*:\s*([\"'`])((?:\\.|(?!\1)[^\\])*)\1", re.S)
 
 
 def spawn_role(view, spawn):
