@@ -1098,7 +1098,7 @@
     },
     {
      "file": "skills/documentation-impact/SKILL.md",
-     "quote": "`independent review not required` only when evidence shows that an internal change has no documentation impact."
+     "quote": "`independent review not required` only when evidence shows that the change edits neither."
     },
     {
      "file": "skills/documentation-impact/SKILL.md",
@@ -1148,7 +1148,7 @@
   },
   "documentation-impact-independent-review-pass-required": {
    "check": "live",
-   "claim": "When the author result requires it, a different agent reviews without editing and completion waits for a current `pass`, repairing and re-reviewing on findings.",
+   "claim": "When the author result requires it, a different agent reviews without editing and completion waits for a current `pass`, with one repair round and a recheck of that repair on findings.",
    "harness_sensitive": true,
    "live_case": "fixture with a CLI flag change and a README; prompt `/poteto-mode add --json; update whatever docs need it` then `/documentation-impact review this change's documentation coverage without editing files.`; pass when the author pass runs before completion, returns an author result, and review mode edits nothing.",
    "owners": [
@@ -1201,6 +1201,29 @@
    "harness_sensitive": false,
    "owners": [
     "skills/documentation-impact/SKILL.md"
+   ]
+  },
+  "documentation-review-one-repair-round": {
+   "check": "static",
+   "claim": "A documentation review gets one repair round. A recheck that does not pass ends with its open findings reported as pending instead of another round.",
+   "evidence": [
+    {
+     "file": "skills/documentation-impact/SKILL.md",
+     "quote": "Allow one repair round per review."
+    },
+    {
+     "file": "skills/documentation-impact/SKILL.md",
+     "quote": "When the recheck does not return `pass`, return its open findings to the caller instead of starting another round."
+    },
+    {
+     "file": "skills/poteto-mode/references/task-triggers.md",
+     "quote": "If the recheck does not return `pass`, report its open findings as pending instead of starting another round."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/documentation-impact/SKILL.md",
+    "skills/poteto-mode/references/task-triggers.md"
    ]
   },
   "escape-hatch-stops-at-dead-end": {
@@ -2208,6 +2231,20 @@
     {
      "file": "skills/no-comments/SKILL.md",
      "quote": "If approved, encode then delete. Otherwise delete, report the constraint open, and sketch out-of-scope work."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/no-comments/SKILL.md"
+   ]
+  },
+  "no-comments-skips-diff-without-comments": {
+   "check": "static",
+   "claim": "On a diff that adds or changes no comments, /no-comments reports that and stops without spawning Comment Sicko.",
+   "evidence": [
+    {
+     "file": "skills/no-comments/SKILL.md",
+     "quote": "If the scope is a diff that adds or changes no comments, report that and stop without spawning Comment Sicko."
     }
    ],
    "harness_sensitive": false,
@@ -5307,6 +5344,15 @@
    ],
    "text": "Codex honors this as installed, and Claude Code does once `/setup-pstack` sets its skill listing."
   },
+  "1d7d9a7d1bfe": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "documentation-review-one-repair-round",
+   "sources": [
+    "port"
+   ],
+   "text": "Poteto reports any finding still open after that recheck instead of starting another round."
+  },
   "1d7e92d5286e": {
    "class": "promise",
    "file": "10-recipes-and-pitfalls.md",
@@ -8340,6 +8386,15 @@
    ],
    "text": "[Understand the code](./03-understand.md). A read-only investigation, then `/how`, `/why`, `/poteto-teach`, and `/recall` before you edit anything."
   },
+  "6fabd625dacc": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "no-comments-skips-diff-without-comments",
+   "sources": [
+    "port"
+   ],
+   "text": "When the diff adds or changes no comments, `/no-comments` says so and stops without spawning Comment Sicko."
+  },
   "6fd59d1053d1": {
    "class": "context",
    "file": "09-make-it-yours.md",
@@ -9427,15 +9482,6 @@
     "port"
    ],
    "text": "Prototypes are planning with code."
-  },
-  "8d21cb86a7e2": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "documentation-impact-independent-review-pass-required",
-   "sources": [
-    "port"
-   ],
-   "text": "Findings are repaired and reviewed again."
   },
   "8d4d37d0397c": {
    "class": "promise",
@@ -11976,6 +12022,15 @@
     "port"
    ],
    "text": "You rarely need more words."
+  },
+  "d0ecc34c548f": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "documentation-impact-independent-review-pass-required",
+   "sources": [
+    "port"
+   ],
+   "text": "Findings get one repair round, and then the reviewer rechecks the repair."
   },
   "d12943b3cae9": {
    "class": "promise",

@@ -13,6 +13,8 @@ Defer to Comment Sicko's fresh perspective.
 
 Use the caller's files or diff. Otherwise use the current diff against the base branch, default `main`, including the working tree.
 
+If the scope is a diff that adds or changes no comments, report that and stop without spawning Comment Sicko.
+
 ## Steps
 
 1. Resolve the logical persona `comment-sicko` through the [persona contract](../pstack-harness/references/named-roles.md) and spawn it with the scope. Use the native persona when the live agent catalog lists it, or pass its complete bundled briefing through the selected mechanism. Preserve its rules verbatim. Call the Skill tool with `pstack-harness` for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call.
