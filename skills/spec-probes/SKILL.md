@@ -48,7 +48,7 @@ Each item ends in exactly one state:
 - **dismissed**, with a reason. "N/A, input is a bounded enum, no boundary exists" is valid; silence is not. The reason is the audit trail.
 - **unresolved**: carried forward as an explicit gap the plan must surface, never dropped silently.
 
-**A new rejection needs a requirement that states it.** Never resolve an item by rejecting, erroring on, or reinterpreting an input that no requirement restricts. The rule holds on a new field and on input the current version accepts. It also holds when a worked example shows only one form of the value, or a sibling field already has the check. Carry such a restriction as `unresolved`, not as a test.
+**A new rejection needs a requirement that states it.** A rejection is an expected result that rejects, errors on, or reinterprets an input. Expect one only where a requirement states it, and name that requirement in the criterion. The rule holds on a new field and on input the program accepts today, even when a worked example shows only one form of the value or a sibling field has the rejection. Without such a requirement, expect the result the program gives that input today, or acceptance on a new field. Carry whether to restrict the input as an `unresolved` question.
 
 Write the `backstop` and `judgment` tags into the spec itself. A reviewer later abstains on those instead of passing them by inspection; without the tag it cannot see its own blind spot.
 
