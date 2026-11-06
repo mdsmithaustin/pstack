@@ -2852,16 +2852,25 @@
   },
   "poteto-mode-subagents-carry-poteto-agent": {
    "check": "static",
-   "claim": "Subagents that /poteto-mode spawns inside a playbook step carry the poteto-agent persona, which reads poteto-mode before any work.",
+   "claim": "Subagents that /poteto-mode spawns inside a playbook step carry the poteto-agent persona, which reads poteto-mode before work unless its brief names a narrow role.",
    "evidence": [
     {
      "file": "skills/poteto-mode/references/delegation.md",
      "quote": "**Use the `poteto-agent` persona for any subagent you spawn inside a playbook step**"
+    },
+    {
+     "file": "agents/poteto-agent.md",
+     "quote": "Read the `poteto-mode` skill's `SKILL.md` in full, including its inline Principles index, before you start."
+    },
+    {
+     "file": "agents/poteto-agent.md",
+     "quote": "Skip that read only when your brief names your unit a narrow role whose output cannot land in the project"
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/references/delegation.md"
+    "skills/poteto-mode/references/delegation.md",
+    "agents/poteto-agent.md"
    ]
   },
   "poteto-mode-triggers-architect-on-boundary-crossing": {

@@ -14,6 +14,10 @@ Pass `model` and `reasoning_effort` on `spawn_agent`, and whenever you pass eith
 
 the reasoning-effort field on `spawn_agent`; `-c model_reasoning_effort=<value>` on `codex exec`. A model set without an effort gets that model's default effort (low on `gpt-6.1-sol`, medium on the other gpt-6 models), not the parent's, so always pass one
 
+## Injected skills
+
+A `$name` mention in a user prompt injects that skill's `SKILL.md` as a `<skill>` block with its name and path. While that block is in your context, it is your read of the file, so do not read the file again, unless the block was cut. Read the files it references only when a step needs them.
+
 ## Writer isolation
 
 Codex's `workspace-write` sandbox keeps `.git` read-only, so `git worktree add` fails there.
