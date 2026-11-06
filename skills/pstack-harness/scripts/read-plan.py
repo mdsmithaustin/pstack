@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Print the commands that read a file in parts that fit an exec_command output cap.
 
-Codex counts 4 bytes of output as 1 token. This script counts 3 and keeps 300 bytes back, so each
-output also fits the JSON that an exec script can wrap around it and any warnings python3 prints first.
-"sed -n 'A,Bp' FILE" prints lines A to B. For a line too long for the cap, "tail -c +S FILE | head -c N"
-commands print it in pieces, each cut after a space where one fits. The script prints the plan in pages
-that fit the cap too. When commands remain, the last line of a page prints the next page.
+Codex counts 4 bytes of output as 1 token. This script counts 3 bytes as 1 token and subtracts 300 bytes.
+The difference leaves room for the JSON that an exec script can wrap around an output, and for the
+warnings python3 can print before a page of the plan. "sed -n 'A,Bp' FILE" prints lines A to B. For a
+line too long for the cap, "tail -c +S FILE | head -c N" commands print it in pieces, each cut after a
+space where one fits. The script prints the plan in pages that fit the cap too. When commands remain, the
+last line of a page is the command that prints the next page. The script exits 1 when it cannot read the
+file and 2 on a usage error, such as --max-output-tokens of 100 or less.
 """
 import argparse
 import io
@@ -19,7 +21,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('file', help='File to read')
 parser.add_argument('--max-output-tokens', type=int, required=True,
                     help='The lowest output cap on the calls that run the commands')
-parser.add_argument('--from', dest='first', type=int, default=1, help='Print the plan from this command on')
+parser.add_argument('--from', dest='first', type=int, default=1, help='Print the plan from this command on, counting from 1')
 args = parser.parse_args()
 byte_cap = BYTES_PER_TOKEN * args.max_output_tokens - RESERVED_BYTES
 if byte_cap <= 0:
