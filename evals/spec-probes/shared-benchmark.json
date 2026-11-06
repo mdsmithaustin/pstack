@@ -474,7 +474,7 @@
             {
               "name": "accepted-input-kept",
               "scale": "1-5",
-              "rubric": "5 = A test or criterion loads nightly.yaml, or an equivalent config with a plain-path `destination` and no archive fields, and expects the same result as today. SJ-202's range is covered at 0, 1, 365, and 366 or an equivalent boundary set, and so is the rejection of `archive_destination` without `archive_after_days`. 4 = nightly.yaml is kept working, and one SJ-202 boundary or rejection is missing. 3 = Neither nightly.yaml nor an equivalent config is covered, though nothing proposed would break it. 2 = A proposed rule would break nightly.yaml under some reading. 1 = A proposed rule rejects nightly.yaml, or a stated SJ-202 rejection is dropped."
+              "rubric": "5 = A test or criterion loads nightly.yaml, or an equivalent config with a plain-path `destination` and no archive fields, and expects the same result as today. SJ-202's range is covered at 0, 1, 365, and 366 or an equivalent boundary set, and so is the rejection of `archive_destination` without `archive_after_days`. 4 = nightly.yaml is kept working and both SJ-202 rejections are covered, but one SJ-202 boundary is missing. 3 = Neither nightly.yaml nor an equivalent config is covered, though nothing proposed would break it. 2 = A proposed rule would break nightly.yaml under some reading. 1 = A proposed rule rejects nightly.yaml, or a stated SJ-202 rejection is dropped."
             }
           ]
         },
