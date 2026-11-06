@@ -336,7 +336,7 @@
         "For SL-501, preserves the inclusive 1 through 300 range and the rejection of values outside it as settled.",
         "For SL-501, checks the empty-value edge in each of YAML, TOML, and JSON, such as a bare YAML key or `~`, TOML having no null at all, and JSON `null` or an empty string, instead of once for the settings file.",
         "For SL-501, checks the integer edge per format, such as `300.0`, a quoted `\"30\"`, or a format-specific integer spelling, or states why checking one format covers the others.",
-        "For SL-502, treats the example's read order and its use of TOML for both files as illustration, and proposes at least one test where one of them does not hold, such as the user file read first or a YAML user file over a TOML project file, with the outcome the stated override rule gives.",
+        "For SL-502, treats the example's read order as illustration and proposes a test that reads the user file first and still expects the user value, as the override rule states. The example's use of TOML for both files may become an open question or a test under a stated assumption.",
         "Leaves unstated behavior open, such as whether an empty user value falls back to the default or keeps the project value."
       ],
       "assertions": [
@@ -354,7 +354,7 @@
             {
               "name": "example-restraint",
               "scale": "1-5",
-              "rubric": "5 = SL-502's read order and single format are treated as properties of the example, not rules, and at least one proposed test breaks one of them with the outcome the stated override rule gives. 4 = One incidental property is named and tested, with one vague phrase. 3 = The proposed tests only replay the example. 2 = The response makes read order or the example's format a rule. 1 = SL-502 is ignored, its override rule is contradicted, or the response chooses unstated behavior."
+              "rubric": "5 = SL-502's read order is treated as a property of the example, not a rule, and a proposed test reads the user file first and still expects the user value. The single format may be tested under a stated assumption or left open. 4 = The read-order test is present but conditional or vaguely worded. 3 = No proposed test breaks an incidental property of the example, and the tests only replay or generalize it. 2 = The response makes read order or the example's format a rule. 1 = SL-502 is ignored, its override rule is contradicted, or the response chooses unstated behavior."
             }
           ]
         },

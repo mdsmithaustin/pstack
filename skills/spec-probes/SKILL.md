@@ -9,7 +9,7 @@ A verifier only checks assertions that exist, and it is confidently wrong about 
 
 ## Pass 1: edge probe
 
-Classify each requirement's data shape: `numeric-range`, `collection`, `text`, `stateful`, `io`. Add `example` when the spec gives the requirement a worked example, and `variants` when the requirement names several variants, such as formats, languages, or strategies. Then raise only the categories whose shapes intersect it. A pure-text requirement is never asked about overflow. The taxonomy is closed on purpose: ten categories the author clears beat thirty nobody finishes.
+Classify each requirement's data shape: `numeric-range`, `collection`, `text`, `stateful`, `io`. The shape also includes `example` when the spec gives the requirement a worked example, and `variants` when the requirement names several variants, such as formats, languages, or strategies. Then raise only the categories whose shapes intersect it. A pure-text requirement is never asked about overflow. The taxonomy is closed on purpose: ten categories the author clears beat thirty nobody finishes.
 
 | Category | Shapes | Ask |
 |---|---|---|
@@ -26,7 +26,7 @@ Classify each requirement's data shape: `numeric-range`, `collection`, `text`, `
 
 A requirement with prose but no matching shape gets one soft "unclassified, review by hand" item, not silence.
 
-The defects this catches: "merge overlapping intervals" says nothing about `[1,2]` and `[2,3]`, which only touch. "Round half to nearest" leaves half-even rounding 2.5 to 2 unstated. "Truncate to N characters" does not say whether a character is a byte, a code unit, a code point, or a grapheme. A worked example whose requests finish in arrival order says nothing about requests that finish out of order. For "read the config as YAML or TOML", checking the empty-value edge only in YAML misses that TOML has no null.
+The defects this catches: "merge overlapping intervals" says nothing about `[1,2]` and `[2,3]`, which only touch. "Round half to nearest" leaves half-even rounding 2.5 to 2 unstated. "Truncate to N characters" does not say whether a character is a byte, a code unit, a code point, or a grapheme. A worked example whose requests finish in arrival order says nothing about requests that finish out of order. For a handler that accepts a JSON or form-encoded body, checking the empty-field edge only in JSON misses that a form field has no null.
 
 ## Pass 2: prohibition probe
 
