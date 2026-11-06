@@ -20,10 +20,10 @@ Codex's `workspace-write` sandbox keeps `.git` read-only, so `git worktree add` 
 
 ## Read skill files
 
-`exec_command` cuts output that is longer than its `max_output_tokens`. Before you read a skill file, print its read plan. Set `<n>` to the `max_output_tokens` value of the calls that will run the plan's commands.
+A tool call cuts output that is longer than its cap and keeps the start and the end. An outer `exec` call has one cap for everything its `tools.exec_command` calls return, whatever `max_output_tokens` each of them sets. Before you read a skill file, print its read plan. Set `<n>` no higher than the smallest cap on the call that will return a range, and pass `<n>` as that range's `max_output_tokens`.
 
 ```sh
 python3 "<installed skills root>/pstack-harness/scripts/read-plan.py" "<file>" --max-output-tokens <n>
 ```
 
-The script prints one `sed -n` command per line, and each command prints a range of lines that fits `<n>`. Run each command in its own call with `max_output_tokens` set to `<n>`. Read every range in order before you act on the file. If a range's output still warns that it was cut, lower `<n>` and print a new plan. If a line is too long for `<n>`, the script exits 1 and names the smallest `<n>` it accepts. Raise `<n>` to that value and print a new plan.
+The script prints one `sed -n` command per line, and each command prints a range of lines that fits `<n>`. Run each command in its own outer call. Never batch two ranges, or two files, in one outer `exec` call. Read every range in order before you act on the file. If a range's output still warns that it was cut, lower `<n>` and print a new plan. If a line is too long for `<n>`, the script exits 1 and names the smallest `<n>` it accepts. Raise `<n>` to that value and print a new plan.
