@@ -1032,18 +1032,23 @@
   },
   "design-ladder-spares-small-changes": {
    "check": "live",
-   "claim": "A change that stays inside one function and has one clear shape, sent through /poteto-mode, runs no architect or arena design fan-out.",
+   "claim": "An additive change to one module, sent through /poteto-mode, runs no architect or arena design fan-out.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "A small, self-contained change keeps this step with `skipped: <reason>`."
+     "quote": "A small, self-contained change, or one with a single plausible shape, keeps this step with `skipped: <reason>`."
+    },
+    {
+     "file": "skills/poteto-mode/references/task-triggers.md",
+     "quote": "An additive change to one module goes straight to implementation."
     }
    ],
    "harness_sensitive": true,
-   "live_case": "feature-run: the six-line --json flag on tally; FAIL when the lead spawns parallel design sketches or architect/arena runners. Reading architect/arena SKILL.md to decide the skip is reported as evidence, not graded.",
+   "live_case": "feature-run: the six-line --json flag on tally; feature-one-module-run: a --pairs option across two functions of tally's one module. FAIL when the lead spawns parallel design sketches or architect/arena runners. Reading architect/arena SKILL.md to decide the skip is reported as evidence, not graded.",
    "owners": [
     "skills/poteto-mode/SKILL.md",
-    "skills/poteto-mode/playbooks/feature.md"
+    "skills/poteto-mode/playbooks/feature.md",
+    "skills/poteto-mode/references/task-triggers.md"
    ],
    "scenario": "feature-run"
   },
@@ -2875,11 +2880,11 @@
   },
   "poteto-mode-triggers-architect-on-boundary-crossing": {
    "check": "static",
-   "claim": "poteto-mode sends boundary-crossing code to architect, except when runtime evidence confirms a bug's root cause and identifies one localized repair.",
+   "claim": "poteto-mode sends code that crosses two or more source files and admits several plausible shapes to architect, except when runtime evidence confirms a bug's root cause and identifies one localized repair.",
    "evidence": [
     {
      "file": "skills/poteto-mode/references/task-triggers.md",
-     "quote": "Code crossing a function boundary → call the Skill tool with `architect` for parallel design exploration before implementing. For a bug fix, skip architect when runtime evidence confirms the root cause and identifies one localized repair, even across a function boundary. Go straight to the failing reproducer, then repair it. Keep architect when design choices or repair scope remain unresolved."
+     "quote": "Code that crosses two or more source files and admits several plausible shapes → call the Skill tool with `architect` for parallel design exploration before implementing. An additive change to one module goes straight to implementation. For a bug fix, skip architect when runtime evidence confirms the root cause and identifies one localized repair, even across a function boundary. Go straight to the failing reproducer, then repair it. Keep architect when design choices or repair scope remain unresolved."
     },
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
@@ -2887,7 +2892,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "2. `architect` for feature design exploration when the change crosses a function boundary or admits several valid shapes."
+     "quote": "2. `architect` for feature design exploration when the change crosses two or more source files and admits several plausible shapes."
     }
    ],
    "harness_sensitive": false,
@@ -5983,7 +5988,7 @@
    "class": "substituted",
    "file": "04-design.md",
    "ported_as": [
-    "ea58a58f42fb"
+    "8e3664055603"
    ],
    "sources": [
     "upstream"
@@ -8457,6 +8462,15 @@
    ],
    "text": "[`/reflect`](../../skills/reflect/SKILL.md) sends the transcript to three parallel reviewers, then a synthesizer sorts the proposals into `Accepted`, `Rejected`, and `Backlog` and waits for your approval before any skill changes."
   },
+  "7007dee5bfc7": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
+   "sources": [
+    "port"
+   ],
+   "text": "Multi-file work with several plausible shapes triggers `/architect` on its own, except for a confirmed bug with one localized repair."
+  },
   "70634e327351": {
    "class": "promise",
    "file": "10-recipes-and-pitfalls.md",
@@ -9546,6 +9560,19 @@
    ],
    "text": "A fresh chat picks the work up from that note through the Session pickup playbook."
   },
+  "8e3664055603": {
+   "also": [
+    "architect-runs-arena-for-sketches",
+    "design-ladder-spares-small-changes"
+   ],
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
+   "sources": [
+    "port"
+   ],
+   "text": "A change that crosses two or more source files and admits several plausible shapes earns `/architect`, which brings `/arena` with it. An additive change to one module goes straight to implementation. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary."
+  },
   "8e536d95e0c8": {
    "class": "promise",
    "file": "README.md",
@@ -9951,15 +9978,6 @@
     "port"
    ],
    "text": "\"don't change any code yet\" pins this one to Investigation."
-  },
-  "9a9cac62d609": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
-   "sources": [
-    "port"
-   ],
-   "text": "Boundary-crossing work triggers `/architect` on its own, except for a confirmed bug with one localized repair."
   },
   "9acd67f502da": {
    "class": "context",
@@ -12178,7 +12196,7 @@
    "class": "substituted",
    "file": "04-design.md",
    "ported_as": [
-    "9a9cac62d609",
+    "7007dee5bfc7",
     "c7761e9fc81b",
     "94abf5e9dc8f"
    ],
@@ -13077,18 +13095,6 @@
     "port"
    ],
    "text": "An agent that can check its own work keeps going until the check passes."
-  },
-  "ea58a58f42fb": {
-   "also": [
-    "architect-runs-arena-for-sketches"
-   ],
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
-   "sources": [
-    "port"
-   ],
-   "text": "A change that crosses function boundaries or moves ownership earns `/architect`, which brings `/arena` with it. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary."
   },
   "ea6975bcbf53": {
    "class": "context",
