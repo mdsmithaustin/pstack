@@ -435,47 +435,136 @@ class WorklistOracle(unittest.TestCase):
 class SourceFileCount(unittest.TestCase):
     CHANGE = ("roster/__main__.py", "tests/test_json.py", "README.md", ".gitignore")
     BELOW = "Step 4 implementation delegation: skipped: implementation delegation below threshold. One source file, one workstream."
+    DONE = [{"text": BELOW, "state": "completed"}]
 
-    def verdict(self, changed, items, spawns=(), harness="claude-code", events=()):
+    def verdict(self, changed, items, spawns=(), harness="claude-code", events=(), exit_code=0):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         project = make_repo(tmp.name, 1, {"roster/__main__.py": "x = 0\n", "README.md": "# roster\n"})
         for rel in changed:
             (project / rel).parent.mkdir(parents=True, exist_ok=True)
             (project / rel).write_text("changed\n")
-        trace = minimal(harness=harness, events=events, worklist=[{"seq": 1, "carrier": "text", "items": items}], spawns=spawns)
+        trace = minimal(harness=harness, events=events, worklist=[{"seq": 1, "carrier": "text", "items": items}], spawns=spawns,
+                        exit_code=exit_code)
         return grade("feature-counts-only-source-files", trace, load_case("feature-source-count-run"), project)
 
     def test_direct_change_closed_below_threshold_passes(self):
-        for harness, items in (("claude-code", [{"text": self.BELOW, "state": "completed"}]),
+        for harness, items in (("claude-code", self.DONE),
                                ("codex", codex.plan_items({"plan": [{"step": self.BELOW, "status": "completed"}]}))):
             with self.subTest(harness=harness):
                 result = self.verdict(self.CHANGE, items, harness=harness)
                 self.assertEqual(result["verdict"], PASS, result)
 
-    def test_delegating_one_source_file_fails(self):
-        spawn = {"seq": 5, "tool": "Agent", "persona": "poteto-agent", "prompt_head": "Add the --json flag."}
-        result = self.verdict(self.CHANGE, [{"text": self.BELOW, "state": "completed"}], spawns=[spawn])
-        self.assertEqual(result["verdict"], FAIL, result)
+    def test_implementation_delegates_fail(self):
+        feature = "You are the `feature` role delegate. One small fix in a tiny Python repo."
+        call = {"seq": 5, "turn": 0, "kind": "tool_call", "name": "Agent", "id": "a",
+                "input": {"description": "Fix load header check for status", "subagent_type": "general-purpose", "prompt": feature}}
+        sealed_events, sealed = codex_spawn(5, "implement_json", "persona: poteto-agent\n\nI'm applying poteto-mode to the scoped CLI and README changes.")
+        rows = [([], {"persona": "poteto-agent", "prompt_head": "Add the --json flag."}),
+                ([call], {"persona": "general-purpose", "prompt_head": feature}),
+                ([], {"persona": "general-purpose", "prompt_head": "Implementation of the --json flag in roster/__main__.py, plus tests and README."}),
+                ([], {"persona": "general-purpose", "prompt_head": "Add the --json flag to roster/__main__.py, tests/test_json.py and README.md."}),
+                ([], {"persona": "poteto-agent", "prompt_head": "Add the --json flag in roster/__main__.py with tests. The lead will review the diff."}),
+                ([], {"persona": "poteto-agent", "description": "Fix review findings in roster", "prompt_head": "Role: `feature` implementation owner."}),
+                (sealed_events, dict(sealed, persona="poteto-agent"))]
+        for events, spawn in rows:
+            with self.subTest(spawn=spawn["prompt_head"] or spawn["x_child_first_reply"]):
+                result = self.verdict(self.CHANGE, self.DONE, spawns=[dict({"seq": 5, "tool": "Agent"}, **spawn)], events=events)
+                self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_spawns_that_do_not_implement_pass(self):
+        design_events, design = codex_spawn(5, "design_ordered", "persona: poteto-agent\n\nI am using the architect and poteto-mode skills for this "
+                                                                 "sketch. I will compare the sorted-record design with per-member date sets.")
+        sicko_events, sicko = codex_spawn(5, "comments_implementation", "Yes... Ha ha ha... Yes!")
+        tests = {"seq": 5, "tool": "Agent", "persona": "poteto-agent",
+                 "prompt_head": "Write the failing tests for the --json flag from the spec. Write tests only; do not touch roster/__main__.py."}
+        explore = {"seq": 5, "tool": "Agent", "persona": "Explore", "subagent_type": "Explore",
+                   "prompt_head": "Read-only search: find where team counts are printed so I can implement a --json flag."}
+        test_role = {"seq": 5, "tool": "Agent", "persona": "general-purpose",
+                     "prompt_head": "Role: `feature` test delegate. Write the failing tests for the --json flag from README.md."}
+        for events, spawn in ((design_events, dict(design, persona="poteto-agent")), (sicko_events, dict(sicko, persona="comment-sicko")),
+                              ([], tests), ([], explore), ([], test_role)):
+            with self.subTest(spawn=spawn["prompt_head"] or spawn["x_child_first_reply"]):
+                result = self.verdict(self.CHANGE, self.DONE, spawns=[spawn], events=events)
+                self.assertEqual(result["verdict"], PASS, result)
+
+    def test_sealed_poteto_agent_spawn_without_a_role_is_inconclusive(self):
+        for task, reply in (("docs_check", "persona: poteto-agent\n\nI'm using documentation-impact to check the README against the CLI."),
+                            ("json_flag", "persona: poteto-agent\n\nI'll add the --json flag to roster/__main__.py, then tests and the README.")):
+            events, spawn = codex_spawn(5, task, reply)
+            with self.subTest(task=task):
+                result = self.verdict(self.CHANGE, self.DONE, spawns=[dict(spawn, x_persona_line="poteto-agent")], events=events, harness="codex")
+                self.assertEqual(result["verdict"], INCONCLUSIVE, result)
 
     def test_verbatim_step_copy_is_not_a_below_threshold_record(self):
         step = next(item for item in feature_items() if item["text"].startswith("4. "))["text"]
         quoted = step[:step.index(". ", step.index("below threshold")) + 1]
-        for copy, note, verdict in ((step, "", FAIL), (quoted, "", FAIL), (step, "\nImplemented directly.", FAIL),
-                                    (step, "\nskipped: implementation delegation below threshold. Source count 1.", PASS)):
-            for state in ("pending", "completed"):
-                with self.subTest(copy=len(copy), note=note, state=state):
-                    result = self.verdict(self.CHANGE, [{"text": copy + note, "state": state}])
-                    self.assertEqual(result["verdict"], verdict, result)
+        record = "\nskipped: implementation delegation below threshold. Source count 1."
+        for text, state, verdict in ((step, "completed", FAIL), (quoted, "completed", FAIL), (step + "\nImplemented directly.", "completed", FAIL),
+                                     (step + record, "completed", PASS), (step + record, "pending", FAIL)):
+            with self.subTest(text=text[-40:], state=state):
+                result = self.verdict(self.CHANGE, [{"text": text, "state": state}])
+                self.assertEqual(result["verdict"], verdict, result)
 
-    def test_task_update_description_can_record_the_skip(self):
+    def test_below_threshold_record_needs_an_executed_close(self):
+        implemented = {"text": "4. Implement or delegate", "state": "completed"}
+        for items in ([{"text": "4. Implement directly and close this item with skipped: implementation delegation below threshold, the counts, "
+                                "and the reason the work is one workstream.", "state": "pending"}],
+                      [{"text": "4. Count source files; <3 and 1 workstream -> implement directly, skipped: implementation delegation below threshold",
+                        "state": "pending"}],
+                      [{"text": "2. architect: skipped: design delegation below threshold for a one-function change", "state": "completed"}, implemented],
+                      [{"text": "3. Smallest safe decomposition: skipped: test delegation below threshold", "state": "completed"}, implemented]):
+            with self.subTest(item=items[0]["text"]):
+                result = self.verdict(self.CHANGE, items)
+                self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_task_update_description_records_the_skip_once_its_task_closes(self):
         item = {"text": "4. Record counts, settle tests, implement or delegate", "state": "completed"}
-        for description, verdict in (("Counts: 1 source file, 1 workstream (skipped: implementation delegation below threshold).", PASS),
-                                     ("Counts: 1 source file, 1 workstream.", FAIL)):
-            with self.subTest(description=description):
-                update = {"seq": 3, "turn": 0, "kind": "tool_call", "name": "TaskUpdate", "id": "u",
-                          "input": {"taskId": "5", "status": "in_progress", "description": description}}
-                result = self.verdict(self.CHANGE, [item], events=[update])
+        record = "Counts: 1 source file, 1 workstream (skipped: implementation delegation below threshold)."
+        for task, description, closes, verdict in (("5", record, True, PASS), ("5", "Counts: 1 source file, 1 workstream.", True, FAIL),
+                                                   ("2", record, False, FAIL)):
+            with self.subTest(task=task, description=description, closes=closes):
+                updates = [{"seq": 3, "turn": 0, "kind": "tool_call", "name": "TaskUpdate", "id": "u3",
+                            "input": {"taskId": task, "status": "in_progress", "description": description}}]
+                updates += [{"seq": 4, "turn": 0, "kind": "tool_call", "name": "TaskUpdate", "id": "u4",
+                             "input": {"taskId": task, "status": "completed"}}] if closes else []
+                result = self.verdict(self.CHANGE, [item], events=updates)
+                self.assertEqual(result["verdict"], verdict, result)
+
+    def test_ordinary_below_threshold_wording_passes(self):
+        for phrase in ("Below the delegation threshold: 1 source file, 1 workstream.",
+                       "Skipped: implementation delegation under threshold (1 source file, 1 workstream).",
+                       "skipped: implementation delegation below the three-file threshold. One source file, one workstream.",
+                       "skipped: below delegation threshold. One source file.",
+                       "skipped: implementation-delegation below-threshold"):
+            with self.subTest(phrase=phrase):
+                result = self.verdict(self.CHANGE, [{"text": "4. " + phrase, "state": "completed"}])
+                self.assertEqual(result["verdict"], PASS, result)
+        plan = {"explanation": "skipped: implementation delegation below threshold; 1 source file",
+                "plan": [{"step": "4. Implement or delegate", "status": "completed"}]}
+        code = 'await tools.update_plan({explanation: "skipped: implementation delegation below threshold; 1 source file", ' \
+               'plan: [{step: "4. Implement or delegate", status: "completed"}]});'
+        for name, given in (("update_plan", plan), ("exec", {"code": code})):
+            with self.subTest(carrier=name):
+                call = {"seq": 3, "turn": 0, "kind": "tool_call", "name": name, "id": "p", "input": given}
+                result = self.verdict(self.CHANGE, codex.plan_items(plan), harness="codex", events=[call])
+                self.assertEqual(result["verdict"], PASS, result)
+
+    def test_killed_run_without_a_record_is_inconclusive(self):
+        items = [{"text": "4. Record counts, settle tests, implement or delegate", "state": "in progress"}]
+        for exit_code, verdict in ((124, INCONCLUSIVE), (-9, INCONCLUSIVE), (1, INCONCLUSIVE), (0, FAIL)):
+            with self.subTest(exit_code=exit_code):
+                result = self.verdict(self.CHANGE, items, events=bash(2, "python3 -m unittest discover -s tests", head="OK"), exit_code=exit_code)
+                self.assertEqual(result["verdict"], verdict, result)
+
+    def test_chat_copy_of_step_four_is_not_a_record(self):
+        steps = feature_items()[1:]
+        step = next(item["text"] for item in steps if item["text"].startswith("4. "))
+        for body, verdict in (("1. Design: pending.\n" + step + ": pending.", FAIL),
+                              ("\n".join(item["text"] + ": pending." for item in steps), FAIL),
+                              ("1. Design: done.\n2. Step 4: skipped: implementation delegation below threshold. One source file.", PASS)):
+            with self.subTest(body=body[:60]):
+                result = self.verdict(self.CHANGE, live.chat_worklist(body))
                 self.assertEqual(result["verdict"], verdict, result)
 
     def test_below_threshold_note_must_name_delegation(self):
@@ -489,7 +578,7 @@ class SourceFileCount(unittest.TestCase):
     def test_change_without_companion_files_is_inconclusive(self):
         for changed in (self.CHANGE[:2], self.CHANGE + ("roster/report.py",), ("tests/test_json.py", "README.md")):
             with self.subTest(changed=changed):
-                result = self.verdict(changed, [{"text": self.BELOW, "state": "completed"}])
+                result = self.verdict(changed, self.DONE)
                 self.assertEqual(result["verdict"], INCONCLUSIVE, result)
 
 

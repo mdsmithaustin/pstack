@@ -1542,7 +1542,43 @@ def architect_on_boundary(view):
 
 
 MANIFEST_OR_IGNORE = re.compile(r"(?:^|/)(?:\.\w+ignore|pyproject\.toml)$")
-BELOW_THRESHOLD = re.compile(r"delegation\W+(?:\w+\W+){0,2}below\s+(?:the\s+)?threshold", re.I)
+BELOW_THRESHOLD = re.compile(r"(?<!design )(?<!test )delegation\W+(?:\w+\W+){0,3}?(?:below|under)\W+(?:\w+\W+){0,3}?threshold"
+                             r"|(?:below|under)\W+(?:\w+\W+){0,3}?delegation\W+threshold", re.I)
+IMPLEMENTER = re.compile(r"(?<![a-z])implement|\bfeature\W+(?:role|delegate)\b|\brole\W+feature\b|write the code")
+NOT_IMPLEMENTER = re.compile(r"review(?! findings| comments)|judge|explain|comment-sicko|read[- ]only|tests? only|test delegate")
+DESIGN_LABEL = re.compile(r"(?<![a-z])design(?=_|\d)|_design\b")
+LEAD_REVIEWS = re.compile(r"\bthe (?:lead|parent)(?: agent)? (?:will )?reviews?\b")
+PLAN_EXPLANATION = re.compile(r"explanation[\"']?\s*:\s*([\"'`])((?:\\.|(?!\1).)*)\1", re.S)
+
+
+def spawn_role(view, spawn):
+    brief = view.spawn_text(spawn, reply=False)
+    if NOT_IMPLEMENTER.search(LEAD_REVIEWS.sub("", view.spawn_text(spawn))) or DESIGN_BRIEF.search(brief) or DESIGN_LABEL.search(brief):
+        return "other"
+    if IMPLEMENTER.search(brief) or EDIT_ORDER.match((spawn.get("prompt_head") or "").lower()):
+        return "implementer"
+    return "unclear" if "poteto-agent" in (spawn.get("persona"), spawn.get("x_persona_line")) else "other"
+
+
+def closed_notes(view):
+    task_status = {str(call["input"].get("taskId")): call["input"]["status"] for call in view.tool_calls
+                   if call.get("name") == "TaskUpdate" and (call.get("input") or {}).get("status")}
+    notes = []
+    for snap in view.worklist:
+        for item in snap.get("items", []):
+            state, text = item.get("state") or "", item.get("text") or ""
+            if state == "completed" or state.startswith("skipped"):
+                detail = state.partition(": ")[2]
+                notes.append(text if detail in text else f"{state} {text}")
+    for call in view.tool_calls:
+        given = call.get("input") or {}
+        if call.get("name") == "TaskUpdate" and task_status.get(str(given.get("taskId"))) == "completed":
+            notes.append(str(given.get("description") or ""))
+        elif call.get("name") == "update_plan":
+            notes.append(str(given.get("explanation") or ""))
+        elif call.get("name") == "exec" and "update_plan(" in str(given.get("code")):
+            notes += [match.group(2) for match in PLAN_EXPLANATION.finditer(str(given.get("code")))]
+    return notes
 
 
 @oracle("feature-counts-only-source-files")
@@ -1553,26 +1589,31 @@ def counts_only_source_files(view):
     kinds = {}
     for path in sorted(changed):
         kinds.setdefault("manifest or ignore" if MANIFEST_OR_IGNORE.search(path) else view.classify(path), []).append(path)
-    delegates = view.code_delegate_seqs()
+    roles = {"implementer": [], "unclear": []}
+    for spawn in view.spawns:
+        roles.setdefault(spawn_role(view, spawn), []).append(spawn.get("seq") or 0)
     sentences = sorted({part for step in playbook_instructions(view) for part in re.split(r"(?<=\.) ", step) if len(part) > 20},
                        key=len, reverse=True)
-    notes = [f"{item.get('state') or ''} {item.get('text') or ''}" for snap in view.worklist for item in snap.get("items", [])]
-    notes += [str((call.get("input") or {}).get("description") or "") for call in view.tool_calls if call.get("name") == "TaskUpdate"]
     below = set()
-    for note in notes:
+    for note in closed_notes(view):
         note = instruction_text(note)
         for sentence in sentences:
             note = note.replace(sentence, " ")
         if BELOW_THRESHOLD.search(note):
             below.add(" ".join(note.split())[:120])
-    evidence = [f"delivered files by class: {kinds}", f"code delegate spawns at seqs: {delegates}", f"below-threshold records: {sorted(below)}"]
+    evidence = [f"delivered files by class: {kinds}", f"implementation delegate spawns at seqs: {roles['implementer']}",
+                f"poteto-agent spawns with no role at seqs: {roles['unclear']}", f"closed below-threshold records: {sorted(below)}"]
     if len(kinds.get("source", [])) != 1 or not kinds.get("test") or not kinds.get("doc"):
         return inconclusive("the delivered change is not one source file with its tests and documentation", *evidence)
-    if delegates:
+    if roles["implementer"]:
         return failed("delegated a change to one source file with its tests and documentation", *evidence)
-    if not below:
-        return failed("no worklist item closes step 4 as below the delegation threshold", *evidence)
-    return passed(*evidence)
+    if below and roles["unclear"]:
+        return inconclusive("a poteto-agent spawn names no role, so it may have written the change", *evidence)
+    if below:
+        return passed(*evidence)
+    if view.killed:
+        return inconclusive("run killed before step 4 closed below the delegation threshold", *evidence)
+    return failed("no worklist item closes step 4 as below the delegation threshold", *evidence)
 
 
 @oracle("claude-effort-applies-via-effort-agents")
