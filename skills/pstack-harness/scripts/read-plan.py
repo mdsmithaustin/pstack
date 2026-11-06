@@ -7,16 +7,17 @@ warnings python3 can print before a page of the plan. "sed -n 'A,Bp' FILE" print
 line too long for the cap, "tail -c +S FILE | head -c N" commands print it in pieces, each cut after a
 space where one fits and never inside a UTF-8 character. The script prints the plan in pages that fit
 the cap too. When commands remain, the last line of a page is the command that prints the next page.
-The script exits 1 when it cannot read the file and 2 on a usage error, such as --max-output-tokens of
-100 or less.
+The script exits 1 when it cannot read the file and 2 on a usage error, such as --max-output-tokens
+below 102.
 """
 import argparse
 import io
+import math
 import shlex
 import sys
 from pathlib import Path
 
-BYTES_PER_TOKEN, RESERVED_BYTES = 3, 300
+BYTES_PER_TOKEN, RESERVED_BYTES, LONGEST_CHARACTER = 3, 300, 4
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('file', help='File to read')
@@ -25,8 +26,9 @@ parser.add_argument('--max-output-tokens', type=int, required=True,
 parser.add_argument('--from', dest='first', type=int, default=1, help='Print the plan from this command on, counting from 1')
 args = parser.parse_args()
 byte_cap = BYTES_PER_TOKEN * args.max_output_tokens - RESERVED_BYTES
-if byte_cap <= 0:
-    parser.error(f'--max-output-tokens must be more than {RESERVED_BYTES // BYTES_PER_TOKEN}')
+if byte_cap < LONGEST_CHARACTER:
+    lowest = math.ceil((RESERVED_BYTES + LONGEST_CHARACTER) / BYTES_PER_TOKEN)
+    parser.error(f'--max-output-tokens must be at least {lowest}')
 try:
     content = Path(args.file).read_bytes()
 except OSError as error:

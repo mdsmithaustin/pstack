@@ -134,11 +134,17 @@ class ReadPlan(unittest.TestCase):
     def test_an_empty_file_needs_no_command(self):
         self.assertEqual(self.read_within_cap(self.file(b''), 1000), [])
 
-    def test_a_cap_of_100_or_less_exits_2_without_commands(self):
-        result = self.plan(self.file(b'one\n'), 100)
+    def test_a_cap_below_102_exits_2_without_commands(self):
+        result = self.plan(self.file(b'one\n'), 101)
         self.assertEqual(result.returncode, 2)
         self.assertEqual(result.stdout, b'')
-        self.assertIn(b'--max-output-tokens must be more than 100', result.stderr)
+        self.assertIn(b'--max-output-tokens must be at least 102', result.stderr)
+
+    def test_the_lowest_cap_still_reads_four_byte_characters_whole(self):
+        content = '\U0001F600'.encode() * 50 + b'\n'
+        path = self.file(content)
+        outputs = [shell(command) for command in self.commands(path, 102)]
+        self.assertEqual(''.join(output.decode() for output in outputs), content.decode())
 
     def test_an_unreadable_path_exits_1_with_a_message(self):
         for path in (self.dir / 'missing.md', self.dir):
