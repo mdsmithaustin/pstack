@@ -2286,7 +2286,7 @@
     },
     {
      "file": "skills/poteto-mode/references/task-triggers.md",
-     "quote": "Before review, when the diff adds or changes comments, doc comments, or lint or type suppressions → call the Skill tool with `no-comments`."
+     "quote": "Before review, when the diff adds or changes comments, doc comments, docstrings, or lint or type suppressions → call the Skill tool with `no-comments`."
     }
    ],
    "harness_sensitive": false,
@@ -9748,6 +9748,15 @@
    ],
    "text": "It also refuses when the base branch has a merge queue, because the queue would land the PR later without rechecking the verdict or the bot reviews."
   },
+  "92d267416820": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "no-comments-skips-diff-without-comments",
+   "sources": [
+    "port"
+   ],
+   "text": "Doc comments, docstrings, and lint or type suppressions count as comments."
+  },
   "92f59e865bbb": {
    "class": "context",
    "file": "02-poteto-mode.md",
@@ -10806,15 +10815,6 @@
     "port"
    ],
    "text": "pstack spends extra tokens on subagents and review panels."
-  },
-  "af544b0f1222": {
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "no-comments-skips-diff-without-comments",
-   "sources": [
-    "port"
-   ],
-   "text": "Doc comments and lint suppressions count as comments."
   },
   "af9babe0062b": {
    "class": "context",
