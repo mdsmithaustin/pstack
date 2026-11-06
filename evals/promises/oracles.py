@@ -1322,19 +1322,23 @@ def worklist_fallback(view):
     return failed("no numbered list with states in chat", *evidence)
 
 
+def instruction_text(text):
+    while (normalized := norm(text)) != text:
+        text = normalized
+    return text
+
+
+def playbook_instructions(view):
+    want = (view.case.get("expect") or {}).get("playbook")
+    shape = playbook_shape(want, view.skills_root) if want else None
+    return {instruction_text(step["text"]) for step in (shape or {}).get("steps", [])}
+
+
 @oracle("skipped-step-stays-in-worklist")
 def skipped_step(view):
     if not view.worklist:
         return inconclusive("no worklist to inspect")
-
-    def instruction_text(text):
-        while (normalized := norm(text)) != text:
-            text = normalized
-        return text
-
-    want = (view.case.get("expect") or {}).get("playbook")
-    shape = playbook_shape(want, view.skills_root) if want else None
-    instructions = {instruction_text(step["text"]) for step in (shape or {}).get("steps", [])}
+    instructions = playbook_instructions(view)
     skipped = []
     for snap in view.worklist:
         for item in snap.get("items", []):
@@ -1535,6 +1539,40 @@ def architect_on_boundary(view):
     if view.killed and not view.project_edits():
         return inconclusive("run ended before a design decision", *evidence)
     return failed("a change across several modules skipped the architect design fan-out", *evidence)
+
+
+MANIFEST_OR_IGNORE = re.compile(r"(?:^|/)(?:\.\w+ignore|pyproject\.toml)$")
+BELOW_THRESHOLD = re.compile(r"below\s+(?:the\s+)?threshold", re.I)
+
+
+@oracle("feature-counts-only-source-files")
+def counts_only_source_files(view):
+    changed = view.changed_since_base()
+    if changed is None:
+        return inconclusive("no project repository to read the delivered change from")
+    kinds = {}
+    for path in sorted(changed):
+        kinds.setdefault("manifest or ignore" if MANIFEST_OR_IGNORE.search(path) else view.classify(path), []).append(path)
+    delegates = view.code_delegate_seqs()
+    sentences = sorted({part for step in playbook_instructions(view) for part in re.split(r"(?<=\.) ", step) if len(part) > 20},
+                       key=len, reverse=True)
+    notes = [f"{item.get('state') or ''} {item.get('text') or ''}" for snap in view.worklist for item in snap.get("items", [])]
+    notes += [str((call.get("input") or {}).get("description") or "") for call in view.tool_calls if call.get("name") == "TaskUpdate"]
+    below = set()
+    for note in notes:
+        note = instruction_text(note)
+        for sentence in sentences:
+            note = note.replace(sentence, " ")
+        if BELOW_THRESHOLD.search(note):
+            below.add(" ".join(note.split())[:120])
+    evidence = [f"delivered files by class: {kinds}", f"code delegate spawns at seqs: {delegates}", f"below-threshold records: {sorted(below)}"]
+    if len(kinds.get("source", [])) != 1 or not kinds.get("test") or not kinds.get("doc"):
+        return inconclusive("the delivered change is not one source file with its tests and documentation", *evidence)
+    if delegates:
+        return failed("delegated a change to one source file with its tests and documentation", *evidence)
+    if not below:
+        return failed("no worklist item closes step 4 as below the delegation threshold", *evidence)
+    return passed(*evidence)
 
 
 @oracle("claude-effort-applies-via-effort-agents")

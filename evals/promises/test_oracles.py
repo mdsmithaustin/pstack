@@ -432,6 +432,59 @@ class WorklistOracle(unittest.TestCase):
                 self.assertEqual(result["verdict"], FAIL, result)
 
 
+class SourceFileCount(unittest.TestCase):
+    CHANGE = ("roster/__main__.py", "tests/test_json.py", "README.md", ".gitignore")
+    BELOW = "Step 4 implementation delegation: skipped: implementation delegation below threshold. One source file, one workstream."
+
+    def verdict(self, changed, items, spawns=(), harness="claude-code", events=()):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1, {"roster/__main__.py": "x = 0\n", "README.md": "# roster\n"})
+        for rel in changed:
+            (project / rel).parent.mkdir(parents=True, exist_ok=True)
+            (project / rel).write_text("changed\n")
+        trace = minimal(harness=harness, events=events, worklist=[{"seq": 1, "carrier": "text", "items": items}], spawns=spawns)
+        return grade("feature-counts-only-source-files", trace, load_case("feature-source-count-run"), project)
+
+    def test_direct_change_closed_below_threshold_passes(self):
+        for harness, items in (("claude-code", [{"text": self.BELOW, "state": "completed"}]),
+                               ("codex", codex.plan_items({"plan": [{"step": self.BELOW, "status": "completed"}]}))):
+            with self.subTest(harness=harness):
+                result = self.verdict(self.CHANGE, items, harness=harness)
+                self.assertEqual(result["verdict"], PASS, result)
+
+    def test_delegating_one_source_file_fails(self):
+        spawn = {"seq": 5, "tool": "Agent", "persona": "poteto-agent", "prompt_head": "Add the --json flag."}
+        result = self.verdict(self.CHANGE, [{"text": self.BELOW, "state": "completed"}], spawns=[spawn])
+        self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_verbatim_step_copy_is_not_a_below_threshold_record(self):
+        step = next(item for item in feature_items() if item["text"].startswith("4. "))["text"]
+        quoted = step[:step.index(". ", step.index("below threshold")) + 1]
+        for copy, note, verdict in ((step, "", FAIL), (quoted, "", FAIL), (step, "\nImplemented directly.", FAIL),
+                                    (step, "\nskipped: implementation delegation below threshold. Source count 1.", PASS)):
+            for state in ("pending", "completed"):
+                with self.subTest(copy=len(copy), note=note, state=state):
+                    result = self.verdict(self.CHANGE, [{"text": copy + note, "state": state}])
+                    self.assertEqual(result["verdict"], verdict, result)
+
+    def test_task_update_description_can_record_the_skip(self):
+        item = {"text": "4. Record counts, settle tests, implement or delegate", "state": "completed"}
+        for description, verdict in (("Counts: 1 source file, 1 workstream (skipped: implementation delegation below threshold).", PASS),
+                                     ("Counts: 1 source file, 1 workstream.", FAIL)):
+            with self.subTest(description=description):
+                update = {"seq": 3, "turn": 0, "kind": "tool_call", "name": "TaskUpdate", "id": "u",
+                          "input": {"taskId": "5", "status": "in_progress", "description": description}}
+                result = self.verdict(self.CHANGE, [item], events=[update])
+                self.assertEqual(result["verdict"], verdict, result)
+
+    def test_change_without_companion_files_is_inconclusive(self):
+        for changed in (self.CHANGE[:2], self.CHANGE + ("roster/report.py",), ("tests/test_json.py", "README.md")):
+            with self.subTest(changed=changed):
+                result = self.verdict(changed, [{"text": self.BELOW, "state": "completed"}])
+                self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+
 class ReplyOracles(unittest.TestCase):
     def test_reply_without_commands_fails(self):
         trace = minimal(events=bash(0, "python3 -m tally sample.txt --json", head='[{"word": "the", "count": 4}]'),
