@@ -760,7 +760,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
-     "quote": "1. Reproduce it yourself on the matching surface via the control skill required by the [task triggers](../references/task-triggers.md)"
+     "quote": "Reproduce it yourself on the matching surface via the control skill required by the [task triggers](../references/task-triggers.md)"
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
@@ -768,11 +768,11 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/refactoring.md",
-     "quote": "1. Pin the behavior contract first."
+     "quote": "Pin the behavior contract first."
     },
     {
      "file": "skills/poteto-mode/playbooks/perf-issue.md",
-     "quote": "1. Capture a baseline trace via the matching control skill."
+     "quote": "Capture a baseline trace via the matching control skill."
     }
    ],
    "harness_sensitive": false,
@@ -815,7 +815,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/code-review.md",
-     "quote": "**Check shared code against its other callers.** Call the Skill tool with `principle-model-the-domain`."
+     "quote": "**Callers checked.** Every change to a shared function, type, or constant is safe for each caller outside the PR's intent. Call the Skill tool with `principle-model-the-domain`."
     },
     {
      "file": "skills/poteto-mode/playbooks/code-review.md",
@@ -1370,10 +1370,6 @@
      "quote": "Then call the Skill tool with `spec-probes` and follow its edge probe on each new requirement."
     },
     {
-     "file": "skills/poteto-mode/references/task-triggers.md",
-     "quote": "- Writing acceptance tests or criteria for a new requirement from a spec, issue, or plan → call the Skill tool with `spec-probes`, then follow its edge probe."
-    },
-    {
      "file": "skills/poteto-mode/playbooks/feature.md",
      "quote": "Record each edge that neither settles as an open gap in the reply, not as a test."
     }
@@ -1381,7 +1377,6 @@
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/playbooks/feature.md",
-    "skills/poteto-mode/references/task-triggers.md",
     "skills/spec-probes/SKILL.md"
    ]
   },
@@ -1649,7 +1644,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/hillclimb.md",
-     "quote": "5. Loop, one hypothesis per iteration:"
+     "quote": "Loop, one hypothesis per iteration:"
     }
    ],
    "harness_sensitive": false,
@@ -2789,21 +2784,16 @@
    "claim": "poteto-mode sends boundary-crossing code to architect, except when runtime evidence confirms a bug's root cause and identifies one localized repair.",
    "evidence": [
     {
-     "file": "skills/poteto-mode/references/task-triggers.md",
-     "quote": "Code crossing a function boundary → call the Skill tool with `architect` for parallel design exploration before implementing. For a bug fix, skip architect when runtime evidence confirms the root cause and identifies one localized repair, even across a function boundary. Go straight to the failing reproducer, then repair it. Keep architect when design choices or repair scope remain unresolved."
-    },
-    {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
      "quote": "Plan the fix. When runtime evidence confirms the root cause and identifies one localized repair, go straight to the failing reproducer, then repair it. This applies even across a function boundary. If design choices or repair scope remain unresolved, call the Skill tool with `architect` first."
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "2. `architect` for feature design exploration when the change crosses a function boundary or admits several valid shapes."
+     "quote": "when the change crosses a function boundary or admits several valid shapes, the alternatives were compared before any code. Call the Skill tool with `architect` for that comparison."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/references/task-triggers.md",
     "skills/poteto-mode/playbooks/feature.md",
     "skills/poteto-mode/playbooks/bug-fix.md"
    ]
@@ -3039,7 +3029,11 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "The current code's behavior is the spec for everything the task does not explicitly change. Call the Skill tool with `principle-redesign-from-first-principles`. Keep that behavior, and say so in the step 4 brief."
+     "quote": "The current code's behavior is the spec for everything the task does not explicitly change."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "Call the Skill tool with `principle-redesign-from-first-principles`."
     },
     {
      "file": "skills/poteto-mode/SKILL.md",
@@ -9257,19 +9251,6 @@
    ],
    "text": "`changed` means one PR of proven corrections, confined to the verification skill's own directory."
   },
-  "88e1272496b5": {
-   "also": [
-    "delegate-brief-passes-source",
-    "delegate-never-writes-only-test"
-   ],
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "feature-settles-acceptance-tests-and-edges",
-   "sources": [
-    "port"
-   ],
-   "text": "[Feature step 4](../../skills/poteto-mode/playbooks/feature.md) defines when the lead implements or delegates, what the worklist records, and the acceptance-test and specification-edge duties for both paths."
-  },
   "8921b1eb1ee6": {
    "class": "promise",
    "file": "02-poteto-mode.md",
@@ -13076,6 +13057,19 @@
     "port"
    ],
    "text": "Of everything in this guide, the verification skill pays off the most."
+  },
+  "ecff60d0a30c": {
+   "also": [
+    "delegate-brief-passes-source",
+    "delegate-never-writes-only-test"
+   ],
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "feature-settles-acceptance-tests-and-edges",
+   "sources": [
+    "port"
+   ],
+   "text": "[Feature step 6](../../skills/poteto-mode/playbooks/feature.md) defines when the lead implements or delegates, what the worklist records, and the acceptance-test and specification-edge duties for both paths."
   },
   "ed257fd20058": {
    "class": "context",
