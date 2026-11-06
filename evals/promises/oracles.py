@@ -1542,20 +1542,51 @@ def architect_on_boundary(view):
 
 
 MANIFEST_OR_IGNORE = re.compile(r"(?:^|/)(?:\.\w+ignore|pyproject\.toml)$")
-BELOW_THRESHOLD = re.compile(r"(?<!design )(?<!test )delegation\W+(?:\w+\W+){0,3}?(?:below|under)\W+(?:\w+\W+){0,3}?threshold"
-                             r"|(?:below|under)\W+(?:\w+\W+){0,3}?delegation\W+threshold", re.I)
-IMPLEMENTER = re.compile(r"(?<![a-z])implement|\bfeature\W+(?:role|delegate)\b|\brole\W+feature\b|write the code")
-NOT_IMPLEMENTER = re.compile(r"(?<![a-z])(?:review(?! findings| comments)|judge|explain|comment-sicko|read[- ]only|tests? only|test delegate)")
+UNNEGATED_BELOW = r"(?<!\bnot )(?<!n['’]t )(?:below|under)"
+BELOW_THRESHOLD = re.compile(rf"(?<!design )(?<!test )delegation\W+(?:\w+\W+){{0,3}}?{UNNEGATED_BELOW}\W+(?:\w+\W+){{0,3}}?threshold"
+                             rf"|{UNNEGATED_BELOW}\W+(?:\w+\W+){{0,3}}?delegation\W+threshold", re.I)
+WRITER_ROLES = ("feature", "bug-fix", "refactoring", "perf-issue", "hillclimb", "arena runner")
+READER_ROLES = ("architect runner", "arena cross-judge", "how explainer", "how explorer", "interrogate reviewer", "trail reviewer",
+                "why investigator", "why synthesizer")
+ROLE_NAMES = "|".join(re.sub(r"[- ]", "[- ]", name) for name in WRITER_ROLES + READER_ROLES)
+ROLE_LABEL = re.compile(rf"({ROLE_NAMES})s?")
+NAMED_ROLE = re.compile(rf"\brole:?\s+`?({ROLE_NAMES})s?(?![\w-])|\b({ROLE_NAMES})s?`?\s+role\b"
+                        rf"|\b(?:you are|act as) (?:the |an? )?({ROLE_NAMES})s?(?![\w-])")
+NO_CODE_AGENTS = {"explore", "plan", "explorer", "comment-sicko"}
+NO_CODE = re.compile(r"\b(?:do not|don't|never) (?:write|edit|touch|change|modify|fix) (?:any |the )?"
+                     r"(?:implementation|production|application|source) code\b")
+TESTS_ONLY = re.compile(r"(?<![a-z])tests? only\b|\btest[- ]only\b|\btest delegate\b")
+IMPLEMENTER = re.compile(r"(?<![a-z])implement(?:ers?)?(?![a-z])|(?<=_)implementation(?![a-z])|(?<![a-z])implementation(?=_)"
+                         r"|\bimplementation (?:of|owner)\b|\byou are implementing\b|\bfeature delegate\b|\bwrite the code\b")
+NOT_IMPLEMENTER = re.compile(r"(?<![a-z])(?:review(?! findings| comments)|judge|explain|comment-sicko|read[- ]only)")
 DESIGN_LABEL = re.compile(r"(?<![a-z])design(?=_|\d)|_design\b")
 LEAD_REVIEWS = re.compile(r"\bthe (?:lead|parent)(?: agent)? (?:will )?reviews?\b")
 PLAN_EXPLANATION = re.compile(r"explanation[\"']?\s*:\s*([\"'`])((?:\\.|(?!\1)[^\\])*)\1", re.S)
 
 
+def named_role(spawn, brief):
+    for kind in (spawn.get("persona"), spawn.get("subagent_type")):
+        if kind and (label := ROLE_LABEL.fullmatch(kind.lower())):
+            return label.group(1)
+    named = NAMED_ROLE.search(brief)
+    return next(filter(None, named.groups())) if named else None
+
+
 def spawn_role(view, spawn):
-    brief = view.spawn_text(spawn, reply=False)
-    if NOT_IMPLEMENTER.search(LEAD_REVIEWS.sub("", view.spawn_text(spawn))) or DESIGN_BRIEF.search(brief) or DESIGN_LABEL.search(brief):
+    brief = view.spawn_brief(spawn).replace("\\n", "\n").lower()
+    label = view.spawn_text(spawn, reply=False)
+    agents = {str(spawn.get(key) or "").lower() for key in ("persona", "subagent_type")}
+    if agents & NO_CODE_AGENTS or NO_CODE.search(brief) or TESTS_ONLY.search(label):
         return "other"
-    if IMPLEMENTER.search(brief) or EDIT_ORDER.match((spawn.get("prompt_head") or "").lower()):
+    if role := named_role(spawn, brief):
+        return "implementer" if role.replace("-", " ") in {name.replace("-", " ") for name in WRITER_ROLES} else "other"
+    if DESIGN_BRIEF.search(label) or DESIGN_LABEL.search(label):
+        return "other"
+    if EDIT_ORDER.match((spawn.get("prompt_head") or "").lower()):
+        return "implementer"
+    if NOT_IMPLEMENTER.search(LEAD_REVIEWS.sub("", view.spawn_text(spawn))):
+        return "other"
+    if IMPLEMENTER.search(label):
         return "implementer"
     return "unclear" if "poteto-agent" in (spawn.get("persona"), spawn.get("x_persona_line")) else "other"
 
@@ -1566,11 +1597,15 @@ def closed_notes(view):
     step_four = next((step for step in (shape or {}).get("steps", []) if step["n"] == 4), None)
     task_status = {str(call["input"].get("taskId")): call["input"]["status"] for call in view.tool_calls
                    if call.get("name") == "TaskUpdate" and (call.get("input") or {}).get("status")}
-    notes, step_four_closed_at = [], set()
+    notes, step_four_closed_at, numbered_four_closed = [], set(), []
     for snap in view.worklist:
         for item in snap.get("items", []):
             state, text = item.get("state") or "", item.get("text") or ""
-            if state == "completed" or state.startswith("skipped"):
+            closed = state == "completed" or state.startswith("skipped")
+            number = ITEM_NUMBER.match(text)
+            if step_four and number and number.group(1) == "4" and item_matches_step(text, step_four):
+                numbered_four_closed.append(closed)
+            if closed:
                 detail = state.partition(": ")[2]
                 notes.append(text if detail in text else f"{state} {text}")
                 if step_four and item_matches_step(text, step_four):
@@ -1584,7 +1619,8 @@ def closed_notes(view):
             notes.append(str(given.get("explanation") or ""))
         elif closes_step_four and call.get("name") == "exec" and "update_plan(" in str(given.get("code")):
             notes += [match.group(2) for match in PLAN_EXPLANATION.finditer(str(given.get("code")))]
-    return notes
+    step_four_left_open = numbered_four_closed and not any(numbered_four_closed)
+    return [] if step_four_left_open else notes
 
 
 @oracle("feature-counts-only-source-files")
