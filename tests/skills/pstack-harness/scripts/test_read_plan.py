@@ -31,7 +31,7 @@ PYTHON3_WARNINGS = 420
 
 def exec_result_bytes(output):
     result = {'chunk_id': '000000', 'wall_time_seconds': 0.000001, 'exit_code': 0,
-              'original_token_count': len(output), 'output': output.decode('utf-8', 'replace')}
+              'original_token_count': len(output), 'output': output.decode()}
     return len(json.dumps(result, ensure_ascii=False).encode())
 
 
@@ -104,6 +104,14 @@ class ReadPlan(unittest.TestCase):
                     piece(488, 300), piece(788, 300), piece(1088, 101), ['sed', '-n', '4,4p', str(path)]]
         self.assertEqual([shlex.split(command) for command in self.commands(path, 200)], expected)
         self.assertEqual(b''.join(shell(command) for command in self.commands(path, 200)), content)
+
+    def test_a_piece_never_ends_inside_a_utf8_character(self):
+        content = b'x' + '\u2192'.encode() * 250 + b'\n'
+        path = self.file(content)
+        self.assertEqual([shlex.split(command) for command in self.commands(path, 300)],
+                         [['tail', '-c', '+1', str(path), '|', 'head', '-c', '598'],
+                          ['tail', '-c', '+599', str(path), '|', 'head', '-c', '154']])
+        self.assertEqual(''.join(output.decode() for output in self.read_within_cap(path, 300)), content.decode())
 
     def test_lines_end_only_at_a_newline_as_in_sed(self):
         path = self.file(b'aa\rbb\ncc\n')

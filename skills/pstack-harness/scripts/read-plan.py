@@ -5,9 +5,10 @@ Codex counts 4 bytes of output as 1 token. This script counts 3 bytes as 1 token
 The difference leaves room for the JSON that an exec script can wrap around an output, and for the
 warnings python3 can print before a page of the plan. "sed -n 'A,Bp' FILE" prints lines A to B. For a
 line too long for the cap, "tail -c +S FILE | head -c N" commands print it in pieces, each cut after a
-space where one fits. The script prints the plan in pages that fit the cap too. When commands remain, the
-last line of a page is the command that prints the next page. The script exits 1 when it cannot read the
-file and 2 on a usage error, such as --max-output-tokens of 100 or less.
+space where one fits and never inside a UTF-8 character. The script prints the plan in pages that fit
+the cap too. When commands remain, the last line of a page is the command that prints the next page.
+The script exits 1 when it cannot read the file and 2 on a usage error, such as --max-output-tokens of
+100 or less.
 """
 import argparse
 import io
@@ -39,6 +40,9 @@ def pieces(start, stop):
         space = content.rfind(b' ', start, end)
         if end < stop and space >= 0:
             end = space + 1
+        # A byte of the form 10xxxxxx continues a UTF-8 character, so move a cut there to the character's start.
+        while start + 1 < end < stop and content[end] & 0xC0 == 0x80:
+            end -= 1
         yield f'tail -c +{start + 1} {quoted} | head -c {end - start}'
         start = end
 
