@@ -2861,6 +2861,10 @@
     {
      "file": "agents/poteto-agent.md",
      "quote": "Read the `poteto-mode` skill's `SKILL.md` in full, including its inline Principles index, before you start."
+    },
+    {
+     "file": "agents/poteto-agent.md",
+     "quote": "Skip that read only when your brief names your unit a narrow role whose output cannot land in the project"
     }
    ],
    "harness_sensitive": false,
