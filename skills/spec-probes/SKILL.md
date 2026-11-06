@@ -51,7 +51,7 @@ Each item ends in exactly one state:
 
 **A new rejection needs a requirement that states the restriction.** A rejection is an expected result that rejects, errors on, or reinterprets an input. Expect one only where a requirement states the restriction, and name that requirement in the criterion. A stated type, range, or format is such a requirement, so expect an input that breaks it to be rejected. The rule holds on a new field and on input the program accepts today, even when a worked example shows only one form of the value or a sibling field has the rejection. Without such a requirement, expect the result the spec text gives the input, or the result the program gives it today. A new field has no result today, so where the spec text gives none, write no criterion for the input and carry the edge as `unresolved`.
 
-**Each criterion cites its source.** Name the requirement or quote the spec sentence that gives its expected result, or name the current behavior it keeps. Label a criterion with no source `assumption`, so a reviewer checks it against the spec instead of trusting it.
+**Each criterion cites its source.** Name the requirement or quote the spec sentence that gives its expected result, or name the current behavior it keeps. Label a criterion with no source `assumption`, so a reviewer checks it against the spec instead of trusting it. An `assumption` never settles an edge, so an edge with no source stays `unresolved` with no criterion.
 
 Write the `backstop` and `judgment` tags into the spec itself. A reviewer later abstains on those instead of passing them by inspection; without the tag it cannot see its own blind spot.
 
