@@ -2857,11 +2857,16 @@
     {
      "file": "skills/poteto-mode/references/delegation.md",
      "quote": "**Use the `poteto-agent` persona for any subagent you spawn inside a playbook step**"
+    },
+    {
+     "file": "agents/poteto-agent.md",
+     "quote": "Read the `poteto-mode` skill's `SKILL.md` in full, including its inline Principles index, before you start one."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/references/delegation.md"
+    "skills/poteto-mode/references/delegation.md",
+    "agents/poteto-agent.md"
    ]
   },
   "poteto-mode-triggers-architect-on-boundary-crossing": {
