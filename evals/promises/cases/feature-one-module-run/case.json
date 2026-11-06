@@ -1,5 +1,7 @@
 {
  "promises": [
+  "poteto-mode-routes-to-playbook",
+  "prove-it-works-checks-real-artifact",
   "design-ladder-spares-small-changes"
  ],
  "fixture": "tally",
@@ -12,7 +14,11 @@
   "codex": 2400
  },
  "expect": {
-  "playbook": "feature"
+  "playbook": "feature",
+  "artifact_command": "-m\\s+tally\\b"
  },
- "note": "an additive change that crosses a function boundary inside tally's one module; the design ladder must still skip the fan-out"
+ "note": "an additive change that crosses a function boundary inside tally's one module; the design ladder must still skip the fan-out",
+ "env": {
+  "todo_tools": true
+ }
 }

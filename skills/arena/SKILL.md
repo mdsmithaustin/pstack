@@ -36,7 +36,7 @@ Score each candidate against the rubric criterion by criterion, not on holistic 
 
 Pick the base a future maintainer can extend most easily without breaking invariants. When two feel tied, prefer the cleaner boundary or smaller API, per the Laziness Protocol.
 
-Start no graft and spawn no implementation before you pick the base.
+Start no graft, and spawn no implementation of the result, before you pick the base.
 
 ## Phase E: Graft
 

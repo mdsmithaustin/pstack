@@ -1036,7 +1036,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "A small, self-contained change keeps this step with `skipped: <reason>`."
+     "quote": "A small, self-contained change, or one with a single plausible shape, keeps this step with `skipped: <reason>`."
     },
     {
      "file": "skills/poteto-mode/references/task-triggers.md",
