@@ -13,7 +13,7 @@ Defer to Comment Sicko's fresh perspective.
 
 Use the caller's files or diff. Otherwise use the current diff against the base branch, default `main`, including the working tree.
 
-If the scope is a diff that adds or changes no comments, report that and stop without spawning Comment Sicko.
+If the scope is a diff that adds or changes no comments, report that and stop without spawning Comment Sicko. Doc comments, docstrings, and lint or type suppressions such as `eslint-disable`, `@ts-ignore`, and `# noqa` count as comments. When unsure, spawn it.
 
 ## Steps
 

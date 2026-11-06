@@ -1098,7 +1098,11 @@
     },
     {
      "file": "skills/documentation-impact/SKILL.md",
-     "quote": "`independent review not required` only when evidence shows that the change edits neither."
+     "quote": "`independent review required` when the change edits maintained documentation, changes a public workflow or a documented contract such as a default or flag, or leaves a documentation gap unresolved."
+    },
+    {
+     "file": "skills/documentation-impact/SKILL.md",
+     "quote": "`independent review not required` only when evidence shows that none of these holds."
     },
     {
      "file": "skills/documentation-impact/SKILL.md",
@@ -1205,7 +1209,7 @@
   },
   "documentation-review-one-repair-round": {
    "check": "static",
-   "claim": "A documentation review gets one repair round. A recheck that does not pass ends with its open findings reported as pending instead of another round.",
+   "claim": "A documentation review gets one repair round, and Babysit and Shipping hold the same bound. The recheck, scoped or full, blocks `pass` on an unresolved finding or an established omission or incorrect claim. A recheck that does not pass ends with completion reported as pending and its open findings, instead of another round.",
    "evidence": [
     {
      "file": "skills/documentation-impact/SKILL.md",
@@ -1213,16 +1217,46 @@
     },
     {
      "file": "skills/documentation-impact/SKILL.md",
-     "quote": "When the recheck does not return `pass`, return its open findings to the caller instead of starting another round."
+     "quote": "The recheck after that round, scoped or full, returns `needs changes` when a finding remains unresolved or it establishes an omission or incorrect claim."
+    },
+    {
+     "file": "skills/documentation-impact/SKILL.md",
+     "quote": "It reports wording suggestions as notes and returns `pass` when only notes remain."
+    },
+    {
+     "file": "skills/documentation-impact/SKILL.md",
+     "quote": "When the recheck does not return `pass`, return its open findings to the caller as pending instead of starting another round."
     },
     {
      "file": "skills/poteto-mode/references/task-triggers.md",
-     "quote": "If the recheck does not return `pass`, report its open findings as pending instead of starting another round."
+     "quote": "If the recheck does not return `pass`, report completion as pending with its open findings instead of starting another round."
+    },
+    {
+     "file": "skills/poteto-mode/references/task-triggers.md",
+     "quote": "Repair the findings in one round, then recheck that repair. Rerun the full review instead when the repair changes behavior or contract claims."
+    },
+    {
+     "file": "skills/poteto-mode/references/task-triggers.md",
+     "quote": "If the recheck does not pass, report completion as pending with its open findings instead of starting another round. Autopilot and Shipping verdict rounds keep their own stop rules."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/babysit.md",
+     "quote": "Send findings to the author for the one repair round that documentation-impact allows, then refresh the author result and, when required, the independent review verdict. If the recheck does not return `pass`, report its open findings as pending instead of starting another round."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/babysit.md",
+     "quote": "open findings after the documentation repair round"
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/shipping.md",
+     "quote": "Return findings to the author for the one repair round that documentation-impact allows, then recheck the resulting artifact. Open findings after that recheck stop the verified run per step 2 instead of starting another round."
     }
    ],
    "harness_sensitive": false,
    "owners": [
     "skills/documentation-impact/SKILL.md",
+    "skills/poteto-mode/playbooks/babysit.md",
+    "skills/poteto-mode/playbooks/shipping.md",
     "skills/poteto-mode/references/task-triggers.md"
    ]
   },
@@ -2240,16 +2274,25 @@
   },
   "no-comments-skips-diff-without-comments": {
    "check": "static",
-   "claim": "On a diff that adds or changes no comments, /no-comments reports that and stops without spawning Comment Sicko.",
+   "claim": "On a diff that adds or changes no comments, /no-comments reports that and stops without spawning Comment Sicko. Doc comments, docstrings, and lint or type suppressions count as comments, and an unsure call spawns it.",
    "evidence": [
     {
      "file": "skills/no-comments/SKILL.md",
      "quote": "If the scope is a diff that adds or changes no comments, report that and stop without spawning Comment Sicko."
+    },
+    {
+     "file": "skills/no-comments/SKILL.md",
+     "quote": "Doc comments, docstrings, and lint or type suppressions such as `eslint-disable`, `@ts-ignore`, and `# noqa` count as comments. When unsure, spawn it."
+    },
+    {
+     "file": "skills/poteto-mode/references/task-triggers.md",
+     "quote": "Before review, when the diff adds or changes comments, doc comments, or lint or type suppressions → call the Skill tool with `no-comments`."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/no-comments/SKILL.md"
+    "skills/no-comments/SKILL.md",
+    "skills/poteto-mode/references/task-triggers.md"
    ]
   },
   "no-comments-spawns-comment-sicko": {
@@ -5343,15 +5386,6 @@
     "port"
    ],
    "text": "Codex honors this as installed, and Claude Code does once `/setup-pstack` sets its skill listing."
-  },
-  "1d7d9a7d1bfe": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "documentation-review-one-repair-round",
-   "sources": [
-    "port"
-   ],
-   "text": "Poteto reports any finding still open after that recheck instead of starting another round."
   },
   "1d7e92d5286e": {
    "class": "promise",
@@ -10773,6 +10807,15 @@
    ],
    "text": "pstack spends extra tokens on subagents and review panels."
   },
+  "af544b0f1222": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "no-comments-skips-diff-without-comments",
+   "sources": [
+    "port"
+   ],
+   "text": "Doc comments and lint suppressions count as comments."
+  },
   "af9babe0062b": {
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
@@ -11317,6 +11360,15 @@
     "port"
    ],
    "text": "A surprise in your own code gets no such pass."
+  },
+  "bd67c3f179d2": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "documentation-review-one-repair-round",
+   "sources": [
+    "port"
+   ],
+   "text": "If the recheck does not pass, Poteto reports completion as pending with the open findings instead of starting another round."
   },
   "bdb3bb40622f": {
    "class": "promise",

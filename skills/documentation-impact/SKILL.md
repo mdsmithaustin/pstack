@@ -63,10 +63,10 @@ Use the repository's existing diagram format when a diagram explains an affected
 
 An author pass returns exactly one result:
 
-- `independent review required` when the change edits maintained documentation or a public workflow.
-- `independent review not required` only when evidence shows that the change edits neither. Report a documentation gap you could not close as an open finding.
+- `independent review required` when the change edits maintained documentation, changes a public workflow or a documented contract such as a default or flag, or leaves a documentation gap unresolved.
+- `independent review not required` only when evidence shows that none of these holds.
 
-`independent review not required` is invalid for a change that edits maintained documentation or a public workflow. Record the evidence that supports the author result with the examined artifact. A completion or shipping workflow can start an independent review only when the author result is `independent review required`.
+Record the evidence that supports the author result with the examined artifact. A completion or shipping workflow can start an independent review only when the author result is `independent review required`.
 
 When independent review is required, a different agent reviews the resulting artifact without editing it. The first review covers the full accepted scope and reports every finding in that one pass. Return `pass`, `needs changes`, or `unverified`. Report a wording suggestion that leaves no claim wrong or missing as a note. A note does not block `pass`.
 
@@ -76,7 +76,7 @@ For wording-only repairs, give the next reviewer that evidence and the resulting
 
 Run a full review when a repair changes behavior or contract claims, or when that effect is uncertain. Missing prior coverage or repair-search evidence leaves the recheck `unverified` until supplied or replaced by a full review. Do not infer a pass from a round count.
 
-Allow one repair round per review. After that round, the recheck returns `needs changes` only when a finding remains unresolved or the repair added an omission or incorrect claim. Report anything else the recheck finds as a note. When the recheck does not return `pass`, return its open findings to the caller instead of starting another round.
+Allow one repair round per review. The recheck after that round, scoped or full, returns `needs changes` when a finding remains unresolved or it establishes an omission or incorrect claim. It reports wording suggestions as notes and returns `pass` when only notes remain. When the recheck does not return `pass`, return its open findings to the caller as pending instead of starting another round.
 
 Bind every recheck to the resulting revision or content snapshot and the accepted scope. Verify that the carried coverage still matches the unchanged inputs and relevant surrounding context. Concurrent edits or changed context invalidate the affected coverage. Refresh those checks or run a full review before returning `pass`. A matching stable patch-id after a rebase does not establish unchanged documentation context.
 
