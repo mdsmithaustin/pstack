@@ -153,6 +153,62 @@ class Preserve(unittest.TestCase):
         self.assertIn(result.returncode, (0, 1), result.stdout + result.stderr)
         self.assertEqual(sorted(p.name for p in (self.repo / 'tests').iterdir() if p.name != '__pycache__'), ['test_new.py'])
 
+    REASON = textwrap.dedent('''\
+        # the scheme test sends a value the new spec forbids
+        test_scheme_kept
+          input: a destination with the ignored:// scheme
+          quote: "Every destination starts with backup:// and names a store."
+        ''')
+
+    def test_reasons_block_naming_each_failure_waives_it(self):
+        (self.repo / 'mod.py').write_text(NARROWED)
+        (self.repo / 'reasons.txt').write_text(self.REASON)
+        result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('1 test(s) waived', result.stdout)
+        self.assertIn('reason: input a destination with the ignored:// scheme', result.stdout)
+
+    def test_failure_without_a_block_still_fails(self):
+        (self.repo / 'mod.py').write_text("def parse(value):\n    raise ValueError(value)\n")
+        (self.repo / 'reasons.txt').write_text(self.REASON)
+        result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('test_plain', result.stdout)
+        self.assertIn('1 test(s) have no reason', result.stdout)
+
+    def test_a_file_that_cannot_run_is_never_waived(self):
+        (self.repo / 'mod.py').rename(self.repo / 'core.py')
+        (self.repo / 'reasons.txt').write_text("test_mod\n  input: every input\n  quote: \"The module moved to core and the old tests are stale.\"\n")
+        result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('have no reason', result.stdout)
+
+    def test_block_without_input_or_quoted_sentence_is_unusable(self):
+        (self.repo / 'mod.py').write_text(NARROWED)
+        for body in ("test_scheme_kept\n  quote: \"Every destination starts with backup:// and names a store.\"\n",
+                     "test_scheme_kept\n  input: the old scheme\n  quote: the schema changed\n",
+                     "test_scheme_kept\n  input: the old scheme\n  quote: \"backup:// only\"\n"):
+            (self.repo / 'reasons.txt').write_text(body)
+            with self.subTest(body=body.splitlines()[-1]):
+                result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn('not a usable reasons file', result.stderr)
+
+    def test_block_naming_no_failing_test_is_reported(self):
+        (self.repo / 'reasons.txt').write_text(self.REASON)
+        result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('names no failing test: test_scheme_kept', result.stdout)
+        self.assertIn('All earlier tests still pass unedited.', result.stdout)
+
+    def test_pytest_ids_and_unittest_ids_both_match_a_block(self):
+        (self.repo / 'mod.py').write_text(NARROWED)
+        for wanted in ('tests/test_mod.py::Parse::test_scheme_kept', 'test_scheme_kept (tests.test_mod.Parse.test_scheme_kept)'):
+            (self.repo / 'reasons.txt').write_text(self.REASON.replace('test_scheme_kept\n', wanted + '\n', 1))
+            with self.subTest(wanted=wanted):
+                result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_unknown_commit_exits_two(self):
         result = subprocess.run([sys.executable, str(SCRIPT), '--since', 'nope', '--project', str(self.repo)],
                                 capture_output=True, text=True)

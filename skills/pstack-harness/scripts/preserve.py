@@ -7,10 +7,23 @@ those files against the current code, and restores whatever the working tree hel
 the earlier tests pinned cannot change silently. The files run in place because tests find the
 project through their own location (`Path(__file__).parent / ".."`, fixture directories).
 
-    preserve.py --since <commit> [--project <root>] [--python <exe>] [--report-only]
+    preserve.py --since <commit> [--project <root>] [--python <exe>] [--reasons <file>] [--report-only]
 
 Exit 0 when every earlier test passes, 1 when any fails or cannot run, 2 when the commit holds no
 test files or the arguments are unusable. --report-only prints the same report and exits 0.
+
+--reasons names a file of allowed failures. A block names the failing tests it covers, one per
+line, then an indented `input:` line naming what those tests sent and an indented `quote:` line
+holding the spec sentence that forbids it, in double quotes:
+
+    tests/test_jobs.py::Jobs::test_missing_destination
+    tests/test_jobs.py::Jobs::test_relative_destination
+      input: a job whose destination is absent or a bare path
+      quote: "Every job declares a destination of the form backup://<name>."
+
+The run exits 0 only when every failing test is named by a block that has both lines. A block
+that names no failing test, or a test with no block, is reported. The script cannot judge whether
+the sentence covers the input; it makes the reason exist, per failure, before the commit.
 """
 from __future__ import annotations
 
@@ -79,6 +92,54 @@ def run_tests(python: str, project: Path, files: list[str], runner: str) -> tupl
     return failed, errors, summary_line(text)
 
 
+def test_name(test_id: str) -> str:
+    """The function name a failure line carries, whichever runner printed it."""
+    head = test_id.split(" (")[0]
+    return head.split("::")[-1].split(".")[-1].split("[")[0]
+
+
+def read_reasons(path: Path) -> tuple[list[dict], list[str]]:
+    """Blocks of {tests, input, quote}, plus the problems that make a block unusable."""
+    blocks: list[dict] = []
+    problems: list[str] = []
+    for n, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw.rstrip()
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        field = re.match(r"\s+(input|quote):\s*(.*)$", line)
+        if field:
+            if not blocks:
+                problems.append(f"line {n}: `{field.group(1)}:` before any test line")
+                continue
+            blocks[-1][field.group(1)] = field.group(2).strip()
+        elif line[0].isspace():
+            problems.append(f"line {n}: indented line is neither `input:` nor `quote:`")
+        elif blocks and not (blocks[-1]["input"] or blocks[-1]["quote"]):
+            blocks[-1]["tests"].append(line.strip())
+        else:
+            blocks.append({"tests": [line.strip()], "input": "", "quote": "", "line": n})
+    for block in blocks:
+        quoted = re.search(r'"([^"]+)"', block["quote"])
+        if not block["input"]:
+            problems.append(f"line {block['line']}: block has no `input:` line")
+        if not quoted or len(quoted.group(1).split()) < 4:
+            problems.append(f"line {block['line']}: block has no `quote:` line holding a sentence in double quotes")
+    return blocks, problems
+
+
+def match_reasons(failed: list[str], blocks: list[dict]) -> tuple[dict[str, dict], list[str], list[dict]]:
+    """Failing test -> block, failing tests no block names, blocks that name no failing test."""
+    covered: dict[str, dict] = {}
+    for block in blocks:
+        for wanted in block["tests"]:
+            for test_id in failed:
+                if wanted == test_id or wanted == test_id.split(" (")[0] or test_name(wanted) == test_name(test_id):
+                    covered.setdefault(test_id, block)
+    uncovered = [t for t in failed if t not in covered]
+    idle = [b for b in blocks if not any(covered.get(t) is b for t in covered)]
+    return covered, uncovered, idle
+
+
 def summary_line(text: str) -> str:
     for line in reversed(text.strip().split("\n")):
         if re.search(r"\b(passed|failed|error|Ran \d+ test|OK|FAILED)\b", line):
@@ -122,8 +183,20 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--since", required=True, help="commit whose test files run against the working tree")
     parser.add_argument("--project", type=Path, default=None, help="a path inside the repository (default: cwd)")
     parser.add_argument("--python", default=None, help="interpreter that has the project's dependencies (default: the project's .venv, else python on PATH)")
+    parser.add_argument("--reasons", type=Path, default=None, help="file of allowed failures: test lines, then indented input: and quote: lines per block")
     parser.add_argument("--report-only", action="store_true", help="print the report and exit 0 whatever the result")
     args = parser.parse_args(argv)
+    blocks: list[dict] = []
+    if args.reasons is not None:
+        if not args.reasons.is_file():
+            print(f"preserve: --reasons {args.reasons} is not a file", file=sys.stderr)
+            return 2
+        blocks, problems = read_reasons(args.reasons)
+        if problems:
+            print(f"preserve: {args.reasons} is not a usable reasons file", file=sys.stderr)
+            for problem in problems:
+                print(f"  {problem}", file=sys.stderr)
+            return 2
 
     start = (args.project or Path.cwd()).resolve()
     top = git(start, "rev-parse", "--show-toplevel", check=False)
@@ -152,16 +225,31 @@ def main(argv: list[str]) -> int:
     print(f"preserve: {len(test_files)} test file(s) from {commit[:10]} run in place with {runner} against the working tree")
     if summary:
         print(f"  {summary}")
+    # A test that raises because the code now rejects its input is an ERROR to the runner and a
+    # failure to the policy, so a block may cover it. A file that could not run is never covered.
+    waivable = failed + [e for e in errors if "_FailedTest" not in e and "before running the tests" not in e]
+    covered, uncovered, idle = match_reasons(waivable, blocks) if blocks else ({}, waivable, [])
+    uncovered += [e for e in errors if e not in waivable]
     for name in failed[:MAX_LISTED]:
-        print(f"  FAILED {name}")
+        block = covered.get(name)
+        print(f"  FAILED {name}" + (f"\n         reason: input {block['input']}; quote {block['quote']}" if block else ""))
     for name in errors[:MAX_LISTED]:
-        print(f"  ERROR  {name}")
+        block = covered.get(name)
+        print(f"  ERROR  {name}" + (f"\n         reason: input {block['input']}; quote {block['quote']}" if block else ""))
     hidden = len(failed) + len(errors) - MAX_LISTED
     if hidden > 0:
         print(f"  ... {hidden} more")
     if errors:
         print("  An ERROR is a test that raised instead of asserting, or could not run (import, fixture, or collection).")
         print(f"  Ran with {python}; pass --python <interpreter> if the project's dependencies live elsewhere.")
+    for block in idle:
+        print(f"  Reasons block at line {block['line']} names no failing test: {', '.join(block['tests'])}")
+    if blocks and uncovered:
+        print(f"  {len(uncovered)} test(s) have no reason; each needs a code fix or its own block in {args.reasons}.")
+        return 0 if args.report_only else 1
+    if blocks and covered:
+        print(f"  {len(covered)} test(s) waived, each with an input and a quoted sentence in {args.reasons}. Carry the blocks into the reply.")
+        return 0
     if failed or errors:
         print("  Each failure needs either a code fix or the playbook's allowed reason before the commit.")
         return 0 if args.report_only else 1
