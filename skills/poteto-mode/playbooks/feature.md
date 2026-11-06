@@ -24,7 +24,7 @@ Run every step in order. Skip a step only as the Playbooks paragraph of the pote
 
    Search the repository for each. An existing pattern records an earlier taste decision, so overruling one has to be visible.
 
-   Brief one read-only reviewer on the `trail reviewer` role with the spec by path and the way to run the integrated result. If you edited the spec, name the version the task gave you, such as `git show <start-commit>:<path>`. Leave out your plan, briefs, tests, and your restatement of the goal. It runs the result on inputs it picks from the spec and reports each place where the behavior differs from the spec text. If you cannot spawn the reviewer, report the spec review as not run.
+   Brief one read-only reviewer on the `trail reviewer` role with the spec by path and the way to run the integrated result. If you edited the spec, give the version the task gave you instead, such as `git show <commit>:<path>` at the commit the task started from. Leave out your plan, briefs, tests, and your restatement of the goal. It runs the result on inputs it picks from the spec and reports each place where the behavior differs from the spec text. If you cannot spawn the reviewer, report the spec review as not run.
 6. Rebase into small, ordered commits. Stack follow-ups. Keep the step 4 branch, per the **Worktree** rule in `playbooks/opening-a-pr.md`. If the project has no git repository, run `git init` in the directory that holds the project's files, and commit on its first branch.
    Call the Skill tool with `principle-sequence-verifiable-units`, building, verifying, and committing each small unit before the next.
 7. If the design is contested, call the Skill tool with `interrogate` before shipping. Otherwise mark this step `skipped: <reason>`.
