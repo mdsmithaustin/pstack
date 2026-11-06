@@ -4,7 +4,7 @@ This receipt covers the #425 change. The architect trigger in `task-triggers.md`
 
 **The one-module case shows no separation.** `feature-one-module-run` asks for a two-function `--pairs` option on the one-module `tally` fixture. Every lead skipped the design fan-out under both the old and the new text, so the case guards the skip but cannot show fewer comparisons on this model. A `--format` pilot with several plausible shapes also skipped the fan-out under the old text in 2 of 2 runs.
 
-**The cross-module guard fails before and after the change.** `feature-boundary-run` fanned out in no run under either text. Under the old text, both leads loaded `architect` and then skipped the fan-out. Under the new text, no lead loaded it, and only 1 of 3 recorded a skip, because Feature step 2 then gave a skip only to a small, self-contained change. With the skip clause extended to a change with a single plausible shape, 2 of 2 leads recorded the skip. #439 tracks the guard.
+**The cross-module guard fails before and after the change.** `feature-boundary-run` fanned out in no run under either text. Under the old text, both leads loaded `architect` and then skipped the fan-out. Under the new text, no lead loaded it, and only 1 of 3 recorded a step 2 skip. Feature step 2 then granted a skip only to a small, self-contained change. With the skip clause extended to a change with a single plausible shape, 2 of 2 leads recorded the skip. #439 tracks the guard.
 
 **The architect run waited for the judge.** In `architect-run` at the new text, the lead spawned the cross-judge after all three runners finished, waited for its completion notice, and made its first graft write after it. It picked the judge's top base and recorded the deciding criterion. The trace carries no judge-completion event, so this order was read by hand from the lead transcript. #432 tracks an oracle for it.
 
@@ -14,6 +14,7 @@ This receipt covers the #425 change. The architect trigger in `task-triggers.md`
 - Old text: `d9a615d3`, trunk before the change. New text: `c07e0fd5`. A later commit on the branch changes the Perf issue and Refactoring architect steps, which these Feature cases do not reach.
 - Variant: `91e05bde`, an unpublished commit that added "even if you already favor one" to the trigger and Feature step 2. The branch does not keep it.
 - Skip clause: `b5dd45b9`, an unpublished commit on `027f6e41` with the branch's final Feature step 2 and arena text. Its `feature-one-module-run` bound the routing and real-artifact checks but ran with the task tools off. The committed case turns them on, as `feature-run` does.
+- A step 2 skip counts as recorded when the lead marked the step skipped in its worklist or its posted numbered list. A reason that appears only in the final reply does not count.
 - The `--format` pilot was an unpublished case with the turn `add a --format option that prints the counts as text, csv, or json. text stays the default and byte-identical. verify all three.` on `tally`, graded by `design-ladder-spares-small-changes`.
 
 ## Results
