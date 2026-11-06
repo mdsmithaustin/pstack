@@ -16,7 +16,7 @@ the reasoning-effort field on `spawn_agent`; `-c model_reasoning_effort=<value>`
 
 ## Injected skills
 
-A `$name` mention in a user prompt injects that skill's whole `SKILL.md` as a `<skill>` block with its name and path. That block is your read of the file. Do not read the file again. Read the files it references only when a step needs them.
+A `$name` mention in a user prompt injects that skill's whole `SKILL.md` as a `<skill>` block with its name and path. While that block is in your context, it is your read of the file, so do not read the file again. Read the files it references only when a step needs them.
 
 ## Writer isolation
 
