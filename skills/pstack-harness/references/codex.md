@@ -17,3 +17,13 @@ the reasoning-effort field on `spawn_agent`; `-c model_reasoning_effort=<value>`
 ## Writer isolation
 
 Codex's `workspace-write` sandbox keeps `.git` read-only, so `git worktree add` fails there.
+
+## Read skill files
+
+`exec_command` cuts output that is longer than its `max_output_tokens`. Read each skill file in its own call with `read-chunk.py`. Set the call's `max_output_tokens` to `<n>`, and pass the same `<n>` to the script.
+
+```sh
+python3 "<installed skills root>/pstack-harness/scripts/read-chunk.py" "<file>" --max-output-tokens <n> --chunk 1
+```
+
+The last output line names the chunk and the chunk count, such as `chunk 1 of 3`. Read the remaining chunks in order with `--chunk 2`, `--chunk 3`, and so on, before you act on the file. If a chunk's output still warns that it was cut, lower `<n>`. If a line is too long for `<n>`, the script exits 1 without file content and names the smallest `<n>` it accepts. After any change to `<n>`, start again at chunk 1.
