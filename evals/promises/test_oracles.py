@@ -477,6 +477,8 @@ class SourceFileCount(unittest.TestCase):
         design_events, design = codex_spawn(5, "design_ordered", "persona: poteto-agent\n\nI am using the architect and poteto-mode skills for this "
                                                                  "sketch. I will compare the sorted-record design with per-member date sets.")
         sicko_events, sicko = codex_spawn(5, "comments_implementation", "Yes... Ha ha ha... Yes!")
+        docs_events, docs = codex_spawn(5, "docs_review", "persona: poteto-agent\nI’m applying the documentation-impact and technical-writing skills "
+                                                          "to check the README against the requested behavior and implementation.\n")
         tests = {"seq": 5, "tool": "Agent", "persona": "poteto-agent",
                  "prompt_head": "Write the failing tests for the --json flag from the spec. Write tests only; do not touch roster/__main__.py."}
         explore = {"seq": 5, "tool": "Agent", "persona": "Explore", "subagent_type": "Explore",
@@ -484,7 +486,7 @@ class SourceFileCount(unittest.TestCase):
         test_role = {"seq": 5, "tool": "Agent", "persona": "general-purpose",
                      "prompt_head": "Role: `feature` test delegate. Write the failing tests for the --json flag from README.md."}
         for events, spawn in ((design_events, dict(design, persona="poteto-agent")), (sicko_events, dict(sicko, persona="comment-sicko")),
-                              ([], tests), ([], explore), ([], test_role)):
+                              (docs_events, dict(docs, persona="poteto-agent")), ([], tests), ([], explore), ([], test_role)):
             with self.subTest(spawn=spawn["prompt_head"] or spawn["x_child_first_reply"]):
                 result = self.verdict(self.CHANGE, self.DONE, spawns=[spawn], events=events)
                 self.assertEqual(result["verdict"], PASS, result)
