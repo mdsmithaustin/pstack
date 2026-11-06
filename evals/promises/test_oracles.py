@@ -5032,6 +5032,8 @@ class LinearTime(unittest.TestCase):
                           "no " * (LONG // 3) + "findings pass", "Review: pass" + " with" * (LONG // 5), "a_" * (LONG // 2) + " pass",
                           "a" + "_" * LONG + "b pass", "no" + " " * (LONG // 2) + " pass" * (LONG // 10),
                           "no edits " * (LONG // 9) + "pass", "Docs review (did not run): pass " * (LONG // 31))
+        self.assert_quick(lambda reply: review_line(reply, lead=""), "\n" * LONG + "Review: pass", "completion" + " " * LONG + "pending",
+                          "is" + " " * LONG + "done", "completion pending. " * (LONG // 20))
 
     def test_a_long_run_of_relative_cds_tracks_the_checkout_in_linear_time(self):
         events = [{"seq": 50 + 2 * n + k, "kind": kind, "name": "Bash", "id": f"cd{n}", "input": {"command": f"cd d{n}"}, "ok": True}
@@ -5110,6 +5112,15 @@ class ReviewVerdictGuard(unittest.TestCase):
                      "Completion is no longer pending; the recheck did not return `pass`."):
             self.assertEqual(review_line(line)["verdict"], FAIL, line)
         self.assertEqual(review_line("Completion pending; recheck: needs changes.", lead="", reviewed=False)["verdict"], FAIL)
+
+    def test_a_reply_that_reports_completion_both_pending_and_done_goes_to_a_judge(self):
+        filler = "Changed the CLI flag parsing and the README table. " * 60
+        for lead, line in (("", "Earlier status: completion pending. Current status: work is complete. Recheck: needs changes."),
+                           ("Done. ", "Completion pending; recheck: needs changes."),
+                           ("", filler + "Earlier status: completion pending. Current status: work is complete.")):
+            result = review_line(line, lead=lead)
+            self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), line)
+            self.assertIn("completion pending", result["excerpt"].lower())
 
     def test_only_an_adverb_may_sit_between_a_negation_and_the_pass_it_fails(self):
         for line in ("Independent review: no regressions PASS", "nothing found PASS", "- no regressions **PASS**"):
