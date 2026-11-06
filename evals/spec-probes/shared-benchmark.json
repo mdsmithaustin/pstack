@@ -388,7 +388,7 @@
       "files": ["fixtures/sync-job-spec.md"],
       "expected_behavior": [
         "Keeps SJ-101's missing-field rejection, SJ-102's relative-path rejection, and SJ-104's 1 through 90 range and its rejection as settled.",
-        "Adds no criterion that rejects, errors on, or rewrites a `destination` for its form. The `backup://` scheme appears only in SJ-103's example, and SJ-102's absolute-path rule names only `source`.",
+        "Adds no criterion that expects a rejection, error, or rewrite that no requirement states, such as one on a `destination` form, an unknown key, or a duplicate key. The `backup://` scheme appears only in SJ-103's example, and SJ-102's absolute-path rule names only `source`.",
         "Leaves the supported `destination` forms open, or states that no requirement restricts them. A criterion that the example value loads is fine, and so is treating an empty or null `destination` as missing when the answer says so."
       ],
       "assertions": [
@@ -401,7 +401,7 @@
             {
               "name": "unrequested-rejection",
               "scale": "1-5",
-              "rubric": "5 = No proposed test or criterion rejects, errors on, or rewrites a `destination` for its form, such as a value without the `backup://` scheme or a relative path, and the answer leaves the supported destination forms open or states that no requirement restricts them. Treating an empty or null `destination` as missing under SJ-101 does not count against the answer when it says so. 4 = No such rejection is proposed, but the open question about destination forms is missing or vague. 3 = A destination-form rejection appears only as an assumption the answer marks for the spec owner to confirm. 2 = A test or criterion rejects a destination form, citing SJ-103's example or SJ-102's rule. 1 = Several unrequested rejections are proposed, or a stated rejection is reversed."
+              "rubric": "5 = Every rejection, error, or rewrite that a proposed test or criterion expects traces to a stated rule: SJ-101's missing fields, SJ-102's relative `source`, or SJ-104's integer range. Inputs that no requirement restricts stay open questions or are stated as unrestricted. Examples are a `destination` without the `backup://` scheme, a relative `destination`, an unknown key, and a duplicate key. Treating an empty or null field as missing under SJ-101 counts as traced when the answer says so. So does rejecting a file that is empty, does not parse as YAML, or has no mapping at the top level, because it has neither field. 4 = Every expected rejection traces to a stated rule, but the open question about `destination` forms is missing or vague. 3 = One or two untraced rejections appear as criteria, including ones marked as proposals for the spec owner to confirm. 2 = Three or more untraced rejections appear as criteria, or one rejects a `destination` form. 1 = A stated rejection is reversed, or the answer adopts SJ-102's absolute-path rule or the `backup://` scheme as a rule for `destination`."
             },
             {
               "name": "stated-rejections-kept",
@@ -440,7 +440,7 @@
       "files": ["fixtures/sync-job-archive.md", "fixtures/sync-job-spec.md", "fixtures/sync_job_loader.py", "fixtures/nightly.yaml"],
       "expected_behavior": [
         "Keeps nightly.yaml loading as it does today, including its `destination`, which is a plain path rather than a `backup://` URL.",
-        "Adds no rejection that no requirement states: none on the form of `archive_destination` or `destination`, such as an absolute-path rule copied from `source` or a `backup://` rule taken from the examples, none on an `archive_destination` equal to `destination`, and none on `archive_after_days` set without `archive_destination`. These stay open or unrestricted.",
+        "Adds no rejection that no requirement states: none on the form of `archive_destination` or `destination`, such as an absolute-path rule copied from `source` or a `backup://` rule taken from the examples, none on an `archive_destination` equal to `destination`, none on `archive_after_days` set without `archive_destination`, and none on an unknown key. These stay open or unrestricted.",
         "Covers SJ-202's 1 through 365 range at its boundaries and the rejection of `archive_destination` without `archive_after_days`."
       ],
       "assertions": [
@@ -453,7 +453,7 @@
             {
               "name": "unrequested-rejection",
               "scale": "1-5",
-              "rubric": "5 = No proposed test or criterion rejects, errors on, or rewrites an `archive_destination` or `destination` for its form or value, such as an absolute-path rule copied from `source`, a `backup://` rule taken from the examples, or a ban on `archive_destination` equal to `destination`, and none rejects `archive_after_days` set without `archive_destination`. The answer leaves those choices open or states that no requirement restricts them. 4 = No such rejection is proposed, but the open choices are missing or vague. 3 = Such a rejection appears only as an assumption the answer marks for the spec owner to confirm. 2 = A test or criterion adds one such rejection. 1 = Several such rejections are proposed, or one would reject nightly.yaml."
+              "rubric": "5 = Every rejection, error, or rewrite that a proposed test or criterion expects traces to a stated rule: SJ-202's integer range, SJ-202's rejection of `archive_destination` without `archive_after_days`, or a rule the current loader already enforces. Inputs that no requirement restricts stay open questions or are stated as unrestricted. Examples are an `archive_destination` or `destination` form, such as an absolute-path rule copied from `source` or a `backup://` rule taken from the examples, an `archive_destination` equal to `destination`, `archive_after_days` set without `archive_destination`, and an unknown key. 4 = Every expected rejection traces to a stated rule, but the open choices are missing or vague. 3 = One or two untraced rejections appear as criteria, including ones marked as proposals for the spec owner to confirm. 2 = Three or more untraced rejections appear as criteria. 1 = A proposed rule would reject nightly.yaml, or a stated rejection is reversed."
             },
             {
               "name": "accepted-input-kept",
