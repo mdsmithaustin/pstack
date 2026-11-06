@@ -391,7 +391,11 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/autopilot-stack.md",
-     "quote": "The deliverable is the verified PRs, each stack reviewable bottom-up in the resolved forge, every PR carrying its verifier verdict in the PR body or a comment. After the handoff, nobody pushes without the operator's go."
+     "quote": "The deliverable is the verified PRs, each stack reviewable bottom-up in the resolved forge, every PR carrying its verifier verdict in the PR body or a comment."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/autopilot-stack.md",
+     "quote": "After the handoff, nobody pushes without the operator's go."
     },
     {
      "file": "skills/poteto-mode/playbooks/autopilot-stack.md",
