@@ -121,13 +121,13 @@ For a migration, state the bar in the prompt:
 You might be wondering whether every change needs this. No. Most changes need none of it. A rough ladder:
 
 - A small, finished change you're unsure about needs `/interrogate` alone.
-- A change that crosses function boundaries or moves ownership earns `/architect`, which brings `/arena` with it. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary.
+- A change that crosses two or more source files and admits several plausible shapes earns `/architect`, which brings `/arena` with it. An additive change to one module goes straight to implementation. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary.
 - A standalone decision where independent attempts would help, like naming, formats, or an algorithm, is `/arena` directly.
 - A coverage matrix, set of parallel checks, or race with declared arms is `/swarm`.
 - An open question you could answer by running something, like a layout, a timing, or an approach, gets a prototype, not a debate.
 - A contested design that's expensive to reverse gets `/architect`, then `/interrogate` before shipping.
 - Work that spans several PRs gets a plan, written after the design settles.
 
-`/poteto-mode` already applies this ladder. Boundary-crossing work triggers `/architect` on its own, except for a confirmed bug with one localized repair. Unresolved design choices or repair scope still need architecture work. Reach for these directly when you want more or less scrutiny than the default.
+`/poteto-mode` already applies this ladder. Multi-file work with several plausible shapes triggers `/architect` on its own, except for a confirmed bug with one localized repair. Unresolved design choices or repair scope still need architecture work. Reach for these directly when you want more or less scrutiny than the default.
 
 Next: [Build and clean the change](./05-build-and-clean.md).

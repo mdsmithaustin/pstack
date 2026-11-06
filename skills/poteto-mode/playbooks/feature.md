@@ -5,7 +5,7 @@
 Run every step in order. Skip a step only as the Playbooks paragraph of the poteto-mode skill allows, and mark it `skipped: <reason>` with a reason that covers that step alone. Where a step says how to run in a new project, run it that way instead of skipping it.
 
 1. `how` over the affected subsystem. Call the Skill tool with `how`, and ask it to list the components, hooks, helpers, and UI patterns the repository already has for this job. Reuse them in the design and the step 4 brief. Extend a shared one only when every caller keeps its behavior. Give the reason for each new one. The current code's behavior is the spec for everything the task does not explicitly change. Call the Skill tool with `principle-redesign-from-first-principles`. Keep that behavior, and say so in the step 4 brief. In an empty or new project, run the step anyway and record `no existing code` as its outcome.
-2. `architect` for feature design exploration when the change crosses a function boundary or admits several valid shapes. Call the Skill tool with `architect` for it. A small, self-contained change keeps this step with `skipped: <reason>`.
+2. `architect` for feature design exploration when the change crosses two or more source files and admits several plausible shapes. Call the Skill tool with `architect` for it. A small, self-contained change keeps this step with `skipped: <reason>`.
 3. Write the throughput checkpoint as four items in the same worklist. A dimension that does not apply (single file, no fan-out) still gets its item, marked `skipped: <reason>`:
    - **Blocking first steps.** Gates run before fan-out.
    - **Independent workstreams.** Disjoint files, services, or layers parallelize. Shared writes serialize.
