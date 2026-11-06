@@ -1,0 +1,21 @@
+{
+ "promises": [
+  "feature-counts-only-source-files",
+  "poteto-mode-routes-to-playbook"
+ ],
+ "fixture": "roster",
+ "entry": "poteto-mode",
+ "turns": [
+  "add a --json flag that prints the team counts as one json object. the text output stays as it is. document the flag in the readme."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "feature"
+ },
+ "env": {
+  "todo_tools": true
+ }
+}
