@@ -1,0 +1,3 @@
+source: /srv/app/data
+destination: /mnt/copies/nightly
+keep: 14
