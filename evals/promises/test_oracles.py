@@ -436,6 +436,7 @@ class SourceFileCount(unittest.TestCase):
     CHANGE = ("roster/__main__.py", "tests/test_json.py", "README.md", ".gitignore")
     BELOW = "Step 4 implementation delegation: skipped: implementation delegation below threshold. One source file, one workstream."
     DONE = [{"text": BELOW, "state": "completed"}]
+    STEP_FOUR_CLOSED = [{"text": "4. Implement or delegate", "state": "completed"}]
 
     def verdict(self, changed, items, spawns=(), harness="claude-code", events=(), exit_code=0):
         tmp = tempfile.TemporaryDirectory()
@@ -510,13 +511,14 @@ class SourceFileCount(unittest.TestCase):
                 self.assertEqual(result["verdict"], verdict, result)
 
     def test_below_threshold_record_needs_an_executed_close(self):
-        implemented = {"text": "4. Implement or delegate", "state": "completed"}
         for items in ([{"text": "4. Implement directly and close this item with skipped: implementation delegation below threshold, the counts, "
                                 "and the reason the work is one workstream.", "state": "pending"}],
                       [{"text": "4. Count source files; <3 and 1 workstream -> implement directly, skipped: implementation delegation below threshold",
                         "state": "pending"}],
-                      [{"text": "2. architect: skipped: design delegation below threshold for a one-function change", "state": "completed"}, implemented],
-                      [{"text": "3. Smallest safe decomposition: skipped: test delegation below threshold", "state": "completed"}, implemented]):
+                      [{"text": "2. architect: skipped: design delegation below threshold for a one-function change", "state": "completed"},
+                       *self.STEP_FOUR_CLOSED],
+                      [{"text": "3. Smallest safe decomposition: skipped: test delegation below threshold", "state": "completed"},
+                       *self.STEP_FOUR_CLOSED]):
             with self.subTest(item=items[0]["text"]):
                 result = self.verdict(self.CHANGE, items)
                 self.assertEqual(result["verdict"], FAIL, result)
@@ -543,23 +545,26 @@ class SourceFileCount(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 result = self.verdict(self.CHANGE, [{"text": "4. " + phrase, "state": "completed"}])
                 self.assertEqual(result["verdict"], PASS, result)
-        plan = {"explanation": "skipped: implementation delegation below threshold; 1 source file",
-                "plan": [{"step": "4. Implement or delegate", "status": "completed"}]}
-        code = 'await tools.update_plan({explanation: "skipped: implementation delegation below threshold; 1 source file", ' \
-               'plan: [{step: "4. Implement or delegate", status: "completed"}]});'
-        for name, given in (("update_plan", plan), ("exec", {"code": code})):
-            with self.subTest(carrier=name):
-                call = {"seq": 3, "turn": 0, "kind": "tool_call", "name": name, "id": "p", "input": given}
-                result = self.verdict(self.CHANGE, codex.plan_items(plan), harness="codex", events=[call])
-                self.assertEqual(result["verdict"], PASS, result)
+
+    def test_plan_explanation_counts_when_its_update_closes_step_four(self):
+        for status, verdict in (("completed", PASS), ("pending", FAIL), ("in_progress", FAIL)):
+            plan = {"explanation": "skipped: implementation delegation below threshold; 1 source file",
+                    "plan": [{"step": "4. Implement or delegate", "status": status}]}
+            code = 'await tools.update_plan({explanation: "skipped: implementation delegation below threshold; 1 source file", ' \
+                   f'plan: [{{step: "4. Implement or delegate", status: "{status}"}}]}});'
+            for name, given in (("update_plan", plan), ("exec", {"code": code})):
+                with self.subTest(carrier=name, status=status):
+                    call = {"seq": 1, "turn": 0, "kind": "tool_call", "name": name, "id": "p", "input": given}
+                    result = self.verdict(self.CHANGE, codex.plan_items(plan), harness="codex", events=[call])
+                    self.assertEqual(result["verdict"], verdict, result)
 
     def test_exec_plan_explanations_with_escapes_pass(self):
         for quote in ('"', "'", '`'):
             for prefix in (r'\a' * 40, '\\' + quote, '\\\\', r'first line\nsecond line'):
                 with self.subTest(quote=quote, prefix=prefix):
                     code = 'await tools.update_plan({explanation: ' + quote + prefix + self.BELOW + quote + '});'
-                    call = {"seq": 3, "kind": "tool_call", "name": "exec", "input": {"code": code}}
-                    result = self.verdict(self.CHANGE, [], harness="codex", events=[call])
+                    call = {"seq": 1, "kind": "tool_call", "name": "exec", "input": {"code": code}}
+                    result = self.verdict(self.CHANGE, self.STEP_FOUR_CLOSED, harness="codex", events=[call])
                     self.assertEqual(result["verdict"], PASS, result)
 
     def test_exec_plan_explanations_reject_unterminated_escapes(self):
@@ -570,7 +575,7 @@ from test_oracles import SourceFileCount
 
 test = SourceFileCount()
 try:
-    result = test.verdict(test.CHANGE, [], harness="codex", events=json.load(sys.stdin))
+    result = test.verdict(test.CHANGE, test.STEP_FOUR_CLOSED, harness="codex", events=json.load(sys.stdin))
     print(json.dumps(result))
 finally:
     test.doCleanups()
@@ -579,7 +584,7 @@ finally:
             for ending in ('', '\\' + quote):
                 with self.subTest(quote=quote, ending=ending):
                     code = 'await tools.update_plan({explanation: ' + quote + self.BELOW + r'\a' * 40 + ending
-                    call = {"seq": 3, "kind": "tool_call", "name": "exec", "input": {"code": code}}
+                    call = {"seq": 1, "kind": "tool_call", "name": "exec", "input": {"code": code}}
                     run = subprocess.run([sys.executable, '-c', probe], cwd=HERE, input=json.dumps([call]),
                                          text=True, capture_output=True, check=True, timeout=10)
                     result = json.loads(run.stdout)

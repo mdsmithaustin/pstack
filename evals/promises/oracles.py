@@ -1561,22 +1561,28 @@ def spawn_role(view, spawn):
 
 
 def closed_notes(view):
+    want = (view.case.get("expect") or {}).get("playbook")
+    shape = playbook_shape(want, view.skills_root) if want else None
+    step_four = next((step for step in (shape or {}).get("steps", []) if step["n"] == 4), None)
     task_status = {str(call["input"].get("taskId")): call["input"]["status"] for call in view.tool_calls
                    if call.get("name") == "TaskUpdate" and (call.get("input") or {}).get("status")}
-    notes = []
+    notes, step_four_closed_at = [], set()
     for snap in view.worklist:
         for item in snap.get("items", []):
             state, text = item.get("state") or "", item.get("text") or ""
             if state == "completed" or state.startswith("skipped"):
                 detail = state.partition(": ")[2]
                 notes.append(text if detail in text else f"{state} {text}")
+                if step_four and item_matches_step(text, step_four):
+                    step_four_closed_at.add(snap.get("seq"))
     for call in view.tool_calls:
         given = call.get("input") or {}
+        closes_step_four = call.get("seq") in step_four_closed_at
         if call.get("name") == "TaskUpdate" and task_status.get(str(given.get("taskId"))) == "completed":
             notes.append(str(given.get("description") or ""))
-        elif call.get("name") == "update_plan":
+        elif closes_step_four and call.get("name") == "update_plan":
             notes.append(str(given.get("explanation") or ""))
-        elif call.get("name") == "exec" and "update_plan(" in str(given.get("code")):
+        elif closes_step_four and call.get("name") == "exec" and "update_plan(" in str(given.get("code")):
             notes += [match.group(2) for match in PLAN_EXPLANATION.finditer(str(given.get("code")))]
     return notes
 
