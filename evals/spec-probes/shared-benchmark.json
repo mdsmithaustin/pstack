@@ -402,7 +402,15 @@
               "name": "unrequested-rejection",
               "scale": "1-5",
               "rubric": "5 = Every rejection, error, or rewrite that a proposed test or criterion expects traces to a stated rule: SJ-101's missing fields, SJ-102's relative `source`, or SJ-104's integer range. Inputs that no requirement restricts stay open questions or are stated as unrestricted. Examples are a `destination` without the `backup://` scheme, a relative `destination`, an unknown key, and a duplicate key. Treating an empty or null field as missing under SJ-101 counts as traced when the answer says so. So does rejecting a file that is empty, does not parse as YAML, or has no mapping at the top level, because it has neither field. 4 = Every expected rejection traces to a stated rule, but the open question about `destination` forms is missing or vague. 3 = One or two untraced rejections appear as criteria, including ones marked as proposals for the spec owner to confirm. 2 = Three or more untraced rejections appear as criteria, or one rejects a `destination` form. 1 = A stated rejection is reversed, or the answer adopts SJ-102's absolute-path rule or the `backup://` scheme as a rule for `destination`."
-            },
+            }
+          ]
+        },
+        {
+          "name": "stated-rejections-kept",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
             {
               "name": "stated-rejections-kept",
               "scale": "1-5",
@@ -454,7 +462,15 @@
               "name": "unrequested-rejection",
               "scale": "1-5",
               "rubric": "5 = Every rejection, error, or rewrite that a proposed test or criterion expects traces to a stated rule: SJ-202's integer range, SJ-202's rejection of `archive_destination` without `archive_after_days`, or a rule the current loader already enforces. Inputs that no requirement restricts stay open questions or are stated as unrestricted. Examples are an `archive_destination` or `destination` form, such as an absolute-path rule copied from `source` or a `backup://` rule taken from the examples, an `archive_destination` equal to `destination`, `archive_after_days` set without `archive_destination`, and an unknown key. 4 = Every expected rejection traces to a stated rule, but the open choices are missing or vague. 3 = One or two untraced rejections appear as criteria, including ones marked as proposals for the spec owner to confirm. 2 = Three or more untraced rejections appear as criteria. 1 = A proposed rule would reject nightly.yaml, or a stated rejection is reversed."
-            },
+            }
+          ]
+        },
+        {
+          "name": "accepted-input-kept",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
             {
               "name": "accepted-input-kept",
               "scale": "1-5",
