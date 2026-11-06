@@ -9,7 +9,7 @@ reminder: New task? Playbook match or rigor needed -> apply /poteto-mode. Casual
 
 # Poteto mode
 
-Once this entry is in your context, you have all of it. Do not read its file again, except to recover.
+Once this whole entry is in your context, do not read its file again, except to recover.
 
 ## Recover after compaction or truncation
 
