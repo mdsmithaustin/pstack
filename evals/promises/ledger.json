@@ -1098,7 +1098,11 @@
     },
     {
      "file": "skills/documentation-impact/SKILL.md",
-     "quote": "`independent review not required` only when evidence shows that an internal change has no documentation impact."
+     "quote": "`independent review required` when the change edits maintained documentation, changes a public workflow or a documented contract such as a default or flag, or leaves a documentation gap unresolved."
+    },
+    {
+     "file": "skills/documentation-impact/SKILL.md",
+     "quote": "`independent review not required` only when evidence shows that none of these holds."
     },
     {
      "file": "skills/documentation-impact/SKILL.md",
@@ -1148,7 +1152,7 @@
   },
   "documentation-impact-independent-review-pass-required": {
    "check": "live",
-   "claim": "When the author result requires it, a different agent reviews without editing and completion waits for a current `pass`, repairing and re-reviewing on findings.",
+   "claim": "When the author result requires it, a different agent reviews without editing and completion waits for a current `pass`, with one repair round and a recheck of that repair on findings.",
    "harness_sensitive": true,
    "live_case": "fixture with a CLI flag change and a README; prompt `/poteto-mode add --json; update whatever docs need it` then `/documentation-impact review this change's documentation coverage without editing files.`; pass when the author pass runs before completion, returns an author result, and review mode edits nothing.",
    "owners": [
@@ -1201,6 +1205,59 @@
    "harness_sensitive": false,
    "owners": [
     "skills/documentation-impact/SKILL.md"
+   ]
+  },
+  "documentation-review-one-repair-round": {
+   "check": "static",
+   "claim": "A documentation review gets one repair round, and Babysit and Shipping hold the same bound. The recheck, scoped or full, blocks `pass` on an unresolved finding or an established omission or incorrect claim. A recheck that does not pass ends with completion reported as pending and its open findings, instead of another round.",
+   "evidence": [
+    {
+     "file": "skills/documentation-impact/SKILL.md",
+     "quote": "Allow one repair round per review."
+    },
+    {
+     "file": "skills/documentation-impact/SKILL.md",
+     "quote": "The recheck after that round, scoped or full, returns `needs changes` when a finding remains unresolved or it establishes an omission or incorrect claim."
+    },
+    {
+     "file": "skills/documentation-impact/SKILL.md",
+     "quote": "It reports wording suggestions as notes and returns `pass` when only notes remain."
+    },
+    {
+     "file": "skills/documentation-impact/SKILL.md",
+     "quote": "When the recheck does not return `pass`, return its open findings to the caller as pending instead of starting another round."
+    },
+    {
+     "file": "skills/poteto-mode/references/task-triggers.md",
+     "quote": "If the recheck does not return `pass`, report completion as pending with its open findings instead of starting another round."
+    },
+    {
+     "file": "skills/poteto-mode/references/task-triggers.md",
+     "quote": "Repair the findings in one round, then recheck that repair. Rerun the full review instead when the repair changes behavior or contract claims."
+    },
+    {
+     "file": "skills/poteto-mode/references/task-triggers.md",
+     "quote": "If the recheck does not pass, report completion as pending with its open findings instead of starting another round. Autopilot and Shipping verdict rounds keep their own stop rules."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/babysit.md",
+     "quote": "Send findings to the author for the one repair round that documentation-impact allows, then refresh the author result and, when required, the independent review verdict. If the recheck does not return `pass`, report its open findings as pending instead of starting another round."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/babysit.md",
+     "quote": "open findings after the documentation repair round"
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/shipping.md",
+     "quote": "Return findings to the author for the one repair round that documentation-impact allows, then recheck the resulting artifact. Open findings after that recheck stop the verified run per step 2 instead of starting another round."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/documentation-impact/SKILL.md",
+    "skills/poteto-mode/playbooks/babysit.md",
+    "skills/poteto-mode/playbooks/shipping.md",
+    "skills/poteto-mode/references/task-triggers.md"
    ]
   },
   "escape-hatch-stops-at-dead-end": {
@@ -2213,6 +2270,29 @@
    "harness_sensitive": false,
    "owners": [
     "skills/no-comments/SKILL.md"
+   ]
+  },
+  "no-comments-skips-diff-without-comments": {
+   "check": "static",
+   "claim": "On a diff that adds or changes no comments, /no-comments reports that and stops without spawning Comment Sicko. Doc comments, docstrings, and lint or type suppressions count as comments, and an unsure call spawns it.",
+   "evidence": [
+    {
+     "file": "skills/no-comments/SKILL.md",
+     "quote": "If the scope is a diff that adds or changes no comments, report that and stop without spawning Comment Sicko."
+    },
+    {
+     "file": "skills/no-comments/SKILL.md",
+     "quote": "Doc comments, docstrings, and lint or type suppressions such as `eslint-disable`, `@ts-ignore`, and `# noqa` count as comments. When unsure, spawn it."
+    },
+    {
+     "file": "skills/poteto-mode/references/task-triggers.md",
+     "quote": "Before review, when the diff adds or changes comments, doc comments, docstrings, or lint or type suppressions → call the Skill tool with `no-comments`."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/no-comments/SKILL.md",
+    "skills/poteto-mode/references/task-triggers.md"
    ]
   },
   "no-comments-spawns-comment-sicko": {
@@ -8340,6 +8420,15 @@
    ],
    "text": "[Understand the code](./03-understand.md). A read-only investigation, then `/how`, `/why`, `/poteto-teach`, and `/recall` before you edit anything."
   },
+  "6fabd625dacc": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "no-comments-skips-diff-without-comments",
+   "sources": [
+    "port"
+   ],
+   "text": "When the diff adds or changes no comments, `/no-comments` says so and stops without spawning Comment Sicko."
+  },
   "6fd59d1053d1": {
    "class": "context",
    "file": "09-make-it-yours.md",
@@ -9428,15 +9517,6 @@
    ],
    "text": "Prototypes are planning with code."
   },
-  "8d21cb86a7e2": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "documentation-impact-independent-review-pass-required",
-   "sources": [
-    "port"
-   ],
-   "text": "Findings are repaired and reviewed again."
-  },
   "8d4d37d0397c": {
    "class": "promise",
    "file": "02-poteto-mode.md",
@@ -9667,6 +9747,15 @@
     "port"
    ],
    "text": "It also refuses when the base branch has a merge queue, because the queue would land the PR later without rechecking the verdict or the bot reviews."
+  },
+  "92d267416820": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "no-comments-skips-diff-without-comments",
+   "sources": [
+    "port"
+   ],
+   "text": "Doc comments, docstrings, and lint or type suppressions count as comments."
   },
   "92f59e865bbb": {
    "class": "context",
@@ -11272,6 +11361,15 @@
    ],
    "text": "A surprise in your own code gets no such pass."
   },
+  "bd67c3f179d2": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "documentation-review-one-repair-round",
+   "sources": [
+    "port"
+   ],
+   "text": "If the recheck does not pass, Poteto reports completion as pending with the open findings instead of starting another round."
+  },
   "bdb3bb40622f": {
    "class": "promise",
    "file": "03-understand.md",
@@ -11976,6 +12074,15 @@
     "port"
    ],
    "text": "You rarely need more words."
+  },
+  "d0ecc34c548f": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "documentation-impact-independent-review-pass-required",
+   "sources": [
+    "port"
+   ],
+   "text": "Findings get one repair round, and then the reviewer rechecks the repair."
   },
   "d12943b3cae9": {
    "class": "promise",

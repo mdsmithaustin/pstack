@@ -127,7 +127,7 @@ A counterexample in model terms convinces you. The PM or designer who owns the b
 
 ## Check documentation impact
 
-Before Poteto reports a substantive code or public workflow change complete, it runs [`/documentation-impact`](../../skills/documentation-impact/SKILL.md) in author mode. The author checks which reader tasks changed and updates the affected docs. The author result decides whether independent review is required. When required, a different agent reviews the artifact without editing it, and completion waits for a current verdict of `pass`. Findings are repaired and reviewed again. This also applies when the work ends without a PR.
+Before Poteto reports a substantive code or public workflow change complete, it runs [`/documentation-impact`](../../skills/documentation-impact/SKILL.md) in author mode. The author checks which reader tasks changed and updates the affected docs. The author result decides whether independent review is required. When required, a different agent reviews the artifact without editing it, and completion waits for a current verdict of `pass`. Findings get one repair round, and then the reviewer rechecks the repair. If the recheck does not pass, Poteto reports completion as pending with the open findings instead of starting another round. This also applies when the work ends without a PR.
 
 The pass checks applicable README instructions, references, examples, upgrade guidance, release notes, and diagrams against the implementation. It records the examined revision or local snapshot and the checks run. The skill defines the author result and when it requires independent review. No new spec or documentation tree is required.
 
