@@ -21,8 +21,8 @@ Classify each requirement's data shape: `numeric-range`, `collection`, `text`, `
 | Precision / overflow | numeric-range | Where can rounding, tie-breaking, precision loss, or overflow occur, and what is the exact contract: half-up or half-even, floor or truncate? |
 | Idempotency | stateful | What happens if this runs twice on the same input? |
 | Concurrency / effect order | stateful, io | If interrupted or run in parallel, what is guaranteed? |
-| Example-only properties | example | What holds in each worked example that no rule states, such as the order its items finish? Don't encode it. Add one test where it does not hold. |
-| Variant coverage | variants | Does each raised edge behave the same in every named variant? Probe it in each variant, or record why checking one variant covers the others. |
+| Example-only properties | example | What holds in each worked example that no rule states, such as the order its operations start or finish? Don't encode it. For incidental sequencing, test a different operation order while keeping values and variants fixed. Otherwise, break another example-only property. State the expected result from the rule, keeping that rule settled. |
+| Variant coverage | variants | Does each raised edge behave the same in every named variant? Probe it in each variant, or record why checking one variant covers the others. For every raised edge, name a concrete input and its expected result or open decision in each variant. |
 
 A requirement with prose but no matching shape gets one soft "unclassified, review by hand" item, not silence.
 
