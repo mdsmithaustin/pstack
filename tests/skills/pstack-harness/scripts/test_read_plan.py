@@ -117,7 +117,8 @@ class ReadPlan(unittest.TestCase):
         self.assertEqual(b''.join(self.read_within_cap(path, 300)), content)
 
     def test_a_long_plan_prints_in_pages_that_each_fit_the_cap(self):
-        content = b''.join(f'{n:04} {"p" * 14}\n'.encode() for n in range(400))
+        # Each 900-byte line fills the read budget at cap 400, so even short paths require paging.
+        content = b''.join(f'{n:04} {"p" * 894}\n'.encode() for n in range(100))
         path = self.file(content)
         self.assertGreater(len(list(self.pages(path, 400))), 1)
         self.assertEqual(b''.join(self.read_within_cap(path, 400)), content)
