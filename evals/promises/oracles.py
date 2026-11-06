@@ -1545,7 +1545,7 @@ MANIFEST_OR_IGNORE = re.compile(r"(?:^|/)(?:\.\w+ignore|pyproject\.toml)$")
 BELOW_THRESHOLD = re.compile(r"(?<!design )(?<!test )delegation\W+(?:\w+\W+){0,3}?(?:below|under)\W+(?:\w+\W+){0,3}?threshold"
                              r"|(?:below|under)\W+(?:\w+\W+){0,3}?delegation\W+threshold", re.I)
 IMPLEMENTER = re.compile(r"(?<![a-z])implement|\bfeature\W+(?:role|delegate)\b|\brole\W+feature\b|write the code")
-NOT_IMPLEMENTER = re.compile(r"review(?! findings| comments)|judge|explain|comment-sicko|read[- ]only|tests? only|test delegate")
+NOT_IMPLEMENTER = re.compile(r"\b(?:review(?! findings| comments)|judge|explain|comment-sicko|read[- ]only|tests? only|test delegate)")
 DESIGN_LABEL = re.compile(r"(?<![a-z])design(?=_|\d)|_design\b")
 LEAD_REVIEWS = re.compile(r"\bthe (?:lead|parent)(?: agent)? (?:will )?reviews?\b")
 PLAN_EXPLANATION = re.compile(r"explanation[\"']?\s*:\s*([\"'`])((?:\\.|(?!\1).)*)\1", re.S)

@@ -465,6 +465,7 @@ class SourceFileCount(unittest.TestCase):
                 ([], {"persona": "general-purpose", "prompt_head": "Implementation of the --json flag in roster/__main__.py, plus tests and README."}),
                 ([], {"persona": "general-purpose", "prompt_head": "Add the --json flag to roster/__main__.py, tests/test_json.py and README.md."}),
                 ([], {"persona": "poteto-agent", "prompt_head": "Add the --json flag in roster/__main__.py with tests. The lead will review the diff."}),
+                ([], {"persona": "poteto-agent", "prompt_head": "Add the --json flag in roster/__main__.py. Check the preview output before delivery."}),
                 ([], {"persona": "poteto-agent", "description": "Fix review findings in roster", "prompt_head": "Role: `feature` implementation owner."}),
                 (sealed_events, dict(sealed, persona="poteto-agent"))]
         for events, spawn in rows:
