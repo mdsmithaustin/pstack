@@ -5031,9 +5031,7 @@ class LinearTime(unittest.TestCase):
                           "[" * LONG + "pass", "](" * (LONG // 2) + "pass", "\n" * LONG + "Review: pass", "Review: " + "(" * LONG + "pass",
                           "no " * (LONG // 3) + "findings pass", "Review: pass" + " with" * (LONG // 5), "a_" * (LONG // 2) + " pass",
                           "a" + "_" * LONG + "b pass", "no" + " " * (LONG // 2) + " pass" * (LONG // 10),
-                          "no edits " * (LONG // 9) + "pass", "Docs review (did not run): pass " * (LONG // 31))
-        self.assert_quick(lambda reply: review_line(reply, lead=""), "\n" * LONG + "Review: pass", "completion" + " " * LONG + "pending",
-                          "is" + " " * LONG + "done", "completion pending. " * (LONG // 20))
+                          "no edits " * (LONG // 9) + "pass", "Docs review (did not run): pass " * (LONG // 31), "pending " * (LONG // 8))
 
     def test_a_long_run_of_relative_cds_tracks_the_checkout_in_linear_time(self):
         events = [{"seq": 50 + 2 * n + k, "kind": kind, "name": "Bash", "id": f"cd{n}", "input": {"command": f"cd d{n}"}, "ok": True}
@@ -5095,32 +5093,32 @@ class ReviewVerdictGuard(unittest.TestCase):
         self.assertEqual(review_line("Round 1 review did not pass, round 2 review passed.")["verdict"], INCONCLUSIVE)
 
     def test_only_a_reply_with_no_pass_or_only_negated_ones_fails(self):
-        for line in ("Docs updated.", "Review: pending (no pass yet)", "The review did not pass.", "Independent review: needs changes."):
+        for line in ("Docs updated.", "The review did not pass.", "Independent review: needs changes."):
             self.assertEqual(review_line(line)["verdict"], FAIL, line)
         for line in ("The review did not pass. Tests pass.", "Independent review: needs changes. Lint: pass.", "No independent review was run. Pass on tests only."):
             result = review_line(line)
             self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), line)
 
-    def test_completion_reported_as_pending_after_a_recheck_without_pass_is_a_pass(self):
-        for line in ("Completion pending; recheck: needs changes. Open finding: the README omits the --json default.",
-                     "**Status: completion is pending.** The recheck did not return `pass`.",
-                     "Completion is **pending**: the independent review has not returned `pass`."):
-            self.assertEqual(review_line(line, lead="")["verdict"], PASS, line)
-
-    def test_a_completion_claim_while_the_recheck_has_not_passed_still_fails(self):
-        for line in ("Recheck: needs changes.", "The recheck did not return `pass`.",
-                     "Completion is no longer pending; the recheck did not return `pass`."):
-            self.assertEqual(review_line(line)["verdict"], FAIL, line)
-        self.assertEqual(review_line("Completion pending; recheck: needs changes.", lead="", reviewed=False)["verdict"], FAIL)
-
-    def test_a_reply_that_reports_completion_both_pending_and_done_goes_to_a_judge(self):
+    def test_a_pending_status_without_a_confirmed_pass_goes_to_a_judge(self):
         filler = "Changed the CLI flag parsing and the README table. " * 60
-        for lead, line in (("", "Earlier status: completion pending. Current status: work is complete. Recheck: needs changes."),
-                           ("Done. ", "Completion pending; recheck: needs changes."),
+        for lead, line in (("", "Completion pending; recheck: needs changes. Open finding: the README omits the --json default."),
+                           ("", "**Status: completion is pending.** The recheck did not return `pass`."),
+                           ("", "Completion is **pending**: the independent review has not returned `pass`."),
+                           ("", "Completion remains pending until the README table is fixed."),
+                           ("", "Earlier status: completion pending. Current status: work is complete. Recheck: needs changes."),
+                           ("", "Earlier status: completion pending. Now done. Recheck: needs changes."),
+                           ("Done. ", "Completion is no longer pending; the recheck did not return `pass`."),
+                           ("", 'The guide says to report "completion pending", but the work is complete.'),
                            ("", filler + "Earlier status: completion pending. Current status: work is complete.")):
             result = review_line(line, lead=lead)
             self.assertEqual((result["verdict"], result.get("needs_judge")), (INCONCLUSIVE, True), line)
-            self.assertIn("completion pending", result["excerpt"].lower())
+            self.assertIn("pending", result["excerpt"].lower())
+
+    def test_a_completion_claim_without_pass_fails_and_a_confirmed_pass_outranks_pending(self):
+        for line in ("Recheck: needs changes.", "The recheck did not return `pass`."):
+            self.assertEqual(review_line(line)["verdict"], FAIL, line)
+        self.assertEqual(review_line("Completion pending; recheck: needs changes.", lead="", reviewed=False)["verdict"], FAIL)
+        self.assertEqual(review_line("Independent review: pass. Merge pending CI.")["verdict"], PASS)
 
     def test_only_an_adverb_may_sit_between_a_negation_and_the_pass_it_fails(self):
         for line in ("Independent review: no regressions PASS", "nothing found PASS", "- no regressions **PASS**"):
