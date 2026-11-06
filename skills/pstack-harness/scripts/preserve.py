@@ -78,14 +78,23 @@ def tidy(node: str, project: Path, baseline: Path) -> str:
 
 
 def run_unittest(python: str, project: Path, baseline: Path, env: dict) -> tuple[list[str], list[str], str]:
-    cmd = [python, "-m", "unittest", "discover", "-s", str(baseline), "-t", str(baseline), "-p", "test*.py"]
-    out = subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True)
-    text = out.stdout + out.stderr
-    failed = re.findall(r"^FAIL: (\S+ \([\w.]+\))", text, re.M)
-    errors = re.findall(r"^ERROR: (\S+ \([\w.]+\))", text, re.M)
-    if out.returncode not in (0, 1) and not failed and not errors:
-        errors.append(f"unittest exited {out.returncode} before running tests")
-    return failed, errors, summary_line(text)
+    """Discover per directory: unittest does not descend into a tests/ folder without __init__.py."""
+    dirs = sorted({p.parent for p in baseline.rglob("*.py") if p.name.startswith("test") or p.name.endswith("_test.py")})
+    failed, errors, summaries = [], [], []
+    for d in dirs:
+        cmd = [python, "-m", "unittest", "discover", "-s", str(d), "-t", str(d), "-p", "test*.py"]
+        out = subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True)
+        text = out.stdout + out.stderr
+        rel = d.relative_to(baseline)
+        failed += [f"{rel}/{n}" for n in re.findall(r"^FAIL: (\S+ \([\w.]+\))", text, re.M)]
+        errors += [f"{rel}/{n}" for n in re.findall(r"^ERROR: (\S+ \([\w.]+\))", text, re.M)]
+        if out.returncode == 5:
+            errors.append(f"{rel}: no tests discovered (files present but unittest found none to run)")
+        elif out.returncode not in (0, 1) and not re.search(r"^(FAIL|ERROR): ", text, re.M):
+            errors.append(f"{rel}: unittest exited {out.returncode} before running tests: {text.strip().splitlines()[-1] if text.strip() else ''}")
+        if summary_line(text):
+            summaries.append(summary_line(text))
+    return failed, errors, "; ".join(summaries)
 
 
 def summary_line(text: str) -> str:
@@ -114,7 +123,8 @@ def main(argv: list[str]) -> int:
         print(f"preserve: {args.since} is not a commit in {project}", file=sys.stderr)
         return 2
     commit = resolved.stdout.strip()
-    python = args.python or shutil.which("python") or sys.executable
+    venv = next((p for p in (project / ".venv/bin/python", project / "venv/bin/python") if p.exists()), None)
+    python = args.python or (str(venv) if venv else None) or shutil.which("python") or sys.executable
 
     with tempfile.TemporaryDirectory(prefix="pstack-preserve.") as tmp:
         baseline = Path(tmp)
@@ -141,6 +151,7 @@ def main(argv: list[str]) -> int:
         print(f"  ... {hidden} more")
     if errors:
         print("  An ERROR is a test that could not run (import, fixture, or collection), not a failing assertion.")
+        print(f"  Ran with {python}; pass --python <interpreter> if the project's dependencies live elsewhere.")
     if failed or errors:
         print("  Each failure needs either a code fix or the playbook's allowed reason before the commit.")
         return 0 if args.report_only else 1

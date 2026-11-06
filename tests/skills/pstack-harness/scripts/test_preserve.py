@@ -91,6 +91,23 @@ class Preserve(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertIn('nothing to preserve', result.stdout)
 
+    def test_tests_directory_without_init_is_discovered(self):
+        self.assertFalse((self.repo / 'tests/__init__.py').exists())
+        (self.repo / 'mod.py').write_text(NARROWED)
+        result = self.run_preserve()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('test_scheme_kept', result.stdout)
+        self.assertNotIn('no tests discovered', result.stdout)
+
+    def test_root_level_test_file_is_discovered(self):
+        (self.repo / 'test_root.py').write_text(TESTS)
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'root test')
+        (self.repo / 'mod.py').write_text(NARROWED)
+        result = self.run_preserve()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(result.stdout.count('test_scheme_kept'), 2, result.stdout)
+
     def test_unknown_commit_exits_two(self):
         result = subprocess.run([sys.executable, str(SCRIPT), '--since', 'nope', '--project', str(self.repo)],
                                 capture_output=True, text=True)
