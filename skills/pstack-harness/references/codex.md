@@ -20,10 +20,10 @@ Codex's `workspace-write` sandbox keeps `.git` read-only, so `git worktree add` 
 
 ## Read skill files
 
-A tool call cuts output that is longer than its cap and keeps the start and the end. An outer `exec` call has one cap for everything its `tools.exec_command` calls return, whatever `max_output_tokens` each of them sets. Before you read a skill file, print its read plan. Set `<n>` no higher than the smallest cap on the call that will return a range, and pass `<n>` as that range's `max_output_tokens`.
+A tool call cuts output that is longer than its cap and keeps the start and the end. An outer `exec` call has one cap for everything its `tools.exec_command` calls return, whatever `max_output_tokens` each of them sets. That outer cap is the `max_output_tokens` in the call's first-line pragma, or 10000 when the pragma sets none. Before you read a skill file, choose the caps for the calls that read it. Set `<n>` to the outer cap, or to the `max_output_tokens` you pass to each `tools.exec_command` call if that is lower. Then print the file's read plan.
 
 ```sh
 python3 "<installed skills root>/pstack-harness/scripts/read-plan.py" "<file>" --max-output-tokens <n>
 ```
 
-The script prints one `sed -n` command per line, and each command prints a range of lines that fits `<n>`. Run each command in its own outer call. Never batch two ranges, or two files, in one outer `exec` call. Read every range in order before you act on the file. If a range's output still warns that it was cut, lower `<n>` and print a new plan. If a line is too long for `<n>`, the script exits 1 and names the smallest `<n>` it accepts. Raise `<n>` to that value and print a new plan.
+Each line that the script prints is a command whose output fits `<n>`. Run each command in its own outer call, with the caps you chose. Never batch two commands, or two files, in one outer `exec` call. Run every command in order before you act on the file. If the last line runs `read-plan.py` again, run it after the other lines. It prints the rest of the plan. If an output still warns that it was cut, keep your caps and print a new plan with half of `<n>`. Then run the new plan from its first command.
