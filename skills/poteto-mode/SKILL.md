@@ -11,9 +11,7 @@ reminder: New task? Playbook match or rigor needed -> apply /poteto-mode. Casual
 
 ## Recover after compaction or truncation
 
-After a known compaction, context summary, or truncation notice, read this entry on its own before the next governed action. Restore the active playbook path and current step from the existing worklist, task record, or resume note. Then read and apply [task triggers](references/task-triggers.md), the active playbook, and its required current-step references one governing file per outer tool response, or in verified bounded chunks. Require complete returned guidance before any governed action. If a return is shortened or reports truncation, read the missing content first. A read command, a process exit, or a remembered summary does not establish complete content. Reconcile completed work, evidence, phase, outstanding gates, and existing grants there. Continue the same task without a new human pause or repeated work. Preserve required watcher and verification checks. A remembered green summary does not replace them.
-
-If governing guidance is unavailable, report the exact missing file. Withhold only actions whose prerequisites you cannot establish. Read the [runtime retention evidence](../pstack-harness/references/skill-retention.md) when runtime retention or restoration affects a decision.
+After a known compaction, context summary, or truncation notice, read this entry on its own, then read and apply [recovery](references/recovery.md) before the next governed action. It restores the active playbook and step from the worklist, requires complete returned guidance, and names the exact missing file when guidance is unavailable.
 
 ## Playbooks
 
@@ -49,6 +47,8 @@ For a large or cross-cutting effort (a migration across many call sites, an ambi
 
 ## Apply the mode
 
+Start every task a playbook matches with that worklist, before you read the code. A change to code an earlier session wrote is a new task, not a continuation.
+
 The Principles section below grounds every trigger. Name each principle that changed a decision in the reply and state the choice it changed.
 
 - On every invocation, resume, and task scope change, read and apply [task triggers](references/task-triggers.md). Each individual trigger governs when its named sibling skill runs.
@@ -75,8 +75,8 @@ Before you apply a principle, call the Skill tool with its leaf skill's bare nam
 **Architecture**
 
 - **Model the Domain** (**principle-model-the-domain**). Writing stateful logic, or code that branches a lot or repeats a shape assumption across files. Encode the domain in a structure (state machine, typed model, table or registry, reducer, boundary, the right collection) instead of scattered conditionals.
-- **Boundary Discipline** (**principle-boundary-discipline**). Wiring validation, error handling, or framework adapters. Guards at system boundaries, trust internal types, keep business logic pure.
-- **Type System Discipline** (**principle-type-system-discipline**). Designing types or a signature in any typed language. Make illegal states unrepresentable, brand primitives, parse external data at boundaries.
+- **Boundary Discipline** (**principle-boundary-discipline**). Wiring validation, error handling, or framework adapters. Guards at system boundaries, trust internal types, keep business logic pure. A boundary parser accepts every value the spec does not forbid.
+- **Type System Discipline** (**principle-type-system-discipline**). Designing types or a signature in any typed language. Make illegal states unrepresentable, brand primitives, parse external data at boundaries. Strengthen a type only where partiality appears, then stop.
 - **Make Operations Idempotent** (**principle-make-operations-idempotent**). Designing commands, lifecycle steps, or loops that run amid crashes and retries. Converge to the same end state.
 - **Migrate Callers Then Delete Legacy APIs** (**principle-migrate-callers-then-delete-legacy-apis**). Introducing a new internal API while old callers exist. Migrate and delete in one wave.
 - **Separate Before Serializing Shared State** (**principle-separate-before-serializing-shared-state**). Concurrent actors might write the same file, branch, key, or object. Eliminate the sharing first.
