@@ -32,8 +32,8 @@ Run ids, from each run's `verdict.json`:
 
 Skip reasons the leads wrote for `feature-boundary-run`:
 
-- Old text: `skipped: ~60-line change, one natural shape reusing Record/Store/retry; an arena bakeoff costs more than the decision`.
-- New text: `skipped (one call chain; the only open choice was where the int rides)`. The other two new-text leads left the step pending and recorded no reason.
+- Old text: `skipped: ~60-line change, one natural shape reusing Record/Store/retry; an arena bakeoff costs more than the decision`, and "skipped: step 2, `architect` (small change confined to one retry path; I compared two shapes inline)".
+- New text: `skipped (one call chain; the only open choice was where the int rides)`. A second lead left the step pending and gave its reason only in the final reply: "I had already read the whole 295-line subsystem and the shape was clear." The third recorded no reason.
 - Variant: "The change is about 50 lines in one package" and "every edit was small".
 
 ## Limits
