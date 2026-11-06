@@ -8,7 +8,7 @@ pstack needs one phrasing that a skill's body uses to make the agent load a sibl
 
 ## Recommendation
 
-Decided on 2026-11-01. At every site where a sibling must load, write "Call the Skill tool with `x`", with the bare skill name in code font, as in "Call the Skill tool with `no-comments`." Put it in a numbered step or a direct sentence, never in a "per" or "in" clause. Codex and Grok Build have no Skill tool for skills on disk. Hermes loads a skill with `skill_view(name)`, which this repository's grader counts as a load; how Hermes treats the phrase is unverified, because no Hermes arm ran. The **pstack-harness** skill maps the phrase to reading `<installed skills root>/x/SKILL.md` in full on those CLIs.
+Decided on 2026-11-01. At every site where a sibling must load, write "Call the Skill tool with `x`", with the bare skill name in code font, as in "Call the Skill tool with `no-comments`." Put it in a numbered step or a direct sentence, never in a "per" or "in" clause. Codex and Grok Build have no Skill tool for skills on disk. Hermes loads a skill with `skill_view(name)`, which this repository's grader counts as a load; how Hermes treats the phrase is unverified, because no Hermes arm ran. The [pstack-harness universal rules](../skills/pstack-harness/SKILL.md#universal-rules) own how each CLI loads a named skill.
 
 The rollout rewrote every "Use the **x** skill" load under `skills/` and poteto-agent's deslop line. It also converted principle citations into 56 explicit principle loads. The sibling-skill row in the [porting substitution map](../PORTING.md#substitution-map) owns the load forms, section and reference-file rules, exceptions, and lint coverage.
 
