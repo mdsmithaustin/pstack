@@ -322,6 +322,60 @@
       "tags": ["population:headline-behavior", "source-grounding", "open-choice"]
     },
     {
+      "id": "pos-variant-coverage",
+      "split": "tune",
+      "kind": "positive",
+      "eval_intent": "capability",
+      "domain": "requirements",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Review settings-spec.md before implementation. List the acceptance tests you would write for each requirement and the decisions it still leaves open. Use a Markdown table, bullets, or prose. Do not choose unstated product behavior.",
+      "files": ["fixtures/settings-spec.md"],
+      "expected_behavior": [
+        "For SL-501, preserves the inclusive 1 through 300 range and the rejection of values outside it as settled.",
+        "For SL-501, checks the empty-value edge in each of YAML, TOML, and JSON, such as a bare YAML key or `~`, TOML having no null at all, and JSON `null` or an empty string, instead of once for the settings file.",
+        "For SL-501, checks the integer edge per format, such as `300.0`, a quoted `\"30\"`, or a format-specific integer spelling, or states why checking one format covers the others.",
+        "For SL-502, treats the example's read order and its use of TOML for both files as illustration, and proposes at least one test where one of them does not hold, such as the user file read first or a YAML user file over a TOML project file, with the outcome the stated override rule gives.",
+        "Leaves unstated behavior open, such as whether an empty user value falls back to the default or keeps the project value."
+      ],
+      "assertions": [
+        {
+          "name": "edges-per-variant",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "variant-coverage",
+              "scale": "1-5",
+              "rubric": "5 = SL-501's empty-value and integer edges are each checked in YAML, TOML, and JSON, with at least one format-specific difference named, such as TOML having no null, or the response gives a sound reason why checking one format covers the others. 4 = Every format is checked for one of the two edges, and the other edge is raised once with no wrong claim about any format. 3 = The edges are raised once for the settings file, with no per-format check. 2 = Formats are named, but no edge is tied to a format. 1 = No SL-501 edge is raised, a format behavior is misstated, or the response chooses unstated behavior."
+            },
+            {
+              "name": "example-restraint",
+              "scale": "1-5",
+              "rubric": "5 = SL-502's read order and single format are treated as properties of the example, not rules, and at least one proposed test breaks one of them with the outcome the stated override rule gives. 4 = One incidental property is named and tested, with one vague phrase. 3 = The proposed tests only replay the example. 2 = The response makes read order or the example's format a rule. 1 = SL-502 is ignored, its override rule is contradicted, or the response chooses unstated behavior."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "source-grounding", "variant-coverage"]
+    },
+    {
       "id": "neg-deployed-incident-restraint",
       "split": "tune",
       "kind": "adversarial",
