@@ -21,7 +21,7 @@ Classify each requirement's data shape: `numeric-range`, `collection`, `text`, `
 | Precision / overflow | numeric-range | Where can rounding, tie-breaking, precision loss, or overflow occur, and what is the exact contract: half-up or half-even, floor or truncate? |
 | Idempotency | stateful | What happens if this runs twice on the same input? |
 | Concurrency / effect order | stateful, io | If interrupted or run in parallel, what is guaranteed? |
-| Example-only properties | example | What holds in each worked example that no rule states, such as the order its operations start or finish? Don't encode it. Add one test where it does not hold. |
+| Example-only properties | example | What holds in each worked example that no rule states, such as the order its operations start or finish? Don't encode it. Add one test where it does not hold when a requirement or today's behavior gives its result. Otherwise carry the edge as `unresolved`. |
 | Variant coverage | variants | Does each raised edge behave the same in every named variant? Probe it in each variant, or record why checking one variant covers the others. |
 
 A requirement with prose but no matching shape gets one soft "unclassified, review by hand" item, not silence.
@@ -47,6 +47,8 @@ Each item ends in exactly one state:
 - **resolved**: an acceptance criterion states the answer (`explicit`, checked by an ordinary test); or a held-out or property-based test will stand in for an edge you know but cannot fully write down (`backstop`); or, for a prohibition that needs human judgment rather than a test, `judgment`.
 - **dismissed**, with a reason. "N/A, input is a bounded enum, no boundary exists" is valid; silence is not. The reason is the audit trail.
 - **unresolved**: carried forward as an explicit gap the plan must surface, never dropped silently.
+
+**A new rejection needs a requirement that states the restriction.** A rejection is an expected result that rejects, errors on, or reinterprets an input. Expect one only where a requirement states the restriction, and name that requirement in the criterion. A stated type, range, or format is such a requirement, so expect an input that breaks it to be rejected. The rule holds on a new field and on input the program accepts today, even when a worked example shows only one form of the value or a sibling field has the rejection. Without such a requirement, expect the result the spec text gives the input, or the result the program gives it today. A new field has no result today, so where the spec text gives none, write no criterion for the input and carry the edge as `unresolved`.
 
 Write the `backstop` and `judgment` tags into the spec itself. A reviewer later abstains on those instead of passing them by inspection; without the tag it cannot see its own blind spot.
 

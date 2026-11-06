@@ -376,6 +376,126 @@
       "tags": ["population:headline-behavior", "source-grounding", "variant-coverage"]
     },
     {
+      "id": "pos-new-field-unrequested-rejection",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "capability",
+      "domain": "requirements",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "We're about to build the job config loader that sync-job-spec.md describes. Write out its acceptance criteria before implementation starts. A Markdown table, bullets, or prose is fine.",
+      "files": ["fixtures/sync-job-spec.md"],
+      "expected_behavior": [
+        "Keeps SJ-101's missing-field rejection, SJ-102's relative-path rejection, and SJ-104's 1 through 90 range and its rejection as settled.",
+        "Adds no criterion that expects a rejection, error, or rewrite that no requirement states, such as one on a `destination` form, an unknown key, or a duplicate key. The `backup://` scheme appears only in SJ-103's example, and SJ-102's absolute-path rule names only `source`.",
+        "Leaves the supported `destination` forms open, or states that no requirement restricts them. A criterion that the example value loads is fine."
+      ],
+      "assertions": [
+        {
+          "name": "rejections-need-requirements",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "unrequested-rejection",
+              "scale": "1-5",
+              "rubric": "5 = Every rejection, error, or rewrite that a proposed test or criterion expects traces to a stated rule: SJ-101's missing fields, SJ-102's requirement that `source` be an absolute path, or SJ-104's integer range. Inputs that no requirement restricts stay open questions or are stated as unrestricted. Examples are a `destination` without the `backup://` scheme, a relative `destination`, an empty or null `destination`, an unknown key, and a duplicate key. Rejecting a `source` value because it is not an absolute path counts as traced to SJ-102. Rejecting a file that is empty, does not parse as YAML, or has no mapping at the top level counts as traced to SJ-101, because it has neither field. An open policy question explicitly excluded from tests or criteria is unresolved, even if it recommends an answer; it is not an expected rejection. 4 = Every expected rejection traces to a stated rule, but the open question about `destination` forms is missing or vague. 3 = One or two untraced rejections appear as criteria, including ones marked as proposals for the spec owner to confirm. 2 = Three or more untraced rejections appear as criteria. 1 = A stated rejection is reversed, or a criterion rejects a `destination` form, such as one taken from SJ-102's rule or the `backup://` example."
+            }
+          ]
+        },
+        {
+          "name": "stated-rejections-kept",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "stated-rejections-kept",
+              "scale": "1-5",
+              "rubric": "5 = SJ-101's missing-field rejection, SJ-102's relative-path rejection, and SJ-104's range rejection are all covered, with `keep` checked at 0, 1, 90, and 91 or an equivalent boundary set. 4 = All three rejections are covered, with one `keep` boundary missing. 3 = One stated rejection is missing. 2 = Several stated rejections are missing. 1 = A stated rejection is contradicted or left open as undecided."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "source-grounding", "unrequested-rejection"]
+    },
+    {
+      "id": "pos-extension-keeps-accepted-input",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "capability",
+      "domain": "requirements",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Before we add the archive settings in sync-job-archive.md to the loader in sync_job_loader.py, write the acceptance criteria for them. sync-job-spec.md is the original spec, and nightly.yaml is one of the job configs that runs today. A Markdown table, bullets, or prose is fine.",
+      "files": ["fixtures/sync-job-archive.md", "fixtures/sync-job-spec.md", "fixtures/sync_job_loader.py", "fixtures/nightly.yaml"],
+      "expected_behavior": [
+        "Keeps nightly.yaml loading as it does today, including its `destination`, which is a plain path rather than a `backup://` URL.",
+        "Adds no rejection that no requirement states: none on the form of `archive_destination` or `destination`, such as an absolute-path rule copied from `source` or a `backup://` rule taken from the examples, none on an `archive_destination` equal to `destination`, none on `archive_after_days` set without `archive_destination`, and none on an unknown key. These stay open or unrestricted.",
+        "Covers SJ-202's 1 through 365 range at its boundaries and the rejection of `archive_destination` without `archive_after_days`."
+      ],
+      "assertions": [
+        {
+          "name": "rejections-need-requirements",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "unrequested-rejection",
+              "scale": "1-5",
+              "rubric": "5 = Every rejection, error, or rewrite that a proposed test or criterion expects traces to a stated rule: SJ-202's integer range, SJ-202's rejection of `archive_destination` without `archive_after_days`, or a rule the current loader already enforces. Inputs that no requirement restricts stay open questions or are stated as unrestricted. Examples are an `archive_destination` or `destination` form, such as an absolute-path rule copied from `source` or a `backup://` rule taken from the examples, an `archive_destination` equal to `destination`, `archive_after_days` set without `archive_destination`, and an unknown key. An open policy question explicitly excluded from tests or criteria is unresolved, even if it recommends an answer; it is not an expected rejection. 4 = Every expected rejection traces to a stated rule, but the open choices are missing or vague. 3 = One or two untraced rejections appear as criteria, including ones marked as proposals for the spec owner to confirm. 2 = Three or more untraced rejections appear as criteria. 1 = A proposed rule would reject nightly.yaml, or a stated rejection is reversed."
+            }
+          ]
+        },
+        {
+          "name": "accepted-input-kept",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "accepted-input-kept",
+              "scale": "1-5",
+              "rubric": "5 = A test or criterion loads nightly.yaml, or an equivalent config with a plain-path `destination` and no archive fields, and expects the same result as today. SJ-202's range is covered at 0, 1, 365, and 366 or an equivalent boundary set, and so is the rejection of `archive_destination` without `archive_after_days`. 4 = nightly.yaml is kept working and both SJ-202 rejections are covered, but one SJ-202 boundary is missing. 3 = Neither nightly.yaml nor an equivalent config is covered, though nothing proposed would break it. 2 = A proposed rule would break nightly.yaml under some reading. 1 = A proposed rule rejects nightly.yaml, or a stated SJ-202 rejection is dropped."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "source-grounding", "unrequested-rejection"]
+    },
+    {
       "id": "neg-deployed-incident-restraint",
       "split": "tune",
       "kind": "adversarial",
