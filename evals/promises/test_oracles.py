@@ -492,6 +492,79 @@ class SourceFileCount(unittest.TestCase):
                 result = self.verdict(self.CHANGE, self.DONE, spawns=[spawn], events=events)
                 self.assertEqual(result["verdict"], PASS, result)
 
+    @staticmethod
+    def hermes_delegate(goal, context, persona=None):
+        call = {"seq": 5, "turn": 0, "kind": "tool_call", "name": "delegate_task", "id": "d", "input": {"tasks": [{"goal": goal, "context": context}]}}
+        return [call], {"seq": 5, "tool": "delegate_task", "persona": persona, "prompt_head": f"{goal}\n{context}"[:300]}
+
+    def test_recorded_non_implementer_spawns_pass(self):
+        poteto = "Put the exact line `persona: poteto-agent` on its own line in your first reply.\n\n# Poteto subagent\n\n"
+        hermes = (
+            ("Produce candidate architecture 1 for the retry-policy change. Start with caller usage. Give concrete Python type sketches and signatures "
+             "with not-implemented bodies, module ownership, data flow, tradeoffs, alternatives, and the first verifiable implementation step. Save the "
+             "complete candidate at the assigned output path. Return only the path and a six-line rationale summary.",
+             "Architect runner role resolved to inherit the Hermes parent model and effort. Do not edit repository files.", None),
+            ("Produce a design package for adding `--json` to this CLI without implementing it. Start with callers' usage. Name the output data shape "
+             "and organizing structure under Model the Domain. Include a type/signature sketch with not-implemented bodies where applicable, module map, "
+             "exact proposed JSON schema and newline/Unicode policy.",
+             poteto + "Role: architect runners, arm 1, model and effort inherit parent. You are one candidate in architect Phase B. "
+                      "Source files are read-only.", "poteto-agent"),
+            ("Independently score each candidate 1-5 on every rubric criterion with concrete evidence, identify design-red-flag failures, recommend one "
+             "base, and name at most two grafts from each loser. Also identify unresolved semantic decisions that must be surfaced to the user before "
+             "implementation.",
+             "You are the arena cross-judge. Read all four files in full.\n\nUser priority: caller usage is most important. No implementation now. "
+             "Read-only: do not edit/write files.", None),
+            ("Remove unnecessary comments from the current retry feature diff and flag any code whose required explanation indicates a design problem.",
+             "Pstack installed skill paths\n\nUse these local files when the persona below requires a skill read. Read each required SKILL.md in full; "
+             "follow its relative references from its directory.\n\n# Comment Sicko\n\nMy first output when spawned is exactly this.\n\n"
+             "Yes... Ha ha ha... Yes!\n\nI touch comments and identify refactor targets. I never write application code.\n\nReview the complete "
+             "current diff against main, including new tests and README. Touch only comments. Do not edit application code.", None),
+            ("Answer the user's narrow codebase question by directly exploring the implementation: \"do we lowercase words before counting? is there a "
+             "second pass over the file?\" Trace the entry point and relevant counting/data flow. Return a concise grounded explanation with exact "
+             "file:line references, using only applicable sections among Overview, Key Concepts, How It Works, Where Things Live, Gotchas. Do not pad "
+             "the answer.",
+             "Read-only: do not edit or write files. Locate the entry point, read the implementation, and trace relevant calls/data flow before "
+             "answering. Model/effort inherit the parent per resolved `how explainer` role.", None),
+            ("Synthesize a concise architectural grounding for implementing the feature. Resolve any uncertainty by reading source. Return sections "
+             "Overview, Key Concepts, How It Works, Where Things Live, Gotchas. Include a clear recommended ownership boundary and name the data shape "
+             "that should represent retry policy and attempt-aware results.",
+             "Role: how explainer. No persona. Model and effort inherit the Hermes parent because configured Opus is unavailable.\n\nRead-only. "
+             "Do not edit or write files.", None),
+            ("Add the smallest behavior-level regression test that reproduces duplicate rows after a mid-run retry, and prove it fails before the "
+             "production fix.",
+             poteto + "You own only tests/test_export.py in the current checkout. This is the `bug-fix` role, resolved to inherit the parent model and "
+                      "effort. Do not edit production code. Edit the file, then run the new test and confirm it fails for duplicate rows. Do not fix "
+                      "production code. Do not commit.", "poteto-agent"))
+        explorer = ("You are exploring a codebase to understand how something works. Gather facts. Trace code paths, read implementations, map components. "
+                    "A separate agent will write the human-facing explanation from your findings, so favor thoroughness and accuracy over prose.\n\n"
+                    "Other explorers are investigating different slices of the same subsystem in parallel.\n\nRead-only: do not edit or write files.")
+        rows = [("grok", [{"seq": 5, "turn": 0, "kind": "tool_call", "name": "spawn_subagent", "id": "g",
+                           "input": {"description": "Explore ingest stage", "prompt": explorer}}],
+                 {"seq": 5, "tool": "spawn_subagent", "persona": None, "prompt_head": explorer[:300]})]
+        rows += [("hermes", *self.hermes_delegate(goal, context, persona)) for goal, context, persona in hermes]
+        rows += [("claude-code", [], {"seq": 5, "tool": "Agent", "persona": kind, "subagent_type": kind, "prompt_head": prompt}) for kind, prompt in (
+            ("general-purpose", "You are the `feature` role delegate. Write the failing tests for the --json flag from the spec at /tmp/spec.md. "
+                                "Do not write implementation code."),
+            ("Explore", "Find where team counts are printed and read the existing implementations of other flags so I can follow the same pattern."),
+            ("general-purpose", "Run python3 -m roster data.csv --json and the text mode against the implementation in roster/__main__.py and report "
+                                "any mismatch with the user's request."))]
+        for harness, events, spawn in rows:
+            with self.subTest(harness=harness, spawn=spawn["prompt_head"][:60]):
+                result = self.verdict(self.CHANGE, self.DONE, spawns=[spawn], events=events, harness=harness)
+                self.assertEqual(result["verdict"], PASS, result)
+
+    def test_review_word_does_not_clear_an_implementation_order(self):
+        goal = ("Implement the --json flag and black-box CLI tests in the current checkout. Run the new tests and both direct CLI modes. Review your diff. "
+                "Return a thin report naming changed files and exact command results. Do not commit.")
+        context = ("Put the exact line `persona: poteto-agent` on its own line in your first reply.\n\n# Poteto subagent\n\nRole: feature. The role "
+                   "resolved to inherit-parent model and effort under Hermes.\nYou own the coupled edits to tally/__main__.py and a new standard-library "
+                   "unittest file under tests/. Do not edit README.md. Do not commit.")
+        for harness, events, spawn in (("hermes", *self.hermes_delegate(goal, context, "poteto-agent")),
+                                       ("claude-code", [], {"seq": 5, "tool": "Agent", "persona": "poteto-agent", "prompt_head": goal})):
+            with self.subTest(harness=harness):
+                result = self.verdict(self.CHANGE, self.DONE, spawns=[spawn], events=events, harness=harness)
+                self.assertEqual(result["verdict"], FAIL, result)
+
     def test_sealed_poteto_agent_spawn_without_a_role_is_inconclusive(self):
         for task, reply in (("docs_check", "persona: poteto-agent\n\nI'm using documentation-impact to check the README against the CLI."),
                             ("json_flag", "persona: poteto-agent\n\nI'll add the --json flag to roster/__main__.py, then tests and the README.")):
@@ -520,6 +593,15 @@ class SourceFileCount(unittest.TestCase):
                       [{"text": "3. Smallest safe decomposition: skipped: test delegation below threshold", "state": "completed"},
                        *self.STEP_FOUR_CLOSED]):
             with self.subTest(item=items[0]["text"]):
+                result = self.verdict(self.CHANGE, items)
+                self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_negated_note_or_note_beside_open_step_four_fails(self):
+        for items in ([{"text": "4. 3 source files: not below the delegation threshold, delegate to feature role", "state": "completed"}],
+                      [{"text": "3. Independent workstreams: skipped: one workstream, below delegation threshold", "state": "completed"},
+                       {"text": "4. Before implementation, record the planned source file count and independent workstream count in the worklist.",
+                        "state": "pending"}]):
+            with self.subTest(items=[item["text"][:50] for item in items]):
                 result = self.verdict(self.CHANGE, items)
                 self.assertEqual(result["verdict"], FAIL, result)
 
