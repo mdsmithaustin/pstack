@@ -82,6 +82,26 @@ class Preserve(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn('nothing was checked', result.stdout)
 
+    def test_a_suite_with_only_skipped_tests_cannot_pass(self):
+        (self.repo / 'tests/test_mod.py').write_text(TESTS.replace(
+            'class Parse', '@unittest.skip("no test body executes")\nclass Parse'))
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'all tests skipped')
+        for command in ((), ('--command', sys.executable, '-m', 'unittest', 'discover', '-s', 'tests')):
+            with self.subTest(command=command):
+                result = self.run_preserve(*command)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn('nothing was checked', result.stdout)
+
+    def test_project_command_with_executed_and_skipped_tests_passes(self):
+        (self.repo / 'tests/test_mod.py').write_text(TESTS.replace(
+            '    def test_plain', '    @unittest.skip("one case is unavailable")\n    def test_plain'))
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'one test skipped')
+        result = self.run_preserve('--command', sys.executable, '-m', 'unittest', 'discover', '-s', 'tests')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('selected project test command passed', result.stdout)
+
     def test_unchanged_code_passes(self):
         result = self.run_preserve()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

@@ -159,9 +159,10 @@ def run_tests(python: str, project: Path, files: list[str], runner: str, command
             failed = re.findall(r"^FAIL: (\S+ \([\w.]+\))", text, re.M)
             errors = re.findall(r"^ERROR: (\S+ \([\w.]+\))", text, re.M)
             counts = re.findall(r"^Ran (\d+) tests?", text, re.M)
+            skipped = re.findall(r"^(?:OK|FAILED) \([^\n]*\bskipped=(\d+)", text, re.M)
+            ran = sum(map(int, counts)) - sum(map(int, skipped))
             if runner == "command" and not counts:
-                counts = re.findall(r"(\d+) (?:passed|failed)", text)
-            ran = sum(map(int, counts))
+                ran = sum(map(int, re.findall(r"(\d+) (?:passed|failed)", text)))
     if out.returncode not in (0, 1) or (out.returncode != 0 and not failed and not errors):
         last = text.strip().splitlines()[-1] if text.strip() else ""
         errors.append(f"{runner} exited {out.returncode} before running the tests: {last}")
