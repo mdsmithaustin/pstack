@@ -267,6 +267,65 @@ class Preserve(unittest.TestCase):
                 result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_no_commits_baseline_satisfies_the_gate(self):
+        for since in ('no commits', 'no-commits'):
+            result = subprocess.run([sys.executable, str(SCRIPT), '--since', since, '--project', str(self.repo)], capture_output=True, text=True)
+            with self.subTest(since=since):
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('started with no commits', result.stdout)
+
+    def test_symlinked_test_path_is_refused_with_the_tree_intact(self):
+        (self.repo / 'tests/data.json').write_text('{"a": 1}')
+        (self.repo / 'tests/test_alias.py').symlink_to('test_mod.py')
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'alias link')
+        edited = TESTS.replace('"a"', '"b"')
+        (self.repo / 'tests/test_mod.py').write_text(edited)
+        result = self.run_preserve()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((self.repo / 'tests/test_mod.py').read_text(), edited)
+        self.assertTrue((self.repo / 'tests/test_alias.py').is_symlink())
+        (self.repo / 'tests/test_alias.py').unlink()
+        (self.repo / 'tests/test_alias.py').write_text(TESTS)
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'alias is a file now')
+        (self.repo / 'tests/test_alias.py').unlink()
+        (self.repo / 'tests/test_alias.py').symlink_to('test_mod.py')
+        result = self.run_preserve()
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn('symlink', result.stderr)
+        self.assertEqual((self.repo / 'tests/test_mod.py').read_text(), edited)
+
+    def test_parameterized_cases_need_their_own_names(self):
+        (self.repo / 'conftest.py').write_text('')
+        (self.repo / 'tests/test_mod.py').write_text(textwrap.dedent('''\
+            import pytest
+            from mod import parse
+
+
+            @pytest.mark.parametrize("value", ["ignored://sink", "other://sink"])
+            def test_scheme_kept(value):
+                assert parse(value) == value
+            '''))
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'parametrized')
+        (self.repo / 'mod.py').write_text("def parse(value):\n    if '://' in value:\n        raise ValueError(value)\n    return value\n")
+        (self.repo / 'reasons.txt').write_text('tests/test_mod.py::test_scheme_kept[ignored://sink]\n  input: the ignored scheme\n  quote: "Every destination starts with backup:// and names a store."\n')
+        result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('1 test(s) have no reason', result.stdout)
+
+    def test_non_ascii_test_path_is_still_run(self):
+        (self.repo / 'tést').mkdir()
+        (self.repo / 'tést/__init__.py').write_text('')
+        (self.repo / 'tést/test_more.py').write_text(TESTS)
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'non-ascii dir')
+        (self.repo / 'mod.py').write_text(NARROWED)
+        result = self.run_preserve()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('2 test file(s)', result.stdout)
+
     def test_unknown_commit_exits_two(self):
         result = subprocess.run([sys.executable, str(SCRIPT), '--since', 'nope', '--project', str(self.repo)],
                                 capture_output=True, text=True)

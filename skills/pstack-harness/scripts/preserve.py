@@ -108,13 +108,14 @@ def test_name(test_id: str) -> str:
 def qualified(test_id: str) -> str:
     """One dotted spelling for a test, whichever runner or author wrote it.
 
-    `test_x (pkg.mod.Case.test_x)` and `pkg/mod.py::Case::test_x[a]` both become `pkg.mod.Case.test_x`.
+    `test_x (pkg.mod.Case.test_x)` and `pkg/mod.py::Case::test_x` both become `pkg.mod.Case.test_x`. A parameter
+    suffix stays, so `test_x[a]` and `test_x[b]` are two tests and each failing case needs its own name.
     """
     inner = re.search(r"\(([\w.]+)\)$", test_id)
     if inner:
         return inner.group(1)
-    head = test_id.split("[")[0]
-    return re.sub(r"\.py(?=::|$)", "", head).replace("::", ".").replace("/", ".")
+    head, _, param = test_id.partition("[")
+    return re.sub(r"\.py(?=::|$)", "", head).replace("::", ".").replace("/", ".") + (f"[{param}" if param else "")
 
 
 def is_collection_error(error_id: str) -> bool:
@@ -186,6 +187,8 @@ class InPlace:
         try:
             for rel in self.paths:
                 target = self.project / rel
+                if target.is_symlink() or any(p.is_symlink() for p in target.parents if self.project in p.parents):
+                    raise OSError(f"{rel} is, or sits under, a symlink in the working tree; the overlay never writes through a link")
                 if target.exists() and not target.is_file():
                     raise IsADirectoryError(f"{rel} is a directory in the working tree, so the earlier file cannot be written there")
                 self.saved[rel] = target.read_bytes() if target.exists() else None
@@ -235,6 +238,9 @@ def main(argv: list[str]) -> int:
                 print(f"  {problem}", file=sys.stderr)
             return 2
 
+    if args.since.strip().lower().replace("-", " ") in ("no commits", "none", "unborn"):
+        print("preserve: nothing to preserve, the task started with no commits. The gate is satisfied; the step's own tests still have to pass.")
+        return 0
     start = (args.project or Path.cwd()).resolve()
     top = git(start, "rev-parse", "--show-toplevel", check=False)
     if top.returncode != 0:
@@ -249,7 +255,9 @@ def main(argv: list[str]) -> int:
     venv = next((p for p in (project / ".venv/bin/python", project / "venv/bin/python") if p.exists()), None)
     python = args.python or (str(venv) if venv else None) or shutil.which("python") or sys.executable
 
-    listed = [p for p in git(project, "ls-tree", "-r", "--name-only", commit).stdout.split("\n") if p]
+    # -z keeps non-ASCII paths unquoted; a 120000 entry is a symlink, which the overlay never writes.
+    entries = [e for e in git(project, "ls-tree", "-r", "-z", commit).stdout.split("\0") if e]
+    listed = [e.split("\t", 1)[1] for e in entries if not e.startswith("120000 ")]
     test_files = [p for p in listed if is_test_file(p)]
     support = [p for p in listed if is_support_file(p)]
     if not test_files:
