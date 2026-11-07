@@ -496,6 +496,65 @@
       "tags": ["population:headline-behavior", "source-grounding", "unrequested-rejection"]
     },
     {
+      "id": "pos-look-alike-terms",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "capability",
+      "domain": "requirements",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "We're about to build the signup handler that signup-spec.md describes. Write the acceptance tests it should pass before implementation starts. A test name plus a line on its input and expected result is enough for each.",
+      "files": ["fixtures/signup-spec.md"],
+      "expected_behavior": [
+        "Separates SU-302's trimming from SU-304's stripping with whitespace inside a value: an `invite_code` with inner whitespace that matches an open invite once all whitespace is removed returns 201, and a `display_name` with inner whitespace is saved with it.",
+        "Ties each test to the requirement or spec sentence that gives its expected result, and labels any test whose result no requirement gives as an assumption."
+      ],
+      "assertions": [
+        {
+          "name": "look-alike-terms-separated",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "contrast-test",
+              "scale": "1-5",
+              "rubric": "5 = The tests put whitespace inside a value and check both rules: an `invite_code` with inner whitespace that matches an open invite once all whitespace is removed still finds it under SU-304, and a `display_name` or `email` with inner whitespace keeps it under SU-302. One test or two together cover both, so they fail if trimming and stripping are implemented as the same operation either way. 4 = The `invite_code` inner-whitespace test is present and expects the invite to be found, but no test checks that trimming keeps inner whitespace. 3 = Inner whitespace is tested only for `display_name` or `email`, or the inner-whitespace invite code is raised only as an open question though SU-304 settles it, or whitespace is tested only at the start and end of values. 2 = The tests treat trimming and stripping as one operation, for example by expecting the same result from both on a value with inner whitespace, or expect an `invite_code` with inner whitespace to return 403 although it matches an open invite once stripped. 1 = No test touches trimming or stripping, or a test contradicts SU-302 or SU-304."
+            }
+          ]
+        },
+        {
+          "name": "tests-cite-spec",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "spec-citations",
+              "scale": "1-5",
+              "rubric": "5 = Every proposed test names the requirement or quotes the spec sentence that gives its expected result, by ID, quote, or a heading it sits under, and any test whose result no requirement gives is labeled an assumption, or the response proposes no such test. An open question kept out of the tests is not a test. 4 = Every test is tied to a requirement, but one test whose result no requirement gives is not labeled an assumption. 3 = Most tests are tied to a requirement but some are not, or two or more tests expect results that no requirement gives without labeling them. 2 = Few tests are tied to a requirement. 1 = No test is tied to the spec text."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "source-grounding", "look-alike-terms"]
+    },
+    {
       "id": "neg-deployed-incident-restraint",
       "split": "tune",
       "kind": "adversarial",
