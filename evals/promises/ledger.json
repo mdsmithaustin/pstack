@@ -5511,6 +5511,18 @@
    ],
    "text": "```text\n/poteto-mode prototype a few options for the settings layout. put them behind a switcher and send me screenshots of each.\n```"
   },
+  "20d57d9d3455": {
+   "also": [
+    "worklist-opens-with-playbook-steps"
+   ],
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "twenty-five-playbooks",
+   "sources": [
+    "port"
+   ],
+   "text": "You give it a goal, it matches one of twenty-five playbooks, tracks progress under the mode's [worklist and completion rules](../../skills/poteto-mode/SKILL.md#playbooks), and calls the other skills as the steps need them."
+  },
   "20eb1af99061": {
    "class": "promise",
    "file": "10-recipes-and-pitfalls.md",
@@ -8529,15 +8541,6 @@
    ],
    "text": "The two most common design mistakes are taking the agent's first design and polishing a plan that no code has tested."
   },
-  "716d506608c5": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "worklist-opens-with-playbook-steps",
-   "sources": [
-    "port"
-   ],
-   "text": "Its first items are the matched playbook's opening prose and steps copied in, the Feature playbook for this prompt."
-  },
   "7177ab579608": {
    "class": "promise",
    "file": "01-setup.md",
@@ -9372,7 +9375,7 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "716d506608c5"
+    "afc96b1f0295"
    ],
    "promise": "worklist-opens-with-playbook-steps",
    "sources": [
@@ -10888,6 +10891,15 @@
    ],
    "text": "One automation triages each report."
   },
+  "afc96b1f0295": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "worklist-opens-with-playbook-steps",
+   "sources": [
+    "port"
+   ],
+   "text": "The mode's [worklist and completion rules](../../skills/poteto-mode/SKILL.md#playbooks) define its items for the matched playbook, Feature for this prompt."
+  },
   "aff864423b92": {
    "class": "promise",
    "file": "01-setup.md",
@@ -10925,12 +10937,14 @@
     "worklist-opens-with-playbook-steps",
     "worklist-in-native-task-tool"
    ],
-   "class": "promise",
+   "class": "substituted",
    "file": "README.md",
+   "ported_as": [
+    "c79e385bd91a"
+   ],
    "promise": "bug-prompt-routes-to-bug-fix",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "It matches the Bug fix playbook, copies the steps into a todo list, and calls the right skills as each step fires."
   },
@@ -11814,6 +11828,19 @@
    ],
    "text": "From your project root, run:"
   },
+  "c79e385bd91a": {
+   "also": [
+    "worklist-opens-with-playbook-steps",
+    "worklist-in-native-task-tool"
+   ],
+   "class": "promise",
+   "file": "README.md",
+   "promise": "bug-prompt-routes-to-bug-fix",
+   "sources": [
+    "port"
+   ],
+   "text": "It matches the Bug fix playbook, tracks progress under the mode's [worklist and completion rules](../../skills/poteto-mode/SKILL.md#playbooks), and calls the right skills as each step fires."
+  },
   "c8066657f094": {
    "class": "context",
    "file": "07-overnight.md",
@@ -12438,7 +12465,7 @@
    "class": "substituted",
    "file": "02-poteto-mode.md",
    "ported_as": [
-    "f29c18a93182"
+    "20d57d9d3455"
    ],
    "promise": "twenty-five-playbooks",
    "sources": [
@@ -13460,18 +13487,6 @@
     "port"
    ],
    "text": "When the gate raises an `ask-user` finding, the agent relays it to you."
-  },
-  "f29c18a93182": {
-   "also": [
-    "worklist-opens-with-playbook-steps"
-   ],
-   "class": "promise",
-   "file": "02-poteto-mode.md",
-   "promise": "twenty-five-playbooks",
-   "sources": [
-    "port"
-   ],
-   "text": "You give it a goal, it matches one of twenty-five playbooks, copies that playbook's opening prose and steps into the todo list, and calls the other skills as the steps need them."
   },
   "f2a7babc8e43": {
    "class": "promise",
