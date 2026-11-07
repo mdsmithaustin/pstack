@@ -2901,6 +2901,7 @@
    ],
    "harness_sensitive": false,
    "owners": [
+    "skills/poteto-mode/references/task-triggers.md",
     "skills/poteto-mode/playbooks/feature.md",
     "skills/poteto-mode/playbooks/bug-fix.md"
    ]

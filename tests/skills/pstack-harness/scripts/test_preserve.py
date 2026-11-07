@@ -107,6 +107,52 @@ class Preserve(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('All earlier tests still pass unedited.', result.stdout)
 
+    def test_unittest_pytest_import_text_does_not_require_pytest(self):
+        source = TESTS.replace('class Parse(', 'class TestParse(') + textwrap.dedent('''\
+
+            EXAMPLE = "import pytest\\nfrom pytest import fixture"
+            # import pytest
+            # from pytest import fixture
+            ''')
+        (self.repo / 'tests/test_mod.py').write_text(source)
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'unittest examples')
+        isolated = self.repo / 'isolated'
+        venv.EnvBuilder(with_pip=False).create(isolated)
+        for python in (sys.executable, str(isolated / 'bin/python')):
+            with self.subTest(python=python):
+                result = self.run_preserve('--python', python)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('with unittest', result.stdout)
+
+    def test_optional_pytest_import_does_not_require_pytest(self):
+        isolated = self.repo / 'isolated'
+        venv.EnvBuilder(with_pip=False).create(isolated)
+        imports = (
+            'try:\n    import pytest\nexcept ImportError:\n    pytest = None\n',
+            'try:\n    from pytest import fixture\nexcept ImportError:\n    fixture = None\n',
+            'if False:\n    import pytest\n',
+        )
+        for source in imports:
+            with self.subTest(source=source):
+                (self.repo / 'tests/test_mod.py').write_text(source + TESTS)
+                git(self.repo, 'add', 'tests/test_mod.py')
+                git(self.repo, 'commit', '-q', '-m', 'optional pytest import')
+                result = self.run_preserve('--python', str(isolated / 'bin/python'))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('with unittest', result.stdout)
+
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
+    def test_unittest_pytest_import_selects_pytest_when_available(self):
+        for source in ('import os, pytest as pt\n', 'from pytest import fixture\n'):
+            with self.subTest(source=source):
+                (self.repo / 'tests/test_mod.py').write_text(source + TESTS)
+                git(self.repo, 'add', 'tests/test_mod.py')
+                git(self.repo, 'commit', '-q', '-m', 'pytest import')
+                result = self.run_preserve()
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('with pytest', result.stdout)
+
     def test_narrowed_code_fails_on_the_earlier_test(self):
         (self.repo / 'mod.py').write_text(NARROWED)
         result = self.run_preserve()
@@ -197,6 +243,44 @@ class Preserve(unittest.TestCase):
         result = self.run_preserve()
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn('test_function_regression', result.stdout)
+
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
+    def test_mixed_unittest_and_class_tests_all_run(self):
+        for base in ('', '(object)'):
+            with self.subTest(base=base):
+                (self.repo / 'mod.py').write_text(MODULE)
+                (self.repo / 'tests/test_mod.py').write_text(TESTS.replace('"ignored://sink"', '"a"') + textwrap.dedent(f'''\
+
+                    class TestParse{base}:
+                        def test_class_regression(self):
+                            assert parse("ignored://sink") == "ignored://sink"
+                    '''))
+                git(self.repo, 'add', 'tests/test_mod.py', 'mod.py')
+                git(self.repo, 'commit', '-q', '-m', 'mixed class tests')
+                (self.repo / 'mod.py').write_text(NARROWED)
+                result = self.run_preserve()
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn('test_class_regression', result.stdout)
+                self.assertIn('with pytest', result.stdout)
+
+    def test_mixed_class_suite_requires_pytest_when_unavailable(self):
+        isolated = self.repo / 'isolated'
+        venv.EnvBuilder(with_pip=False).create(isolated)
+        for base in ('', '(object)'):
+            with self.subTest(base=base):
+                (self.repo / 'tests/test_mod.py').write_text(TESTS + textwrap.dedent(f'''\
+
+                    class TestPlain{base}:
+                        def test_plain(self):
+                            assert True
+                    '''))
+                git(self.repo, 'add', 'tests/test_mod.py')
+                git(self.repo, 'commit', '-q', '-m', 'mixed class tests')
+                result = self.run_preserve('--python', str(isolated / 'bin/python'))
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn('pytest', result.stdout)
+                self.assertIn('ERROR', result.stdout)
+                self.assertNotIn('All earlier tests still pass', result.stdout)
 
     def test_cached_working_tree_tests_cannot_hide_a_regression(self):
         for runner in ('unittest', 'pytest') if HAS_PYTEST else ('unittest',):
@@ -387,6 +471,47 @@ class Preserve(unittest.TestCase):
             with self.subTest(wanted=wanted):
                 result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_unittest_subtests_need_their_own_names(self):
+        (self.repo / 'tests/test_mod.py').write_text(textwrap.dedent('''\
+            import unittest
+            from mod import parse
+
+            class Parse(unittest.TestCase):
+                def test_values(self):
+                    for value in ('a', 'b'):
+                        with self.subTest('input / (value)', value=value):
+                            self.assertEqual(parse(value), value)
+            '''))
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'subtests')
+        parent = 'test_values (tests.test_mod.Parse.test_values)'
+        suffix_a = " [input / (value)] (value='a')"
+        suffix_b = " [input / (value)] (value='b')"
+        for implementation, status in (
+            ('def parse(value):\n    return "changed"\n', 'FAILED'),
+            ('def parse(value):\n    raise ValueError(value)\n', 'ERROR '),
+        ):
+            (self.repo / 'mod.py').write_text(implementation)
+            for wanted, code, missing in (
+                (parent, 1, 2),
+                ('test_values', 1, 2),
+                (parent + suffix_a, 1, 1),
+                ('tests.test_mod.Parse.test_values' + suffix_a, 1, 1),
+                ('tests/test_mod.py::Parse::test_values' + suffix_a, 1, 1),
+                (parent + suffix_a + '\n' + parent + suffix_b, 0, 0),
+            ):
+                with self.subTest(status=status, wanted=wanted):
+                    reason = wanted + '\n  input: the a or b input\n  quote: "Reject these values."\n'
+                    (self.repo / 'reasons.txt').write_text(reason)
+                    result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
+                    self.assertEqual(result.returncode, code, result.stdout + result.stderr)
+                    self.assertIn(f'{status} {parent}{suffix_a}', result.stdout)
+                    self.assertIn(f'{status} {parent}{suffix_b}', result.stdout)
+                    if missing:
+                        self.assertIn(f'{missing} test(s) have no reason', result.stdout)
+                    else:
+                        self.assertIn('2 test(s) waived', result.stdout)
 
     def test_no_commits_baseline_satisfies_the_gate(self):
         for since in ('no commits', 'no-commits'):

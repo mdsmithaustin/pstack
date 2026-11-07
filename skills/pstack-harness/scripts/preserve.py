@@ -119,23 +119,33 @@ def pytest_importable(python: str, project: Path) -> bool:
     return subprocess.run([python, "-c", "import pytest"], cwd=project, capture_output=True).returncode == 0
 
 
-def wants_pytest(project: Path, test_files: list[str], commit: str) -> bool:
+def wants_pytest(project: Path, test_files: list[str], commit: str, python: str) -> bool:
     if any((project / name).exists() for name in ("pytest.ini", "conftest.py", "tox.ini")):
         return True
     pyproject = project / "pyproject.toml"
     if pyproject.exists() and "[tool.pytest" in pyproject.read_text(errors="ignore"):
         return True
+    has_pytest_import = False
     for path in test_files:
         source = git(project, "show", f"{commit}:{path}", binary=True).stdout
-        if b"import pytest" in source or b"from pytest " in source:
-            return True
         try:
             module = ast.parse(source)
         except SyntaxError:
             continue
-        if any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test") for node in module.body):
-            return True
-    return False
+        for node in module.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test"):
+                return True
+            if isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
+                if node.bases and not (len(node.bases) == 1 and isinstance(node.bases[0], ast.Name) and node.bases[0].id == "object"):
+                    continue
+                if any(isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)) and method.name.startswith("test") for method in node.body):
+                    return True
+        has_pytest_import = has_pytest_import or any(
+            isinstance(node, ast.Import) and any(alias.name.split(".")[0] == "pytest" for alias in node.names)
+            or isinstance(node, ast.ImportFrom) and node.level == 0 and node.module is not None and node.module.split(".")[0] == "pytest"
+            for node in ast.walk(module)
+        )
+    return has_pytest_import and pytest_importable(python, project)
 
 
 def run_tests(python: str, project: Path, files: list[str], runner: str, command: list[str] | None = None) -> tuple[list[str], list[str], str]:
@@ -156,8 +166,8 @@ def run_tests(python: str, project: Path, files: list[str], runner: str, command
             if results.get("incomplete"):
                 errors.append("pytest stopped before running the tests to completion: the baseline suite was incomplete")
         else:
-            failed = re.findall(r"^FAIL: (\S+ \([\w.]+\))", text, re.M)
-            errors = re.findall(r"^ERROR: (\S+ \([\w.]+\))", text, re.M)
+            failed = re.findall(r"^FAIL: (\S+ \([\w.]+\).*)$", text, re.M)
+            errors = re.findall(r"^ERROR: (\S+ \([\w.]+\).*)$", text, re.M)
             counts = re.findall(r"^Ran (\d+) tests?", text, re.M)
             skipped = re.findall(r"^(?:OK|FAILED) \([^\n]*\bskipped=(\d+)", text, re.M)
             ran = sum(map(int, counts)) - sum(map(int, skipped))
@@ -182,11 +192,11 @@ def qualified(test_id: str) -> str:
     `test_x (pkg.mod.Case.test_x)` and `pkg/mod.py::Case::test_x` both become `pkg.mod.Case.test_x`. A parameter
     suffix stays, so `test_x[a]` and `test_x[b]` are two tests and each failing case needs its own name.
     """
-    inner = re.search(r"\(([\w.]+)\)$", test_id)
+    inner = re.match(r"\S+ \(([\w.]+)\)(.*)$", test_id)
     if inner:
-        return inner.group(1)
-    head, _, param = test_id.partition("[")
-    return re.sub(r"\.py(?=::|$)", "", head).replace("::", ".").replace("/", ".") + (f"[{param}" if param else "")
+        return inner.group(1) + inner.group(2)
+    head = re.split(r"\[| \(", test_id, maxsplit=1)[0]
+    return re.sub(r"\.py(?=::|$)", "", head).replace("::", ".").replace("/", ".") + test_id[len(head):]
 
 
 def is_collection_error(error_id: str) -> bool:
@@ -334,7 +344,7 @@ def main(argv: list[str]) -> int:
         print(f"preserve: nothing to preserve, {commit[:10]} holds no Python test files. The gate is satisfied; a project tested in "
               "another language runs the start commit's test files with its own runner by hand, under the same policy.")
         return 0
-    runner = "command" if args.command is not None else "pytest" if wants_pytest(project, test_files, commit) else "unittest"
+    runner = "command" if args.command is not None else "pytest" if wants_pytest(project, test_files, commit, python) else "unittest"
     try:
         with InPlace(project, commit, test_files + support):
             failed, errors, summary = run_tests(python, project, test_files, runner, args.command)
