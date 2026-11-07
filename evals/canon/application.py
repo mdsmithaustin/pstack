@@ -440,6 +440,8 @@ def _restore_clone(source, entries, digest):
 def _inside_setup(payload):
     root = Path(payload["root"])
     _disable_git_attributes(root)
+    (root / ".git/index").unlink()
+    _command(["git", "-C", root, "read-tree", "HEAD"], env=_git_env())
     _command(["git", "-C", root, "checkout-index", "--force", "--all"], env=_git_env())
     inventories = {"project": _restore_clone(root / "project", payload["project_entries"], payload["project"])}
     if payload["skills"] is not None:
