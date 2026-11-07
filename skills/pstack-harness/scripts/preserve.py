@@ -2,15 +2,18 @@
 """Run the test files that existed at a commit, unedited, against the working tree.
 
 The agent that changes code also edits the tests that disagree with it. This script keeps the
-earlier tests out of its reach: it writes the start commit's test files into place, runs exactly
-those files against the current code, and restores whatever the working tree held, so a behavior
-the earlier tests pinned cannot change silently. The files run in place because tests find the
-project through their own location (`Path(__file__).parent / ".."`, fixture directories).
+earlier tests out of its reach: it writes the start commit's test files into place, runs them
+against the current code, and restores whatever the working tree held. Automatic selection runs
+exactly those test files; --command delegates selection to the repository task. The files run in
+place because tests find the project through their own location (`Path(__file__).parent / ".."`,
+fixture directories).
 
     preserve.py --since <commit> [--project <root>] [--python <exe>] [--reasons <file>] [--report-only]
 
-Exit 0 when every earlier test passes or there are no earlier Python tests, 1 when any fails or
-cannot run, and 2 when the arguments or overlay are unusable. --report-only suppresses test-result failures; invalid arguments, refs, and overlay setup still fail.
+Exit 0 when the selected tests pass, all failures have allowed reasons, or there are no earlier
+Python tests. Exit 1 when a failure is uncovered, tests cannot run, or no test executes, including
+an all-skipped suite. Exit 2 when the arguments or overlay are unusable. --report-only suppresses
+test-result failures; invalid arguments, refs, and overlay setup still fail.
 
 Use --command <argv...> as the last argument when the repository has its own test task. It runs
 without a shell from the repository root, with baseline files restored. The task owns test selection
