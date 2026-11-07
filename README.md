@@ -92,11 +92,11 @@ morning.
 
 when invoked it:
 
-1. matches your task to a [playbook](./skills/poteto-mode/playbooks/) and opens a todo list whose first items are its opening prose and its steps, copied in verbatim.
+1. matches your task to a [playbook](./skills/poteto-mode/playbooks/) and tracks progress under the mode's [worklist and completion rules](./skills/poteto-mode/SKILL.md#playbooks).
 2. routes to the other skills as the steps fire.
 3. writes unslopped replies framed for the consumer and the maintainer.
 
-the full rules and playbooks live in [`skills/poteto-mode/SKILL.md`](./skills/poteto-mode/SKILL.md).
+the mode's [Playbooks section](./skills/poteto-mode/SKILL.md#playbooks) also owns the preservation gate required before every commit. the full rules and playbooks live in [`skills/poteto-mode/SKILL.md`](./skills/poteto-mode/SKILL.md).
 
 [`/poteto-mode`](./skills/poteto-mode/SKILL.md) is also a sticky mode: once entered it stays on across turns, applying itself when a playbook matches or the task needs rigor and staying out of the way otherwise. opt out any time by saying so. after known compaction or truncation, the agent follows the mode's [recovery rule](./skills/poteto-mode/SKILL.md#recover-after-compaction-or-truncation) to continue the current task. runtime retention varies; see the [dated evidence](./skills/pstack-harness/references/skill-retention.md). if the mode stops applying, type `/poteto-mode` again.
 

@@ -1,6 +1,6 @@
 # Harness loading paths
 
-Issue [254](https://github.com/mdsmithaustin/pstack/issues/254) splits harness instructions by action and runtime. The shared guide selects the procedure. A spawn adds shared role, isolation, fallback, and reporting instructions plus the portable-root contract and one runtime adapter. Transcript lookups select a separate location file, so they do not load spawn instructions.
+Issue [254](https://github.com/mdsmithaustin/pstack/issues/254) splits harness instructions by action and runtime. The shared guide selects the procedure. Its [action table](../skills/pstack-harness/SKILL.md#select-the-action) and [spawn recipe](../skills/pstack-harness/SKILL.md#spawn-a-role) define which references a spawn needs. Transcript lookups select a separate location file, so they do not load spawn instructions.
 
 The [source-byte receipts](pstack-harness-loading-paths.json) record the shared guide and files selected by its action and runtime tables, with each file's exact UTF-8 byte count. They compare those routes against base `d3d8fd4d1354385390050a4e18e8cd579c565f75`. Its unsplit guide matches the issue's pinned `b5622490de2db0b32108bc071df32ae477f117fe` guide byte for byte. Each receipt's `measured_at` names the commit whose files produced its `after` counts, so a later edit to a loaded file leaves the receipt valid.
 
