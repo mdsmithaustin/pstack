@@ -1436,6 +1436,10 @@
      "quote": "Then call the Skill tool with `spec-probes` and follow its edge probe on each new requirement."
     },
     {
+     "file": "skills/poteto-mode/references/task-triggers.md",
+     "quote": "- Writing acceptance tests or criteria for a new requirement from a spec, issue, or plan → call the Skill tool with `spec-probes`, then follow its edge probe."
+    },
+    {
      "file": "skills/poteto-mode/playbooks/feature.md",
      "quote": "Record each edge that neither settles as an open gap in the reply, not as a test."
     }
@@ -1443,6 +1447,7 @@
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/playbooks/feature.md",
+    "skills/poteto-mode/references/task-triggers.md",
     "skills/spec-probes/SKILL.md"
    ]
   },
