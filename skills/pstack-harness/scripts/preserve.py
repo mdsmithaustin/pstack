@@ -10,8 +10,11 @@ fixture directories).
 
 Automatic selection uses pytest configuration and function/import hints, then runtime class
 evidence for undecided suites. Undecided modules load under unittest's module names and are reused
-if pytest is selected. Use --command for a repository task that needs different import naming or
-third-party collection plugins without those hints.
+if pytest is selected. Automatic pytest collection retains the baseline's python_files,
+python_functions, and python_classes settings through the selected pytest's configuration discovery.
+Without an explicit baseline python_files setting, the broader Python filename patterns still apply.
+Use --command for a repository task that needs different import naming or third-party collection
+plugins without those hints.
 
     preserve.py --since <commit> [--project <root>] [--python <exe>] [--reasons <file>] [--report-only]
 
@@ -22,10 +25,25 @@ test-result failures; invalid arguments, refs, and overlay setup still fail.
 
 Use --command <argv...> as the last argument when the repository has its own test task. It runs
 without a shell from the repository root, with baseline files restored. The task owns test selection
-and must emit unittest or pytest execution summaries. A command that reports no executed tests fails.
+and must provide unittest or pytest execution evidence. A command that proves no test execution fails.
 This strict mode cannot be combined with --reasons. For example:
 
     preserve.py --since <commit> --command mise run gate-test
+
+Commands whose executable resolves to the selected --python executable, followed by supported Python
+options and -m unittest, use native result data to distinguish skipped methods from skipped subtests:
+
+    preserve.py --since <commit> --python <python> --command <python> -m unittest discover -s tests
+
+The adapter preserves the executable, interpreter options, unittest selection, normal test output,
+and native exit status. It launches a Python wrapper, so process argv and import-tracing diagnostics
+can reveal the helper. Supported standalone Python options are -B, -E, -I, -O, -OO, -P, -q, -s, -S,
+-u, -v, -vv, -b, -bb, -d, and -R. -W and -X accept attached or separate values.
+
+Other commands and unsupported invocation forms use output summaries. A positive conservative
+execution count is sufficient. When unittest skip counts leave execution ambiguous, the command
+fails with a diagnostic naming the direct form above. Summary text alone cannot distinguish a skipped
+method from an executed method with skipped subtests.
 
 --reasons names a file of allowed failures. A block names the failing tests it covers, one per
 line, then an indented `input:` line naming what those tests sent and an indented `quote:` line
@@ -41,7 +59,9 @@ that names no failing test, or a test with no block, is reported. The script can
 the sentence covers the input; it makes the reason exist, per failure, before the commit.
 
 The overlay first saves original test and support-file bytes and modes in a private
-preserve-backup directory under this worktree's Git directory. Find the Git directory with
+preserve-backup directory under this worktree's Git directory. Before any baseline write, preflight
+refuses selected files with multiple hard links and exits 2. Selected overlay targets must be
+independent regular files. Find the Git directory with
 `git rev-parse --absolute-git-dir`. Another overlay refuses a pending backup. Successful
 restoration removes the backup; incomplete restoration retains it.
 
@@ -79,6 +99,35 @@ from pathlib import Path
 
 TEST_DIRS = {"test", "tests"}
 MAX_LISTED = 120
+PYTEST_CONFIGS = ("pytest.toml", ".pytest.toml", "pytest.ini", ".pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg")
+UNITTEST_RESULTS = '''\
+class UnittestResults(unittest.TextTestResult):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.started = []
+        self.skipped_tests = []
+        self.current = None
+
+    def startTest(self, test):
+        super().startTest(test)
+        self.current = test
+        self.started.append(str(test))
+
+    def stopTest(self, test):
+        super().stopTest(test)
+        self.current = None
+
+    def addSkip(self, test, reason):
+        super().addSkip(test, reason)
+        if test is self.current:
+            self.skipped_tests.append(str(test))
+
+    def evidence(self):
+        return dict(failed=[str(test) for test, _ in self.failures],
+                    errors=[str(test) for test, _ in self.errors],
+                    started=self.started, skipped=self.skipped_tests,
+                    ran=len(self.started) - len(self.skipped_tests))
+'''
 TEST_RUNNER = '''\
 import inspect
 import json
@@ -86,6 +135,8 @@ import sys
 import unittest
 from pathlib import Path
 
+
+''' + UNITTEST_RESULTS + '''
 
 class Results:
     def __init__(self):
@@ -116,7 +167,7 @@ class Results:
 
 
 report = Path(sys.argv[1])
-runner, files = sys.argv[2], sys.argv[3:]
+runner, configuration, files = sys.argv[2], Path(sys.argv[3]), sys.argv[4:]
 data = {"runner": "pytest" if runner == "pytest" else "unittest", "failed": [], "errors": [], "ran": 0}
 report.write_text(json.dumps(data))
 if runner == "optional":
@@ -135,7 +186,8 @@ if runner == "auto":
             return self.suiteClass()
 
     imports = Imports()
-    import_errors = imports.loadTestsFromNames([path[:-3].replace("/", ".") for path in files])
+    names = [path[:-12] if path.endswith("/__init__.py") else path[:-3] for path in files]
+    import_errors = imports.loadTestsFromNames([path.replace("/", ".") for path in names])
     requires_pytest = False
     for module in modules:
         pending = list(vars(module).items())
@@ -170,18 +222,47 @@ if runner == "pytest":
         if parts:
             sys.modules.setdefault(".".join(parts), module)
     results = Results()
+    baseline = pytest.Config.fromdictargs({}, [*[str(configuration / path) for path in files], "--noconftest", "-o", "addopts="])
+    naming = []
+    for name in ("python_files", "python_functions", "python_classes"):
+        patterns = baseline.getini(name)
+        if name == "python_files" and name not in baseline.inicfg:
+            patterns = ["test*.py", "*_test.py", "*_tests.py"]
+        naming.extend(["-o", name + "=" + " ".join(patterns)])
+    baseline._ensure_unconfigure()
     status = pytest.main(["-q", "-p", "no:cacheprovider", "-rfE", "-o", "addopts=", "--maxfail=0",
-                          "-o", "python_files=test*.py *_test.py *_tests.py", *files], plugins=[results])
+                          *naming, *files], plugins=[results])
     data.update(failed=results.failed, errors=results.errors, ran=results.ran,
                 incomplete=len(results.finished) != results.collected or results.deselected > 0)
 else:
     suite = unittest.TestSuite([import_errors, *(unittest.defaultTestLoader.loadTestsFromModule(module) for module in modules)])
-    result = unittest.TextTestRunner().run(suite)
+    result = unittest.TextTestRunner(resultclass=UnittestResults).run(suite)
     status = int(not result.wasSuccessful())
-    data.update(failed=[str(test) for test, _ in result.failures], errors=[str(test) for test, _ in result.errors],
-                ran=result.testsRun - len(result.skipped))
+    data.update(result.evidence())
 report.write_text(json.dumps(data))
 sys.exit(status)
+'''
+UNITTEST_COMMAND = '''\
+import json
+import runpy
+import sys
+import unittest
+from pathlib import Path
+
+''' + UNITTEST_RESULTS + '''
+report = Path(sys.argv[1])
+report.write_text(json.dumps(dict(failed=[], errors=[], ran=0)))
+
+class CommandResults(UnittestResults):
+    def stopTestRun(self):
+        super().stopTestRun()
+        report.write_text(json.dumps(self.evidence()))
+
+unittest.TextTestRunner.resultclass = CommandResults
+sys.argv = ["-m", *sys.argv[2:]]
+if not getattr(sys.flags, "safe_path", sys.flags.isolated):
+    sys.path[0] = str(Path.cwd())
+runpy.run_module("unittest", run_name="__main__", alter_sys=True)
 '''
 
 
@@ -205,16 +286,29 @@ def git(project: Path, *args: str, check: bool = True, binary: bool = False) -> 
     return subprocess.run(["git", "-C", str(project), *args], capture_output=True, text=not binary, check=check)
 
 
+def baseline_pytest_configs(project: Path, test_files: list[str], commit: str) -> dict[str, bytes]:
+    parents = {parent for path in test_files for parent in Path(path).parents}
+    entries = [entry for entry in git(project, "ls-tree", "-r", "-z", commit).stdout.split("\0") if entry and not entry.startswith("120000 ")]
+    paths = [entry.split("\t", 1)[1] for entry in entries]
+    return {path: git(project, "show", f"{commit}:{path}", binary=True).stdout
+            for path in paths if Path(path).name in PYTEST_CONFIGS and Path(path).parent in parents}
+
+
 def select_runner(project: Path, test_files: list[str], commit: str) -> str:
-    if any((project / name).exists() for name in ("pytest.ini", "conftest.py")):
+    configs = {path: source.decode(errors="ignore") for path, source in baseline_pytest_configs(project, test_files, commit).items()}
+    for name in PYTEST_CONFIGS:
+        if name not in configs and (project / name).is_file():
+            configs[name] = (project / name).read_text(errors="ignore")
+    if any(Path(name).name in ("pytest.toml", ".pytest.toml", "pytest.ini", ".pytest.ini") for name in configs) or (project / "conftest.py").exists():
         return "pytest"
-    tox = configparser.ConfigParser(interpolation=None)
-    tox.read(project / "tox.ini")
-    if tox.has_section("pytest"):
-        return "pytest"
-    pyproject = project / "pyproject.toml"
-    if pyproject.exists() and "[tool.pytest" in pyproject.read_text(errors="ignore"):
-        return "pytest"
+    for name, source in configs.items():
+        if Path(name).name in ("tox.ini", "setup.cfg"):
+            ini = configparser.ConfigParser(interpolation=None)
+            ini.read_string(source)
+            if ini.has_section("pytest" if Path(name).name == "tox.ini" else "tool:pytest"):
+                return "pytest"
+        if Path(name).name == "pyproject.toml" and "[tool.pytest" in source:
+            return "pytest"
     has_pytest_import = False
     for path in test_files:
         source = git(project, "show", f"{commit}:{path}", binary=True).stdout
@@ -233,21 +327,61 @@ def select_runner(project: Path, test_files: list[str], commit: str) -> str:
     return "optional" if has_pytest_import else "auto"
 
 
+def direct_unittest(command: list[str], python: str, project: Path) -> int | None:
+    paths = []
+    for name in (command[0], python):
+        found = str(project / name) if os.sep in name else shutil.which(name)
+        if not found:
+            return None
+        paths.append(Path(found).resolve())
+    if paths[0] != paths[1]:
+        return None
+    index = 1
+    while index < len(command):
+        option = command[index]
+        if option == "-m":
+            return index if command[index + 1:index + 2] == ["unittest"] else None
+        if option in ("-W", "-X"):
+            index += 2
+        elif option in {"-B", "-E", "-I", "-O", "-OO", "-P", "-q", "-s", "-S", "-u", "-v", "-vv", "-b", "-bb", "-d", "-R"} or option.startswith(("-W", "-X")):
+            index += 1
+        else:
+            return None
+    return None
+
+
 def run_tests(python: str, files: list[str], runner: str, overlay: InPlace,
               command: list[str] | None = None) -> tuple[str, list[str], list[str], str]:
     with tempfile.TemporaryDirectory(prefix="preserve-") as isolated:
         env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONPYCACHEPREFIX=str(Path(isolated) / "pycache"))
         env.pop("PYTEST_ADDOPTS", None)
+        report = Path(isolated) / "results.json"
+        structured_command = direct_unittest(command, python, overlay.project) if runner == "command" else None
         if runner != "command":
-            report = Path(isolated) / "results.json"
-            cmd = [python, "-c", TEST_RUNNER, str(report), runner, *files]
+            configuration = Path(isolated) / "configuration"
+            configuration.mkdir()
+            configs = baseline_pytest_configs(overlay.project, files, overlay.commit)
+            for name, source in configs.items():
+                target = configuration / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(source)
+            if not configs:
+                (configuration / "pytest.ini").write_text("[pytest]\n")
+            for path in files:
+                target = configuration / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.touch()
+            cmd = [python, "-c", TEST_RUNNER, str(report), runner, str(configuration), *files]
+        elif structured_command is not None:
+            cmd = [*command[:structured_command], "-c", UNITTEST_COMMAND, str(report), *command[structured_command + 2:]]
         else:
             cmd = command
         out = overlay.run(cmd, env=env)
         text = out.stdout + out.stderr
-        if runner != "command":
+        if runner != "command" or structured_command is not None:
             results = json.loads(report.read_text()) if report.exists() else {"runner": "pytest" if runner == "pytest" else "unittest", "failed": [], "errors": [], "ran": 0}
-            runner = results["runner"]
+            if runner != "command":
+                runner = results["runner"]
             failed, errors, ran = results["failed"], results["errors"], results["ran"]
             if results.get("incomplete"):
                 errors.append("pytest stopped before running the tests to completion: the baseline suite was incomplete")
@@ -257,12 +391,17 @@ def run_tests(python: str, files: list[str], runner: str, overlay: InPlace,
             counts = re.findall(r"^Ran (\d+) tests?", text, re.M)
             skipped = re.findall(r"^(?:OK|FAILED) \([^\n]*\bskipped=(\d+)", text, re.M)
             ran = sum(map(int, counts)) - sum(map(int, skipped))
+            if counts and skipped and ran <= 0:
+                errors.append("command has ambiguous unittest execution evidence before running the tests: "
+                              "the summary cannot distinguish skipped methods from skipped subtests; "
+                              "use --python <interpreter> --command <same-interpreter> -m unittest <selection> for structured evidence")
+                ran = None
             if not counts:
                 ran = sum(map(int, re.findall(r"(\d+) (?:passed|failed)", text)))
     if out.returncode not in (0, 1) or (out.returncode != 0 and not failed and not errors):
         last = text.strip().splitlines()[-1] if text.strip() else ""
         errors.append(f"{runner} exited {out.returncode} before running the tests: {last}")
-    if ran == 0:
+    if ran is not None and ran <= 0:
         errors.append(f"{runner} ran no tests from the listed files before running the tests: nothing was checked")
     return runner, failed, errors, summary_line(text)
 
@@ -370,7 +509,11 @@ class InPlace:
                     self.save_manifest()
                     ready_write.write(b"1")
                     ready_write.close()
-                    stdout, stderr = out.communicate()
+                    while out.poll() is None:
+                        try:
+                            out.communicate(timeout=0.1)
+                        except subprocess.TimeoutExpired:
+                            pass
                 finally:
                     ready_write.close()
                     blocked = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGINT, signal.SIGTERM, signal.SIGHUP})
@@ -387,7 +530,7 @@ class InPlace:
                             os.killpg(out.pid, signal.SIGKILL)
                         except (ProcessLookupError, PermissionError):
                             pass
-                        out.communicate()
+                        stdout, stderr = out.communicate()
                         deadline = time.monotonic() + 2
                         while True:
                             try:
@@ -446,6 +589,8 @@ class InPlace:
                     raise OSError(f"{rel} is, or sits under, a symlink in the working tree; the overlay never writes through a link")
                 if target.exists() and not target.is_file():
                     raise IsADirectoryError(f"{rel} is a directory in the working tree, so the earlier file cannot be written there")
+                if target.exists() and target.stat().st_nlink > 1:
+                    raise OSError(f"{rel} has a hard link in the working tree; the overlay never writes through a shared inode")
                 entry = {"backup": str(index) if target.exists() else None,
                          "mode": target.stat().st_mode & 0o7777 if target.exists() else None}
                 if entry["backup"] is not None:
