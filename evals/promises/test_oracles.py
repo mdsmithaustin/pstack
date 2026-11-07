@@ -73,7 +73,6 @@ def text(seq, body):
 
 
 def open_delegation_step(skills_root=ROOT / "skills"):
-    """The Feature step that records the source-file count, as an item whose text is its first sentence."""
     step = next(s for s in oracles.playbook_shape("feature", skills_root)["steps"] if "below threshold" in s["text"])
     return f"{step['n']}. {oracles.first_sentence(step['text'])}"
 

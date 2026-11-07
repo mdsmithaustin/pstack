@@ -6766,6 +6766,19 @@
    ],
    "text": "```text\n/recall my work on the virtualized list from yesterday, then read this bug report.\n```"
   },
+  "40be969ee463": {
+   "also": [
+    "delegate-brief-passes-source",
+    "delegate-never-writes-only-test"
+   ],
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "feature-settles-acceptance-tests-and-edges",
+   "sources": [
+    "port"
+   ],
+   "text": "[Step 6](../../skills/poteto-mode/playbooks/feature.md) defines when the lead implements or delegates, the worklist records, and the implementation checks for both paths."
+  },
   "410f72dd5ea7": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -9119,6 +9132,15 @@
     "port"
    ],
    "text": "When all you want is status, ask smaller and Babysit answers without starting the loop:"
+  },
+  "818bacaf1182": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "feature-settles-acceptance-tests-and-edges",
+   "sources": [
+    "port"
+   ],
+   "text": "[Feature step 4](../../skills/poteto-mode/playbooks/feature.md) defines the acceptance tests and specification edges."
   },
   "820ddf7e8cd8": {
    "class": "context",
@@ -13187,19 +13209,6 @@
     "port"
    ],
    "text": "Of everything in this guide, the verification skill pays off the most."
-  },
-  "ecff60d0a30c": {
-   "also": [
-    "delegate-brief-passes-source",
-    "delegate-never-writes-only-test"
-   ],
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "feature-settles-acceptance-tests-and-edges",
-   "sources": [
-    "port"
-   ],
-   "text": "[Feature step 6](../../skills/poteto-mode/playbooks/feature.md) defines when the lead implements or delegates, what the worklist records, and the acceptance-test and specification-edge duties for both paths."
   },
   "ed257fd20058": {
    "class": "context",

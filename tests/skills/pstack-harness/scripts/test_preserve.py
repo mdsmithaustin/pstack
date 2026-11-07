@@ -1,14 +1,18 @@
+import importlib.util
 import os
+import py_compile
 import subprocess
 import sys
 import tempfile
 import textwrap
 import unittest
+import venv
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[4]
 SCRIPT = ROOT / 'skills/pstack-harness/scripts/preserve.py'
+HAS_PYTEST = importlib.util.find_spec('pytest') is not None
 
 MODULE = "def parse(value):\n    return value\n"
 TESTS = textwrap.dedent('''\
@@ -45,12 +49,38 @@ class Preserve(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_preserve(self, *extra):
+    def run_preserve(self, *extra, env=None):
         since = ['--since', 'HEAD'] if '--since' not in extra else []
         return subprocess.run(
             [sys.executable, str(SCRIPT), *since, '--project', str(self.repo), '--python', sys.executable, *extra],
-            capture_output=True, text=True,
+            capture_output=True, text=True, env=env,
         )
+
+    def test_project_command_uses_the_projects_test_selection(self):
+        (self.repo / 'fixtures').mkdir()
+        saved = self.repo / 'fixtures/test_saved.py'
+        saved.write_text('import unavailable_example_dependency\n')
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'saved example')
+        command = ('--command', sys.executable, '-m', 'unittest', 'discover', '-s', 'tests')
+        result = self.run_preserve(*command)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("baseline Python test file(s) restored", result.stdout)
+        self.assertIn("selected project test command passed", result.stdout)
+        self.assertNotIn("All earlier tests still pass", result.stdout)
+        (self.repo / 'mod.py').write_text(NARROWED)
+        edited = TESTS.replace('ignored://sink', 'allowed://sink')
+        (self.repo / 'tests/test_mod.py').write_text(edited)
+        result = self.run_preserve(*command)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('test_scheme_kept', result.stdout)
+        self.assertEqual((self.repo / 'tests/test_mod.py').read_text(), edited)
+        self.assertEqual(saved.read_text(), 'import unavailable_example_dependency\n')
+
+    def test_project_command_that_runs_nothing_cannot_pass(self):
+        result = self.run_preserve('--command', sys.executable, '-c', 'pass')
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('nothing was checked', result.stdout)
 
     def test_unchanged_code_passes(self):
         result = self.run_preserve()
@@ -94,6 +124,7 @@ class Preserve(unittest.TestCase):
         self.assertIn('nothing to preserve', result.stdout)
         self.assertIn('own runner by hand', result.stdout)
 
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
     def test_function_style_tests_without_a_pytest_marker_still_run(self):
         (self.repo / 'tests/test_mod.py').write_text("from mod import parse\n\n\ndef test_scheme_kept():\n    assert parse('ignored://sink') == 'ignored://sink'\n")
         git(self.repo, 'add', '-A')
@@ -103,6 +134,66 @@ class Preserve(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn('test_scheme_kept', result.stdout)
         self.assertIn('with pytest', result.stdout)
+
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
+    def test_class_style_tests_without_a_pytest_marker_still_run(self):
+        (self.repo / 'tests/test_mod.py').write_text(textwrap.dedent('''\
+            from mod import parse
+
+            class TestParse:
+                def test_scheme_kept(self):
+                    assert parse("ignored://sink") == "ignored://sink"
+            '''))
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'class tests')
+        (self.repo / 'mod.py').write_text(NARROWED)
+        result = self.run_preserve()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('test_scheme_kept', result.stdout)
+        self.assertIn('with pytest', result.stdout)
+
+    def test_function_style_suite_requires_pytest_when_unavailable(self):
+        (self.repo / 'tests/test_mod.py').write_text('def test_plain():\n    assert True\n')
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'function tests')
+        isolated = self.repo / 'isolated'
+        venv.EnvBuilder(with_pip=False).create(isolated)
+        result = self.run_preserve('--python', str(isolated / 'bin/python'))
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('pytest', result.stdout)
+        self.assertIn('ERROR', result.stdout)
+        self.assertNotIn('All earlier tests still pass', result.stdout)
+
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
+    def test_mixed_unittest_and_function_tests_all_run(self):
+        (self.repo / 'tests/test_mod.py').write_text(TESTS.replace('"ignored://sink"', '"a"') + textwrap.dedent('''\
+
+            def test_function_regression():
+                assert parse("ignored://sink") == "ignored://sink"
+            '''))
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'mixed tests')
+        (self.repo / 'mod.py').write_text(NARROWED)
+        result = self.run_preserve()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('test_function_regression', result.stdout)
+
+    def test_cached_working_tree_tests_cannot_hide_a_regression(self):
+        for runner in ('unittest', 'pytest') if HAS_PYTEST else ('unittest',):
+            with self.subTest(runner=runner):
+                if runner == 'pytest':
+                    (self.repo / 'conftest.py').write_text('')
+                (self.repo / 'mod.py').write_text(MODULE.replace('return value', 'return value.replace("ignored", "changed")'))
+                edited = TESTS.replace('), "ignored://sink")', '), "changed://sink")')
+                self.assertEqual(len(edited), len(TESTS))
+                test_file = self.repo / 'tests/test_mod.py'
+                test_file.write_text(edited)
+                py_compile.compile(str(test_file), doraise=True,
+                                   invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH)
+                result = self.run_preserve()
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn('test_scheme_kept', result.stdout)
+                self.assertEqual(test_file.read_text(), edited)
 
     def test_a_run_that_checks_nothing_is_an_error(self):
         (self.repo / 'tests/test_mod.py').write_text("import sys\nsys.exit(1)\n")
@@ -127,6 +218,7 @@ class Preserve(unittest.TestCase):
         result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
     def test_pytest_collection_error_is_never_waived(self):
         (self.repo / 'conftest.py').write_text('')
         (self.repo / 'tests/test_mod.py').write_text("import pytest\nfrom mod import parse\n\n\ndef test_scheme_kept():\n    assert parse('ignored://sink') == 'ignored://sink'\n")
@@ -218,6 +310,15 @@ class Preserve(unittest.TestCase):
           quote: "Every destination starts with backup:// and names a store."
         ''')
 
+    def test_short_spec_sentences_are_valid_reasons(self):
+        (self.repo / 'mod.py').write_text(NARROWED)
+        for quote in ('Reject old values.', 'Destination is required.'):
+            with self.subTest(quote=quote):
+                reason = self.REASON.replace('Every destination starts with backup:// and names a store.', quote)
+                (self.repo / 'reasons.txt').write_text(reason)
+                result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_reasons_block_naming_each_failure_waives_it(self):
         (self.repo / 'mod.py').write_text(NARROWED)
         (self.repo / 'reasons.txt').write_text(self.REASON)
@@ -245,7 +346,7 @@ class Preserve(unittest.TestCase):
         (self.repo / 'mod.py').write_text(NARROWED)
         for body in ("test_scheme_kept\n  quote: \"Every destination starts with backup:// and names a store.\"\n",
                      "test_scheme_kept\n  input: the old scheme\n  quote: the schema changed\n",
-                     "test_scheme_kept\n  input: the old scheme\n  quote: \"backup:// only\"\n"):
+                     "test_scheme_kept\n  input: the old scheme\n  quote: \"\"\n"):
             (self.repo / 'reasons.txt').write_text(body)
             with self.subTest(body=body.splitlines()[-1]):
                 result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
@@ -296,6 +397,7 @@ class Preserve(unittest.TestCase):
         self.assertIn('symlink', result.stderr)
         self.assertEqual((self.repo / 'tests/test_mod.py').read_text(), edited)
 
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
     def test_parameterized_cases_need_their_own_names(self):
         (self.repo / 'conftest.py').write_text('')
         (self.repo / 'tests/test_mod.py').write_text(textwrap.dedent('''\
@@ -314,6 +416,60 @@ class Preserve(unittest.TestCase):
         result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn('1 test(s) have no reason', result.stdout)
+
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
+    def test_parameter_ids_with_spaces_remain_distinct(self):
+        (self.repo / 'tests/test_mod.py').write_text(textwrap.dedent('''\
+            import pytest
+            from mod import parse
+
+            @pytest.mark.parametrize("value", ["a", "b"], ids=["bad a", "bad b"])
+            def test_scheme_kept(value):
+                assert parse(value) == value
+            '''))
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'parameter ids with spaces')
+        (self.repo / 'mod.py').write_text('def parse(value):\n    return "changed"\n')
+        for wanted, status, missing in (
+            ('tests/test_mod.py::test_scheme_kept[bad', 1, 2),
+            ('tests/test_mod.py::test_scheme_kept[bad a]', 1, 1),
+            ('tests/test_mod.py::test_scheme_kept[bad a]\ntests/test_mod.py::test_scheme_kept[bad b]', 0, 0),
+        ):
+            with self.subTest(wanted=wanted):
+                reason = self.REASON.replace('test_scheme_kept\n', wanted + '\n', 1)
+                (self.repo / 'reasons.txt').write_text(reason)
+                result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
+                self.assertEqual(result.returncode, status, result.stdout + result.stderr)
+                self.assertIn('tests/test_mod.py::test_scheme_kept[bad a]', result.stdout)
+                self.assertIn('tests/test_mod.py::test_scheme_kept[bad b]', result.stdout)
+                if missing:
+                    self.assertIn(f'{missing} test(s) have no reason', result.stdout)
+
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
+    def test_inherited_pytest_options_cannot_omit_tests(self):
+        (self.repo / 'tests/test_mod.py').write_text(textwrap.dedent('''\
+            import pytest
+            from mod import parse
+
+            def test_a_waived():
+                assert parse("a") == "a"
+
+            def test_z_uncovered():
+                assert parse("z") == "z"
+            '''))
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'two regressions')
+        (self.repo / 'mod.py').write_text('def parse(value):\n    return "changed"\n')
+        (self.repo / 'reasons.txt').write_text(self.REASON.replace('test_scheme_kept\n', 'test_a_waived\n', 1))
+        for source in ('config', 'environment'):
+            for options in ('-k test_a_waived', '-x'):
+                with self.subTest(source=source, options=options):
+                    (self.repo / 'pytest.ini').write_text('[pytest]\naddopts = ' + (options if source == 'config' else '') + '\n')
+                    env = {**os.environ, 'PYTEST_ADDOPTS': options if source == 'environment' else ''}
+                    result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'), env=env)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn('test_z_uncovered', result.stdout)
+                    self.assertIn('1 test(s) have no reason', result.stdout)
 
     def test_non_ascii_test_path_is_still_run(self):
         (self.repo / 'tést').mkdir()

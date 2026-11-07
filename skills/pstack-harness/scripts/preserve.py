@@ -9,8 +9,15 @@ project through their own location (`Path(__file__).parent / ".."`, fixture dire
 
     preserve.py --since <commit> [--project <root>] [--python <exe>] [--reasons <file>] [--report-only]
 
-Exit 0 when every earlier test passes, 1 when any fails or cannot run, 2 when the commit holds no
-test files or the arguments are unusable. --report-only prints the same report and exits 0.
+Exit 0 when every earlier test passes or there are no earlier Python tests, 1 when any fails or
+cannot run, and 2 when the arguments or overlay are unusable. --report-only suppresses test-result failures; invalid arguments, refs, and overlay setup still fail.
+
+Use --command <argv...> as the last argument when the repository has its own test task. It runs
+without a shell from the repository root, with baseline files restored. The task owns test selection
+and must emit unittest or pytest execution summaries. A command that reports no executed tests fails.
+This strict mode cannot be combined with --reasons. For example:
+
+    preserve.py --since <commit> --command mise run gate-test
 
 --reasons names a file of allowed failures. A block names the failing tests it covers, one per
 line, then an indented `input:` line naming what those tests sent and an indented `quote:` line
@@ -28,15 +35,64 @@ the sentence covers the input; it makes the reason exist, per failure, before th
 from __future__ import annotations
 
 import argparse
+import ast
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 TEST_DIRS = {"test", "tests"}
 MAX_LISTED = 120
+PYTEST_RUNNER = '''\
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+
+class Results:
+    def __init__(self):
+        self.failed = []
+        self.errors = []
+        self.finished = set()
+        self.ran = 0
+        self.collected = 0
+        self.deselected = 0
+
+    def pytest_runtest_logreport(self, report):
+        if report.when == "call" and not report.skipped:
+            self.ran += 1
+        if report.when == "teardown":
+            self.finished.add(report.nodeid)
+        if report.failed:
+            (self.failed if report.when == "call" else self.errors).append(report.nodeid)
+
+    def pytest_collectreport(self, report):
+        if report.failed:
+            self.errors.append(f"collection failed before running the tests: {report.nodeid}")
+
+    def pytest_deselected(self, items):
+        self.deselected += len(items)
+
+    def pytest_sessionfinish(self, session):
+        self.collected = session.testscollected
+
+
+results = Results()
+status = pytest.main(sys.argv[2:], plugins=[results])
+Path(sys.argv[1]).write_text(json.dumps({
+    "failed": results.failed,
+    "errors": results.errors,
+    "ran": results.ran,
+    "incomplete": len(results.finished) != results.collected or results.deselected > 0,
+}))
+sys.exit(status)
+'''
 
 
 def is_test_file(path: str) -> bool:
@@ -48,7 +104,6 @@ def is_test_file(path: str) -> bool:
 
 
 def is_support_file(path: str) -> bool:
-    """conftest.py, and non-code files that live beside the tests (fixtures)."""
     parts = path.split("/")
     name = parts[-1]
     if name == "conftest.py":
@@ -64,43 +119,58 @@ def pytest_importable(python: str, project: Path) -> bool:
     return subprocess.run([python, "-c", "import pytest"], cwd=project, capture_output=True).returncode == 0
 
 
-def wants_pytest(python: str, project: Path, test_files: list[str], commit: str) -> bool:
-    if not pytest_importable(python, project):
-        return False
+def wants_pytest(project: Path, test_files: list[str], commit: str) -> bool:
     if any((project / name).exists() for name in ("pytest.ini", "conftest.py", "tox.ini")):
         return True
     pyproject = project / "pyproject.toml"
     if pyproject.exists() and "[tool.pytest" in pyproject.read_text(errors="ignore"):
         return True
-    return any(b"import pytest" in git(project, "show", f"{commit}:{p}", binary=True).stdout for p in test_files)
+    for path in test_files:
+        source = git(project, "show", f"{commit}:{path}", binary=True).stdout
+        if b"import pytest" in source or b"from pytest " in source:
+            return True
+        try:
+            module = ast.parse(source)
+        except SyntaxError:
+            continue
+        if any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test") for node in module.body):
+            return True
+    return False
 
 
-def run_tests(python: str, project: Path, files: list[str], runner: str) -> tuple[list[str], list[str], str]:
-    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
-    if runner == "pytest":
-        cmd = [python, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfE",
-               "-o", "python_files=test*.py *_test.py *_tests.py", *files]
+def run_tests(python: str, project: Path, files: list[str], runner: str, command: list[str] | None = None) -> tuple[list[str], list[str], str]:
+    with tempfile.TemporaryDirectory(prefix="preserve-") as isolated:
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONPYCACHEPREFIX=str(Path(isolated) / "pycache"))
+        env.pop("PYTEST_ADDOPTS", None)
+        if runner == "pytest":
+            report = Path(isolated) / "results.json"
+            cmd = [python, "-c", PYTEST_RUNNER, str(report), "-q", "-p", "no:cacheprovider", "-rfE",
+                   "-o", "addopts=", "--maxfail=0", "-o", "python_files=test*.py *_test.py *_tests.py", *files]
+        else:
+            cmd = command if command is not None else [python, "-m", "unittest", *files]
         out = subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True)
         text = out.stdout + out.stderr
-        failed = re.findall(r"^FAILED (\S+)", text, re.M)
-        errors = re.findall(r"^ERROR (\S+)", text, re.M)
-    else:
-        cmd = [python, "-m", "unittest", *files]
-        out = subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True)
-        text = out.stdout + out.stderr
-        failed = re.findall(r"^FAIL: (\S+ \([\w.]+\))", text, re.M)
-        errors = re.findall(r"^ERROR: (\S+ \([\w.]+\))", text, re.M)
-    ran = re.search(r"^Ran (\d+) tests?", text, re.M) if runner == "unittest" else re.search(r"(\d+) (?:passed|failed)", text)
-    if out.returncode != 0 and not failed and not errors:
+        if runner == "pytest":
+            results = json.loads(report.read_text()) if report.exists() else {"failed": [], "errors": [], "ran": 0}
+            failed, errors, ran = results["failed"], results["errors"], results["ran"]
+            if results.get("incomplete"):
+                errors.append("pytest stopped before running the tests to completion: the baseline suite was incomplete")
+        else:
+            failed = re.findall(r"^FAIL: (\S+ \([\w.]+\))", text, re.M)
+            errors = re.findall(r"^ERROR: (\S+ \([\w.]+\))", text, re.M)
+            counts = re.findall(r"^Ran (\d+) tests?", text, re.M)
+            if runner == "command" and not counts:
+                counts = re.findall(r"(\d+) (?:passed|failed)", text)
+            ran = sum(map(int, counts))
+    if out.returncode not in (0, 1) or (out.returncode != 0 and not failed and not errors):
         last = text.strip().splitlines()[-1] if text.strip() else ""
         errors.append(f"{runner} exited {out.returncode} before running the tests: {last}")
-    elif not failed and not errors and (ran is None or int(ran.group(1)) == 0):
+    elif not failed and not errors and ran == 0:
         errors.append(f"{runner} ran no tests from the listed files before running the tests: nothing was checked")
     return failed, errors, summary_line(text)
 
 
 def test_name(test_id: str) -> str:
-    """The function name a failure line carries, whichever runner printed it."""
     head = test_id.split(" (")[0]
     return head.split("::")[-1].split(".")[-1].split("[")[0]
 
@@ -125,7 +195,6 @@ def is_collection_error(error_id: str) -> bool:
 
 
 def read_reasons(path: Path) -> tuple[list[dict], list[str]]:
-    """Blocks of {tests, input, quote}, plus the problems that make a block unusable."""
     blocks: list[dict] = []
     problems: list[str] = []
     for n, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -148,18 +217,16 @@ def read_reasons(path: Path) -> tuple[list[dict], list[str]]:
         quoted = re.search(r'"([^"]+)"', block["quote"])
         if not block["input"]:
             problems.append(f"line {block['line']}: block has no `input:` line")
-        if not quoted or len(quoted.group(1).split()) < 4:
+        if not quoted or not quoted.group(1).strip():
             problems.append(f"line {block['line']}: block has no `quote:` line holding a sentence in double quotes")
     return blocks, problems
 
 
 def match_reasons(failed: list[str], blocks: list[dict]) -> tuple[dict[str, dict], list[str], list[dict]]:
-    """Failing test -> block, failing tests no block names, blocks that name no failing test."""
     covered: dict[str, dict] = {}
     for block in blocks:
         for wanted in block["tests"]:
             exact = [t for t in failed if wanted == t or qualified(wanted) == qualified(t)]
-            # A bare function name is shorthand for exactly one failing test; two matches need qualified ids.
             by_name = [t for t in failed if test_name(t) == wanted] if not exact and "::" not in wanted and "." not in wanted else []
             for test_id in exact or (by_name if len(by_name) == 1 else []):
                 covered.setdefault(test_id, block)
@@ -176,7 +243,6 @@ def summary_line(text: str) -> str:
 
 
 class InPlace:
-    """Write the commit's versions of the given paths into the working tree, then put back what was there."""
 
     def __init__(self, project: Path, commit: str, paths: list[str]):
         self.project, self.commit, self.paths = project, commit, paths
@@ -224,8 +290,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--project", type=Path, default=None, help="a path inside the repository (default: cwd)")
     parser.add_argument("--python", default=None, help="interpreter that has the project's dependencies (default: the project's .venv, else python on PATH)")
     parser.add_argument("--reasons", type=Path, default=None, help="file of allowed failures: test lines, then indented input: and quote: lines per block")
-    parser.add_argument("--report-only", action="store_true", help="print the report and exit 0 whatever the result")
+    parser.add_argument("--report-only", action="store_true", help="print test results and exit 0; invalid arguments, refs, and overlay setup still fail")
+    parser.add_argument("--command", nargs=argparse.REMAINDER, help="project test command, last argument; requires unittest or pytest execution summaries and forbids --reasons")
     args = parser.parse_args(argv)
+    if args.command is not None and (not args.command or args.reasons is not None):
+        parser.error("--command needs an argument vector and cannot be combined with --reasons")
     blocks: list[dict] = []
     if args.reasons is not None:
         if not args.reasons.is_file():
@@ -264,24 +333,24 @@ def main(argv: list[str]) -> int:
         print(f"preserve: nothing to preserve, {commit[:10]} holds no Python test files. The gate is satisfied; a project tested in "
               "another language runs the start commit's test files with its own runner by hand, under the same policy.")
         return 0
-    runner = "pytest" if wants_pytest(python, project, test_files, commit) else "unittest"
+    runner = "command" if args.command is not None else "pytest" if wants_pytest(project, test_files, commit) else "unittest"
     try:
         with InPlace(project, commit, test_files + support):
-            failed, errors, summary = run_tests(python, project, test_files, runner)
+            failed, errors, summary = run_tests(python, project, test_files, runner, args.command)
             nothing_ran = not failed and any("ran no tests" in e or "NO TESTS RAN" in e for e in errors)
             if runner == "unittest" and nothing_ran and pytest_importable(python, project):
-                # Function-style tests with no pytest marker: unittest finds nothing, pytest runs them.
                 runner = "pytest"
                 failed, errors, summary = run_tests(python, project, test_files, runner)
     except OSError as exc:
         print(f"preserve: could not write the earlier test files into place, working tree restored: {exc}", file=sys.stderr)
         return 2
 
-    print(f"preserve: {len(test_files)} test file(s) from {commit[:10]} run in place with {runner} against the working tree")
+    if runner == "command":
+        print(f"preserve: {len(test_files)} baseline Python test file(s) restored from {commit[:10]}; the project command owns test selection")
+    else:
+        print(f"preserve: {len(test_files)} test file(s) from {commit[:10]} run in place with {runner} against the working tree")
     if summary:
         print(f"  {summary}")
-    # A test that raises because the code now rejects its input is an ERROR to the runner and a
-    # failure to the policy, so a block may cover it. A file that could not run is never covered.
     waivable = failed + [e for e in errors if not is_collection_error(e)]
     covered, uncovered, idle = match_reasons(waivable, blocks) if blocks else ({}, waivable, [])
     uncovered += [e for e in errors if e not in waivable]
@@ -308,7 +377,7 @@ def main(argv: list[str]) -> int:
     if failed or errors:
         print("  Each failure needs either a code fix or the playbook's allowed reason before the commit.")
         return 0 if args.report_only else 1
-    print("  All earlier tests still pass unedited.")
+    print("  The selected project test command passed with baseline files restored." if runner == "command" else "  All earlier tests still pass unedited.")
     return 0
 
 
