@@ -3,16 +3,21 @@
 
 The agent that changes code also edits the tests that disagree with it. This script keeps the
 earlier tests out of its reach: it writes the start commit's test files into place, runs them
-against the current code, and restores whatever the working tree held. Automatic selection runs
+against the current code, and restores their saved working-tree contents. Automatic selection runs
 exactly those test files; --command delegates selection to the repository task. The files run in
 place because tests find the project through their own location (`Path(__file__).parent / ".."`,
 fixture directories).
+
+Automatic selection uses pytest configuration and function/import hints, then runtime class
+evidence for undecided suites. Undecided modules load under unittest's module names and are reused
+if pytest is selected. Use --command for a repository task that needs different import naming or
+third-party collection plugins without those hints.
 
     preserve.py --since <commit> [--project <root>] [--python <exe>] [--reasons <file>] [--report-only]
 
 Exit 0 when the selected tests pass, all failures have allowed reasons, or there are no earlier
 Python tests. Exit 1 when a failure is uncovered, tests cannot run, or no test executes, including
-an all-skipped suite. Exit 2 when the arguments or overlay are unusable. --report-only suppresses
+an all-skipped suite. Exit 2 when the arguments, overlay, or recovery are unusable. --report-only suppresses
 test-result failures; invalid arguments, refs, and overlay setup still fail.
 
 Use --command <argv...> as the last argument when the repository has its own test task. It runs
@@ -34,28 +39,52 @@ holding the spec sentence that forbids it, in double quotes:
 The run exits 0 only when every failing test is named by a block that has both lines. A block
 that names no failing test, or a test with no block, is reported. The script cannot judge whether
 the sentence covers the input; it makes the reason exist, per failure, before the commit.
+
+The overlay first saves original test and support-file bytes and modes in a private
+preserve-backup directory under this worktree's Git directory. Find the Git directory with
+`git rev-parse --absolute-git-dir`. Another overlay refuses a pending backup. Successful
+restoration removes the backup; incomplete restoration retains it.
+
+On POSIX, INT, TERM, and HUP stop the owned command group before restoration. After successful
+restoration, the CLI exits with 128 plus the signal number. Failed cleanup or restoration exits 2
+and retains the backup. SIGKILL cannot run cleanup, so the selected command may still be active.
+Stop the original command before recovery. Recovery refuses a recorded live owner or command group
+and never signals processes.
+
+Use the backup directory printed by the pending-overlay error:
+
+    preserve.py --project <root> --recover <printed-backup-directory>
+
+Recovery accepts only that worktree's backup. It restores saved files and modes, then removes the
+backup. Repeating successful recovery exits 0 without changing files. If restoration had completed
+but backup removal failed, recovery retries removal without replaying restoration over later edits.
+Recovery retains ambiguous or invalid evidence for inspection. It rejects --since, --python,
+--reasons, --report-only, and --command. Run normal preservation again after recovery.
 """
 from __future__ import annotations
 
 import argparse
 import ast
+import configparser
 import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 TEST_DIRS = {"test", "tests"}
 MAX_LISTED = 120
-PYTEST_RUNNER = '''\
+TEST_RUNNER = '''\
+import inspect
 import json
 import sys
+import unittest
 from pathlib import Path
-
-import pytest
 
 
 class Results:
@@ -86,14 +115,72 @@ class Results:
         self.collected = session.testscollected
 
 
-results = Results()
-status = pytest.main(sys.argv[2:], plugins=[results])
-Path(sys.argv[1]).write_text(json.dumps({
-    "failed": results.failed,
-    "errors": results.errors,
-    "ran": results.ran,
-    "incomplete": len(results.finished) != results.collected or results.deselected > 0,
-}))
+report = Path(sys.argv[1])
+runner, files = sys.argv[2], sys.argv[3:]
+data = {"runner": "pytest" if runner == "pytest" else "unittest", "failed": [], "errors": [], "ran": 0}
+report.write_text(json.dumps(data))
+if runner == "optional":
+    try:
+        import pytest
+    except Exception:
+        runner = "auto"
+    else:
+        runner = "pytest"
+
+modules = []
+if runner == "auto":
+    class Imports(unittest.TestLoader):
+        def loadTestsFromModule(self, module, *, pattern=None):
+            modules.append(module)
+            return self.suiteClass()
+
+    imports = Imports()
+    import_errors = imports.loadTestsFromNames([path[:-3].replace("/", ".") for path in files])
+    requires_pytest = False
+    for module in modules:
+        pending = list(vars(module).items())
+        seen = set()
+        while pending:
+            name, value = pending.pop()
+            marked = getattr(value, "__test__", False) is True
+            if (name.startswith("test") or marked) and callable(value) and not isinstance(value, type) and getattr(value, "__test__", True):
+                requires_pytest = True
+            if not (name.startswith("Test") or marked) or not isinstance(value, type) or issubclass(value, unittest.TestCase):
+                continue
+            if id(value) in seen or inspect.isabstract(value) or not getattr(value, "__test__", True):
+                continue
+            if value.__init__ is not object.__init__ or value.__new__ is not object.__new__:
+                continue
+            seen.add(id(value))
+            pending.extend((name, getattr(value, name)) for name in dir(value))
+    runner = "pytest" if requires_pytest and not imports.errors else "unittest"
+
+data["runner"] = runner
+report.write_text(json.dumps(data))
+if runner == "pytest":
+    import pytest
+
+    for module in modules:
+        path = Path(module.__file__).resolve()
+        parts = [] if path.name == "__init__.py" else [path.stem]
+        parent = path.parent
+        while (parent / "__init__.py").is_file():
+            parts.insert(0, parent.name)
+            parent = parent.parent
+        if parts:
+            sys.modules.setdefault(".".join(parts), module)
+    results = Results()
+    status = pytest.main(["-q", "-p", "no:cacheprovider", "-rfE", "-o", "addopts=", "--maxfail=0",
+                          "-o", "python_files=test*.py *_test.py *_tests.py", *files], plugins=[results])
+    data.update(failed=results.failed, errors=results.errors, ran=results.ran,
+                incomplete=len(results.finished) != results.collected or results.deselected > 0)
+else:
+    suite = unittest.TestSuite([import_errors, *(unittest.defaultTestLoader.loadTestsFromModule(module) for module in modules)])
+    result = unittest.TextTestRunner().run(suite)
+    status = int(not result.wasSuccessful())
+    data.update(failed=[str(test) for test, _ in result.failures], errors=[str(test) for test, _ in result.errors],
+                ran=result.testsRun - len(result.skipped))
+report.write_text(json.dumps(data))
 sys.exit(status)
 '''
 
@@ -118,16 +205,16 @@ def git(project: Path, *args: str, check: bool = True, binary: bool = False) -> 
     return subprocess.run(["git", "-C", str(project), *args], capture_output=True, text=not binary, check=check)
 
 
-def pytest_importable(python: str, project: Path) -> bool:
-    return subprocess.run([python, "-c", "import pytest"], cwd=project, capture_output=True).returncode == 0
-
-
-def wants_pytest(project: Path, test_files: list[str], commit: str, python: str) -> bool:
-    if any((project / name).exists() for name in ("pytest.ini", "conftest.py", "tox.ini")):
-        return True
+def select_runner(project: Path, test_files: list[str], commit: str) -> str:
+    if any((project / name).exists() for name in ("pytest.ini", "conftest.py")):
+        return "pytest"
+    tox = configparser.ConfigParser(interpolation=None)
+    tox.read(project / "tox.ini")
+    if tox.has_section("pytest"):
+        return "pytest"
     pyproject = project / "pyproject.toml"
     if pyproject.exists() and "[tool.pytest" in pyproject.read_text(errors="ignore"):
-        return True
+        return "pytest"
     has_pytest_import = False
     for path in test_files:
         source = git(project, "show", f"{commit}:{path}", binary=True).stdout
@@ -137,34 +224,30 @@ def wants_pytest(project: Path, test_files: list[str], commit: str, python: str)
             continue
         for node in module.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test"):
-                return True
-            if isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
-                if node.bases and not (len(node.bases) == 1 and isinstance(node.bases[0], ast.Name) and node.bases[0].id == "object"):
-                    continue
-                if any(isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)) and method.name.startswith("test") for method in node.body):
-                    return True
+                return "pytest"
         has_pytest_import = has_pytest_import or any(
             isinstance(node, ast.Import) and any(alias.name.split(".")[0] == "pytest" for alias in node.names)
             or isinstance(node, ast.ImportFrom) and node.level == 0 and node.module is not None and node.module.split(".")[0] == "pytest"
             for node in ast.walk(module)
         )
-    return has_pytest_import and pytest_importable(python, project)
+    return "optional" if has_pytest_import else "auto"
 
 
-def run_tests(python: str, project: Path, files: list[str], runner: str, command: list[str] | None = None) -> tuple[list[str], list[str], str]:
+def run_tests(python: str, files: list[str], runner: str, overlay: InPlace,
+              command: list[str] | None = None) -> tuple[str, list[str], list[str], str]:
     with tempfile.TemporaryDirectory(prefix="preserve-") as isolated:
         env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONPYCACHEPREFIX=str(Path(isolated) / "pycache"))
         env.pop("PYTEST_ADDOPTS", None)
-        if runner == "pytest":
+        if runner != "command":
             report = Path(isolated) / "results.json"
-            cmd = [python, "-c", PYTEST_RUNNER, str(report), "-q", "-p", "no:cacheprovider", "-rfE",
-                   "-o", "addopts=", "--maxfail=0", "-o", "python_files=test*.py *_test.py *_tests.py", *files]
+            cmd = [python, "-c", TEST_RUNNER, str(report), runner, *files]
         else:
-            cmd = command if command is not None else [python, "-m", "unittest", *files]
-        out = subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True)
+            cmd = command
+        out = overlay.run(cmd, env=env)
         text = out.stdout + out.stderr
-        if runner == "pytest":
-            results = json.loads(report.read_text()) if report.exists() else {"failed": [], "errors": [], "ran": 0}
+        if runner != "command":
+            results = json.loads(report.read_text()) if report.exists() else {"runner": "pytest" if runner == "pytest" else "unittest", "failed": [], "errors": [], "ran": 0}
+            runner = results["runner"]
             failed, errors, ran = results["failed"], results["errors"], results["ran"]
             if results.get("incomplete"):
                 errors.append("pytest stopped before running the tests to completion: the baseline suite was incomplete")
@@ -174,14 +257,14 @@ def run_tests(python: str, project: Path, files: list[str], runner: str, command
             counts = re.findall(r"^Ran (\d+) tests?", text, re.M)
             skipped = re.findall(r"^(?:OK|FAILED) \([^\n]*\bskipped=(\d+)", text, re.M)
             ran = sum(map(int, counts)) - sum(map(int, skipped))
-            if runner == "command" and not counts:
+            if not counts:
                 ran = sum(map(int, re.findall(r"(\d+) (?:passed|failed)", text)))
     if out.returncode not in (0, 1) or (out.returncode != 0 and not failed and not errors):
         last = text.strip().splitlines()[-1] if text.strip() else ""
         errors.append(f"{runner} exited {out.returncode} before running the tests: {last}")
-    elif not failed and not errors and ran == 0:
+    if ran == 0:
         errors.append(f"{runner} ran no tests from the listed files before running the tests: nothing was checked")
-    return failed, errors, summary_line(text)
+    return runner, failed, errors, summary_line(text)
 
 
 def test_name(test_id: str) -> str:
@@ -256,57 +339,296 @@ def summary_line(text: str) -> str:
     return ""
 
 
+class Interrupted(BaseException):
+
+    def __init__(self, signum: int):
+        self.signum = signum
+
+
 class InPlace:
 
     def __init__(self, project: Path, commit: str, paths: list[str]):
         self.project, self.commit, self.paths = project, commit, paths
-        self.saved: dict[str, bytes | None] = {}
-        self.made_dirs: list[Path] = []
+        admin = Path(git(project, "rev-parse", "--absolute-git-dir").stdout.strip())
+        self.backup = admin / "preserve-backup"
+        self.saved: dict[str, dict] = {}
+        self.made_dirs: list[str] = []
+        self.command: int | None = None
+        self.restored = False
+        self.handlers: dict[int, object] = {}
+
+    def run(self, cmd: list[str], *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+        reader, writer = os.pipe()
+        launcher = ("import os, sys; fd = int(sys.argv[1]); ready = os.read(fd, 1); os.close(fd); "
+                    "sys.exit(125) if ready != b'1' else os.execvpe(sys.argv[2], sys.argv[2:], os.environ)")
+        with os.fdopen(reader, "rb") as ready_read, os.fdopen(writer, "wb", buffering=0) as ready_write:
+            with subprocess.Popen([sys.executable, "-c", launcher, str(reader), *cmd], cwd=self.project, env=env,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                  start_new_session=True, pass_fds=(reader,)) as out:
+                try:
+                    self.command = out.pid
+                    self.save_manifest()
+                    ready_write.write(b"1")
+                    ready_write.close()
+                    stdout, stderr = out.communicate()
+                finally:
+                    ready_write.close()
+                    blocked = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGINT, signal.SIGTERM, signal.SIGHUP})
+                    try:
+                        try:
+                            os.killpg(out.pid, signal.SIGTERM)
+                        except (ProcessLookupError, PermissionError):
+                            pass
+                        try:
+                            out.communicate(timeout=2)
+                        except subprocess.TimeoutExpired:
+                            pass
+                        try:
+                            os.killpg(out.pid, signal.SIGKILL)
+                        except (ProcessLookupError, PermissionError):
+                            pass
+                        out.communicate()
+                        deadline = time.monotonic() + 2
+                        while True:
+                            try:
+                                os.killpg(out.pid, 0)
+                            except ProcessLookupError:
+                                break
+                            except PermissionError:
+                                pass
+                            if time.monotonic() >= deadline:
+                                raise OSError(f"command process group {out.pid} did not stop; backup retained")
+                            time.sleep(0.01)
+                        self.command = None
+                        self.save_manifest()
+                    finally:
+                        signal.pthread_sigmask(signal.SIG_SETMASK, blocked)
+        return subprocess.CompletedProcess(cmd, out.returncode, stdout, stderr)
+
+    def save_manifest(self):
+        manifest = {"version": 1, "project": str(self.project), "owner": os.getpid(), "restored": self.restored, "saved": self.saved,
+                    "made_dirs": self.made_dirs, "command": self.command}
+        temporary = self.backup / "manifest.tmp"
+        with temporary.open("w", encoding="utf-8") as handle:
+            json.dump(manifest, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(self.backup / "manifest.json")
+        for path in (self.backup, self.backup.parent):
+            directory = os.open(path, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+
+    @staticmethod
+    def interrupt(signum, frame):
+        for watched in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            signal.signal(watched, signal.SIG_IGN)
+        raise Interrupted(signum)
+
+    def restore_handlers(self):
+        for signum, handler in self.handlers.items():
+            signal.signal(signum, handler)
+        self.handlers.clear()
 
     def __enter__(self):
         try:
-            for rel in self.paths:
+            self.backup.mkdir(mode=0o700)
+        except FileExistsError:
+            raise OSError(f"pending preservation backup at {self.backup}; stop its command and use --recover {self.backup}")
+        try:
+            for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+                self.handlers[signum] = signal.signal(signum, self.interrupt)
+            for index, rel in enumerate(self.paths):
                 target = self.project / rel
                 if target.is_symlink() or any(p.is_symlink() for p in target.parents if self.project in p.parents):
                     raise OSError(f"{rel} is, or sits under, a symlink in the working tree; the overlay never writes through a link")
                 if target.exists() and not target.is_file():
                     raise IsADirectoryError(f"{rel} is a directory in the working tree, so the earlier file cannot be written there")
-                self.saved[rel] = target.read_bytes() if target.exists() else None
+                entry = {"backup": str(index) if target.exists() else None,
+                         "mode": target.stat().st_mode & 0o7777 if target.exists() else None}
+                if entry["backup"] is not None:
+                    with (self.backup / entry["backup"]).open("wb") as handle:
+                        handle.write(target.read_bytes())
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                self.saved[rel] = entry
+                for parent in reversed(target.parents):
+                    if parent != self.project and self.project in parent.parents and not parent.exists():
+                        relative = str(parent.relative_to(self.project))
+                        if relative not in self.made_dirs:
+                            self.made_dirs.append(relative)
+            self.save_manifest()
+            for rel in self.paths:
+                target = self.project / rel
                 for parent in reversed(target.parents):
                     if parent != self.project and self.project in parent.parents and not parent.exists():
                         parent.mkdir()
-                        self.made_dirs.append(parent)
                 target.write_bytes(git(self.project, "show", f"{self.commit}:{rel}", binary=True).stdout)
         except BaseException:
-            # Python skips __exit__ when __enter__ raises, so put back what was already replaced.
-            self.restore()
+            try:
+                if (self.backup / "manifest.json").exists():
+                    self.restore()
+                else:
+                    shutil.rmtree(self.backup)
+            finally:
+                self.restore_handlers()
             raise
         return self
 
     def restore(self):
-        for rel, content in self.saved.items():
+        if self.command is not None:
+            raise OSError(f"command process group {self.command} may still be running; backup retained at {self.backup}")
+        if not self.saved and not self.backup.exists():
+            return
+        handlers = {signum: signal.signal(signum, signal.SIG_IGN)
+                    for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
+        try:
+            self.restore_files()
+        finally:
+            for signum, handler in handlers.items():
+                signal.signal(signum, handler)
+
+    def restore_files(self):
+        if self.restored:
+            self.remove_backup()
+            return
+        problems = []
+        for rel, entry in self.saved.items():
             target = self.project / rel
-            if content is None:
-                target.unlink(missing_ok=True)
-            else:
-                target.write_bytes(content)
+            try:
+                if target.is_symlink() or any(p.is_symlink() for p in target.parents if self.project in p.parents):
+                    raise OSError(f"{rel} is, or sits under, a symlink")
+                if entry["backup"] is None:
+                    target.unlink(missing_ok=True)
+                else:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    content = (self.backup / entry["backup"]).read_bytes()
+                    with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as handle:
+                        temporary = Path(handle.name)
+                        try:
+                            handle.write(content)
+                            handle.flush()
+                            os.fsync(handle.fileno())
+                            os.fchmod(handle.fileno(), entry["mode"])
+                        except BaseException:
+                            temporary.unlink(missing_ok=True)
+                            raise
+                    try:
+                        temporary.replace(target)
+                    finally:
+                        temporary.unlink(missing_ok=True)
+            except OSError as exc:
+                problems.append(f"{rel}: {exc}")
         for d in reversed(self.made_dirs):
-            shutil.rmtree(d, ignore_errors=True)
+            try:
+                target = self.project / d
+                if target.is_symlink() or any(p.is_symlink() for p in target.parents if self.project in p.parents):
+                    raise OSError(f"{d} is, or sits under, a symlink")
+                target.rmdir()
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                problems.append(f"{d}: {exc}")
+        if problems:
+            raise OSError(f"working tree restoration incomplete; backup retained at {self.backup}: " + "; ".join(problems))
+        self.restored = True
+        self.save_manifest()
+        self.remove_backup()
+
+    def remove_backup(self):
+        expected = {entry["backup"] for entry in self.saved.values() if entry["backup"] is not None}
+        expected.update(("manifest.json", "manifest.tmp"))
+        if any(path.name not in expected for path in self.backup.iterdir()):
+            raise OSError(f"unexpected backup contents; restored working tree and backup retained at {self.backup}")
+        for name in expected - {"manifest.json"}:
+            (self.backup / name).unlink(missing_ok=True)
+        (self.backup / "manifest.json").unlink()
+        self.backup.rmdir()
+        self.saved.clear()
+        self.made_dirs.clear()
 
     def __exit__(self, *exc):
-        self.restore()
+        try:
+            self.restore()
+        finally:
+            self.restore_handlers()
         return False
+
+    def recover(self, backup: Path):
+        if backup.absolute() != self.backup or backup.is_symlink():
+            raise OSError(f"recovery must use this worktree's backup directory: {self.backup}")
+        if not self.backup.exists():
+            return
+        if not any(self.backup.iterdir()):
+            self.backup.rmdir()
+            return
+        try:
+            manifest_path = self.backup / "manifest.json"
+            if manifest_path.is_symlink():
+                raise ValueError("manifest is a symlink")
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if manifest["version"] != 1 or manifest["project"] != str(self.project):
+                raise ValueError("manifest belongs to a different project or version")
+            restored = manifest["restored"]
+            if type(restored) is not bool:
+                raise ValueError("invalid restoration state")
+            owner = manifest["owner"]
+            if type(owner) is not int or owner <= 1:
+                raise ValueError("invalid preservation process")
+            try:
+                os.kill(owner, 0)
+            except ProcessLookupError:
+                pass
+            else:
+                raise OSError(f"preservation process {owner} still exists; stop it before recovery")
+            saved, made_dirs, command = manifest["saved"], manifest["made_dirs"], manifest["command"]
+            if not isinstance(saved, dict) or not isinstance(made_dirs, list):
+                raise ValueError("invalid saved paths")
+            for index, (rel, entry) in enumerate(saved.items()):
+                path = Path(rel)
+                if path.is_absolute() or ".." in path.parts or ".git" in path.parts or not path.parts:
+                    raise ValueError("saved path escapes the project")
+                if entry["backup"] is not None:
+                    content = self.backup / str(index)
+                    if entry["backup"] != str(index) or content.is_symlink() or not (restored or content.is_file()):
+                        raise ValueError("invalid backup file")
+                    if type(entry["mode"]) is not int or not 0 <= entry["mode"] <= 0o7777:
+                        raise ValueError("invalid saved mode")
+            for rel in made_dirs:
+                path = Path(rel)
+                if path.is_absolute() or ".." in path.parts or not path.parts or not any(path in Path(p).parents for p in saved):
+                    raise ValueError("invalid created directory")
+            if command is not None:
+                if type(command) is not int or command <= 1:
+                    raise ValueError("invalid command process group")
+                try:
+                    os.killpg(command, 0)
+                except ProcessLookupError:
+                    pass
+                else:
+                    raise OSError(f"command process group {command} still exists; stop it before recovery")
+            self.saved, self.made_dirs = saved, made_dirs
+            self.restored = restored
+        except (ValueError, KeyError, TypeError) as exc:
+            raise OSError(f"invalid recovery manifest at {self.backup}: {exc}") from exc
+        self.restore()
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--since", required=True, help="commit whose test files run against the working tree")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--since", help="commit whose test files run against the working tree")
+    source.add_argument("--recover", type=Path, help="restore a pending backup after its selected command has stopped")
     parser.add_argument("--project", type=Path, default=None, help="a path inside the repository (default: cwd)")
-    parser.add_argument("--python", default=None, help="interpreter that has the project's dependencies (default: the project's .venv, else python on PATH)")
+    parser.add_argument("--python", default=None, help="interpreter with project dependencies (default: project .venv/bin/python, then venv/bin/python, then python on PATH, then the running interpreter)")
     parser.add_argument("--reasons", type=Path, default=None, help="file of allowed failures: test lines, then indented input: and quote: lines per block")
     parser.add_argument("--report-only", action="store_true", help="print test results and exit 0; invalid arguments, refs, and overlay setup still fail")
     parser.add_argument("--command", nargs=argparse.REMAINDER, help="project test command, last argument; requires unittest or pytest execution summaries and forbids --reasons")
     args = parser.parse_args(argv)
+    if args.recover is not None and (args.command is not None or args.reasons is not None or args.report_only or args.python is not None):
+        parser.error("--recover cannot be combined with --command, --reasons, --report-only, or --python")
     if args.command is not None and (not args.command or args.reasons is not None):
         parser.error("--command needs an argument vector and cannot be combined with --reasons")
     blocks: list[dict] = []
@@ -321,7 +643,7 @@ def main(argv: list[str]) -> int:
                 print(f"  {problem}", file=sys.stderr)
             return 2
 
-    if args.since.strip().lower().replace("-", " ") in ("no commits", "none", "unborn"):
+    if args.since is not None and args.since.strip().lower().replace("-", " ") in ("no commits", "none", "unborn"):
         print("preserve: nothing to preserve, the task started with no commits. The gate is satisfied; the step's own tests still have to pass.")
         return 0
     start = (args.project or Path.cwd()).resolve()
@@ -330,6 +652,14 @@ def main(argv: list[str]) -> int:
         print(f"preserve: {start} is not inside a git repository", file=sys.stderr)
         return 2
     project = Path(top.stdout.strip())
+    if args.recover is not None:
+        try:
+            InPlace(project, "", []).recover(args.recover)
+        except OSError as exc:
+            print(f"preserve: {exc}", file=sys.stderr)
+            return 2
+        print("preserve: working tree restored from the pending backup")
+        return 0
     resolved = git(project, "rev-parse", "--verify", "-q", f"{args.since}^{{commit}}", check=False)
     if resolved.returncode != 0:
         print(f"preserve: {args.since} is not a commit in {project}", file=sys.stderr)
@@ -347,16 +677,15 @@ def main(argv: list[str]) -> int:
         print(f"preserve: nothing to preserve, {commit[:10]} holds no Python test files. The gate is satisfied; a project tested in "
               "another language runs the start commit's test files with its own runner by hand, under the same policy.")
         return 0
-    runner = "command" if args.command is not None else "pytest" if wants_pytest(project, test_files, commit, python) else "unittest"
     try:
-        with InPlace(project, commit, test_files + support):
-            failed, errors, summary = run_tests(python, project, test_files, runner, args.command)
-            nothing_ran = not failed and any("ran no tests" in e or "NO TESTS RAN" in e for e in errors)
-            if runner == "unittest" and nothing_ran and pytest_importable(python, project):
-                runner = "pytest"
-                failed, errors, summary = run_tests(python, project, test_files, runner)
+        with InPlace(project, commit, test_files + support) as overlay:
+            runner = "command" if args.command is not None else select_runner(project, test_files, commit)
+            runner, failed, errors, summary = run_tests(python, test_files, runner, overlay, args.command)
+    except Interrupted as exc:
+        print(f"preserve: interrupted by signal {exc.signum}; working tree restored", file=sys.stderr)
+        return 128 + exc.signum
     except OSError as exc:
-        print(f"preserve: could not write the earlier test files into place, working tree restored: {exc}", file=sys.stderr)
+        print(f"preserve: could not run the earlier test files: {exc}", file=sys.stderr)
         return 2
 
     if runner == "command":

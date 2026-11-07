@@ -107,6 +107,38 @@ class Preserve(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('All earlier tests still pass unedited.', result.stdout)
 
+    def test_unittest_modules_initialize_once(self):
+        counter = self.repo / 'import_count.txt'
+        hooks = self.repo / 'hook_count.txt'
+        source = 'from pathlib import Path\ncounter = Path.cwd() / "import_count.txt"\ncounter.write_text(str(int(counter.read_text()) + 1))\n'
+        source += TESTS.replace('class Parse', 'class TestParse').replace('self.assertEqual(parse("a"), "a")', 'self.assertEqual(int(counter.read_text()), 1)')
+        source += '\ndef load_tests(loader, tests, pattern):\n    counter = Path.cwd() / "hook_count.txt"\n    counter.write_text(str(int(counter.read_text()) + 1))\n    assert int(counter.read_text()) == 1\n    return tests\n'
+        (self.repo / 'tests/test_mod.py').write_text(source)
+        git(self.repo, 'add', 'tests/test_mod.py')
+        git(self.repo, 'commit', '-q', '-m', 'single unittest initialization')
+        counter.write_text('0')
+        hooks.write_text('0')
+        result = self.run_preserve()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('with unittest', result.stdout)
+        self.assertEqual(counter.read_text(), '1')
+        self.assertEqual(hooks.read_text(), '1')
+
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
+    def test_mixed_class_modules_initialize_once(self):
+        counter = self.repo / 'import_count.txt'
+        source = 'from pathlib import Path\ncounter = Path.cwd() / "import_count.txt"\ncounter.write_text(str(int(counter.read_text()) + 1))\n'
+        source += TESTS + '\nclass Base:\n    pass\nclass TestRegression(Base):\n    def test_one_import(self):\n        assert int(counter.read_text()) == 1\n'
+        source += '\ndef load_tests(loader, tests, pattern):\n    raise AssertionError("pytest does not use module load_tests")\n'
+        (self.repo / 'tests/test_mod.py').write_text(source)
+        git(self.repo, 'add', 'tests/test_mod.py')
+        git(self.repo, 'commit', '-q', '-m', 'single mixed initialization')
+        counter.write_text('0')
+        result = self.run_preserve()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('with pytest', result.stdout)
+        self.assertEqual(counter.read_text(), '1')
+
     def test_unittest_pytest_import_text_does_not_require_pytest(self):
         source = TESTS.replace('class Parse(', 'class TestParse(') + textwrap.dedent('''\
 
@@ -141,6 +173,42 @@ class Preserve(unittest.TestCase):
                 result = self.run_preserve('--python', str(isolated / 'bin/python'))
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn('with unittest', result.stdout)
+
+    def test_unittest_inheritance_does_not_require_pytest(self):
+        isolated = self.repo / 'isolated'
+        venv.EnvBuilder(with_pip=False).create(isolated)
+        (self.repo / 'base.py').write_text('import unittest\nclass ImportedBase(unittest.TestCase):\n    pass\n')
+        sources = (
+            TESTS.replace('class Parse(unittest.TestCase):', 'class Base(unittest.TestCase):\n    pass\n\nclass TestParse(Base):'),
+            TESTS.replace('class Parse(unittest.TestCase):', 'class Mixin:\n    pass\n\nclass TestParse(Mixin, unittest.TestCase):'),
+            'from base import ImportedBase\n' + TESTS.replace('class Parse(unittest.TestCase):', 'class TestParse(ImportedBase):'),
+            'from abc import ABC, abstractmethod\n' + TESTS.replace('class Parse(unittest.TestCase):', 'class TestMixin(ABC):\n    @abstractmethod\n    def test_plain(self):\n        pass\n\nclass TestParse(TestMixin, unittest.TestCase):'),
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                (self.repo / 'tests/test_mod.py').write_text(source)
+                git(self.repo, 'add', 'base.py', 'tests/test_mod.py')
+                git(self.repo, 'commit', '-q', '-m', 'unittest inheritance')
+                result = self.run_preserve('--python', str(isolated / 'bin/python'))
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('with unittest', result.stdout)
+
+    def test_unittest_tox_configuration_does_not_require_pytest(self):
+        (self.repo / 'tox.ini').write_text('[tox]\nenvlist = py\n[testenv]\ncommands = python -m unittest discover\n')
+        isolated = self.repo / 'isolated'
+        venv.EnvBuilder(with_pip=False).create(isolated)
+        result = self.run_preserve('--python', str(isolated / 'bin/python'))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('with unittest', result.stdout)
+
+    def test_pytest_tox_configuration_requires_pytest(self):
+        (self.repo / 'tox.ini').write_text('[tox]\nenvlist = py\n[pytest]\ntestpaths = tests\n')
+        isolated = self.repo / 'isolated'
+        venv.EnvBuilder(with_pip=False).create(isolated)
+        result = self.run_preserve('--python', str(isolated / 'bin/python'))
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('with pytest', result.stdout)
+        self.assertIn('ERROR', result.stdout)
 
     @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
     def test_unittest_pytest_import_selects_pytest_when_available(self):
@@ -246,10 +314,13 @@ class Preserve(unittest.TestCase):
 
     @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
     def test_mixed_unittest_and_class_tests_all_run(self):
-        for base in ('', '(object)'):
+        for base in ('', '(object)', '(Base)'):
             with self.subTest(base=base):
                 (self.repo / 'mod.py').write_text(MODULE)
                 (self.repo / 'tests/test_mod.py').write_text(TESTS.replace('"ignored://sink"', '"a"') + textwrap.dedent(f'''\
+
+                    class Base:
+                        pass
 
                     class TestParse{base}:
                         def test_class_regression(self):
@@ -266,9 +337,12 @@ class Preserve(unittest.TestCase):
     def test_mixed_class_suite_requires_pytest_when_unavailable(self):
         isolated = self.repo / 'isolated'
         venv.EnvBuilder(with_pip=False).create(isolated)
-        for base in ('', '(object)'):
+        for base in ('', '(object)', '(Base)'):
             with self.subTest(base=base):
                 (self.repo / 'tests/test_mod.py').write_text(TESTS + textwrap.dedent(f'''\
+
+                    class Base:
+                        pass
 
                     class TestPlain{base}:
                         def test_plain(self):
@@ -281,6 +355,27 @@ class Preserve(unittest.TestCase):
                 self.assertIn('pytest', result.stdout)
                 self.assertIn('ERROR', result.stdout)
                 self.assertNotIn('All earlier tests still pass', result.stdout)
+
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
+    def test_pytest_class_inheritance_cannot_omit_regressions(self):
+        variants = (
+            ('class Base:\n    def test_inherited_regression(self):\n        assert False\n', 'class TestInherited(Base):\n    pass\n'),
+            ('class Base:\n    class TestNested:\n        def test_inherited_regression(self):\n            assert False\n', 'class TestInherited(Base):\n    pass\n'),
+            ('class Base:\n    def test_inherited_regression(self):\n        assert False\n', 'class Regression(Base):\n    __test__ = True\n'),
+        )
+        for base, declaration in variants:
+            with self.subTest(base=base, declaration=declaration):
+                (self.repo / 'base.py').write_text(base)
+                source = TESTS + '\nfrom base import Base\n' + declaration
+                (self.repo / 'tests/test_mod.py').write_text(source)
+                git(self.repo, 'add', 'base.py', 'tests/test_mod.py')
+                git(self.repo, 'commit', '-q', '-m', 'inherited pytest test')
+                (self.repo / 'tests/test_mod.py').write_text(TESTS)
+                result = self.run_preserve()
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn('test_inherited_regression', result.stdout)
+                self.assertIn('with pytest', result.stdout)
+                self.assertEqual((self.repo / 'tests/test_mod.py').read_text(), TESTS)
 
     def test_cached_working_tree_tests_cannot_hide_a_regression(self):
         for runner in ('unittest', 'pytest') if HAS_PYTEST else ('unittest',):
