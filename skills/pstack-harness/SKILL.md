@@ -53,7 +53,7 @@ Read the role resolution and handoffs reference selected above before a role han
 Every pstack spawn runs a role from the models config, such as `feature` or `how explorer`, sometimes under a persona. Keep the caller's role and panel arm count.
 
 1. Take the role from the skill or playbook step. A step that names none uses `default`. A `subagent_type` of `poteto-agent` or `comment-sicko` names a persona, and `general-purpose` names none.
-2. Resolve it once per task, and again after the harness or config changes. Do not read the config files to pick values.
+2. Resolve it once per task, and again after the harness or config changes. Run the resolver from the project root, or pass `--project <root>`, since it reads that directory's `.agents/pstack-models.md`. Do not read the config files to pick values.
 
    ```sh
    python3 "${PSTACK_SKILLS_ROOT:?}/setup-pstack/scripts/check-models-config.py" --resolve --harness <claude-code|codex|grok|hermes> <role>

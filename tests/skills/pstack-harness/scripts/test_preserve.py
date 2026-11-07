@@ -86,12 +86,70 @@ class Preserve(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('test_scheme_kept', result.stdout)
 
-    def test_commit_without_tests_exits_two(self):
+    def test_commit_without_tests_satisfies_the_gate(self):
         git(self.repo, 'rm', '-q', '-r', 'tests')
         git(self.repo, 'commit', '-q', '-m', 'no tests')
         result = self.run_preserve()
-        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('nothing to preserve', result.stdout)
+        self.assertIn('own runner by hand', result.stdout)
+
+    def test_function_style_tests_without_a_pytest_marker_still_run(self):
+        (self.repo / 'tests/test_mod.py').write_text("from mod import parse\n\n\ndef test_scheme_kept():\n    assert parse('ignored://sink') == 'ignored://sink'\n")
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'function tests')
+        (self.repo / 'mod.py').write_text(NARROWED)
+        result = self.run_preserve()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('test_scheme_kept', result.stdout)
+        self.assertIn('with pytest', result.stdout)
+
+    def test_a_run_that_checks_nothing_is_an_error(self):
+        (self.repo / 'tests/test_mod.py').write_text("import sys\nsys.exit(1)\n")
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'exits on import')
+        result = self.run_preserve()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('ERROR', result.stdout)
+        self.assertNotIn('All earlier tests still pass', result.stdout)
+
+    def test_bare_name_shorthand_covers_only_one_failing_test(self):
+        (self.repo / 'tests/test_other.py').write_text(TESTS.replace('class Parse', 'class Other'))
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'second module')
+        (self.repo / 'mod.py').write_text(NARROWED)
+        (self.repo / 'reasons.txt').write_text(self.REASON)
+        result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('2 test(s) have no reason', result.stdout)
+        qualified = self.REASON.replace('test_scheme_kept\n', 'tests.test_mod.Parse.test_scheme_kept\ntests.test_other.Other.test_scheme_kept\n', 1)
+        (self.repo / 'reasons.txt').write_text(qualified)
+        result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_pytest_collection_error_is_never_waived(self):
+        (self.repo / 'conftest.py').write_text('')
+        (self.repo / 'tests/test_mod.py').write_text("import pytest\nfrom mod import parse\n\n\ndef test_scheme_kept():\n    assert parse('ignored://sink') == 'ignored://sink'\n")
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'pytest suite')
+        (self.repo / 'mod.py').rename(self.repo / 'core.py')
+        (self.repo / 'reasons.txt').write_text("tests/test_mod.py\n  input: every input\n  quote: \"The module moved to core and the old tests are stale.\"\n")
+        result = self.run_preserve('--reasons', str(self.repo / 'reasons.txt'))
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('have no reason', result.stdout)
+
+    def test_setup_failure_restores_the_files_already_replaced(self):
+        (self.repo / 'tests/test_new.py').write_text(TESTS)
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'two test files')
+        edited = TESTS.replace('"a"', '"b"')
+        (self.repo / 'tests/test_mod.py').write_text(edited)
+        (self.repo / 'tests/test_new.py').unlink()
+        (self.repo / 'tests/test_new.py').mkdir()
+        result = self.run_preserve()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.repo / 'tests/test_mod.py').read_text(), edited)
+        self.assertTrue((self.repo / 'tests/test_new.py').is_dir())
 
     def test_tests_directory_without_init_is_discovered(self):
         self.assertFalse((self.repo / 'tests/__init__.py').exists())
