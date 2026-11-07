@@ -8,6 +8,24 @@ exactly those test files; --command delegates selection to the repository task. 
 place because tests find the project through their own location (`Path(__file__).parent / ".."`,
 fixture directories).
 
+The initial boundary is tracked regular Python files under a test or tests directory, or whose
+basename starts with test or ends with _test.py or _tests.py. conftest.py is support, not a test.
+Baseline pytest configuration can add files outside that boundary. The selected pytest matches
+its baseline python_files patterns against original project paths. A matching top-level test
+function, or a matching base-free class with a directly declared test method, establishes ownership.
+Plain scalar bindings and ordinary undecorated functions stay current. An additional matching file
+with unresolved imported, assigned, generated, conditional, inherited, or unparsable test ownership
+refuses with exit 2. This is a bounded static check, not arbitrary dynamic collection support.
+Files are preserved whole. A module containing both production code and test definitions also
+overlays its production definitions. Keep production and tests in separate modules.
+
+Configured baseline discovery requires pytest installed in the selected interpreter's isolated
+environment, including --command mode. PYTHONPATH and user-site packages do not satisfy this
+requirement. Missing or unrecognized configuration support fails closed. Metadata discovery loads
+neither project modules nor conftest or project plugins. Unconfigured stdlib-only projects avoid it.
+Support preservation includes tracked regular conftest.py files and non-Python files under test or
+tests. Ordinary Python helpers and non-Python fixtures solely under custom directories stay current.
+
 Automatic selection uses pytest configuration and function/import hints, then runtime class
 evidence for undecided suites. Undecided modules load under unittest's module names and are reused
 if pytest is selected. Automatic pytest collection retains the baseline's python_files,
@@ -19,7 +37,8 @@ plugins without those hints.
     preserve.py --since <commit> [--project <root>] [--python <exe>] [--reasons <file>] [--report-only]
 
 Exit 0 when the selected tests pass, all failures have allowed reasons, or there are no earlier
-Python tests. Exit 1 when a failure is uncovered, tests cannot run, or no test executes, including
+Python tests in automatic mode. With a valid committed baseline, an explicit command still runs when
+file selection is empty. Exit 1 when a failure is uncovered, tests cannot run, or no test executes, including
 an all-skipped suite. Exit 2 when the arguments, overlay, or recovery are unusable. --report-only suppresses
 test-result failures; invalid arguments, refs, and overlay setup still fail.
 
@@ -35,8 +54,9 @@ options and -m unittest, use native result data to distinguish skipped methods f
 
     preserve.py --since <commit> --python <python> --command <python> -m unittest discover -s tests
 
-The adapter preserves the executable, interpreter options, unittest selection, normal test output,
-and native exit status. It launches a Python wrapper, so process argv and import-tracing diagnostics
+The adapter preserves the executable, unittest selection, normal test output, and native exit status.
+It preserves interpreter options except caller -X pycache_prefix settings, which it replaces with
+an explicit fresh cache prefix. It launches a Python wrapper, so process argv and import-tracing diagnostics
 can reveal the helper. Supported standalone Python options are -B, -E, -I, -O, -OO, -P, -q, -s, -S,
 -u, -v, -vv, -b, -bb, -d, and -R. -W and -X accept attached or separate values.
 
@@ -54,7 +74,9 @@ holding the spec sentence that forbids it, in double quotes:
       input: a job whose destination is absent or a bare path
       quote: "Every job declares a destination of the form backup://<name>."
 
-The run exits 0 only when every failing test is named by a block that has both lines. A block
+Native unittest unexpected successes count as failures with their own test identities. Expected
+failures retain unittest's successful outcome. The run exits 0 only when every failing test is named
+by a block that has both lines. A block
 that names no failing test, or a test with no block, is reported. The script cannot judge whether
 the sentence covers the input; it makes the reason exist, per failure, before the commit.
 
@@ -123,10 +145,23 @@ class UnittestResults(unittest.TextTestResult):
             self.skipped_tests.append(str(test))
 
     def evidence(self):
-        return dict(failed=[str(test) for test, _ in self.failures],
+        return dict(failed=[str(test) for test, _ in self.failures] + [str(test) for test in self.unexpectedSuccesses],
                     errors=[str(test) for test, _ in self.errors],
                     started=self.started, skipped=self.skipped_tests,
                     ran=len(self.started) - len(self.skipped_tests))
+'''
+PYTEST_CONFIGURATION = '''\
+def baseline_naming(configuration, files):
+    import pytest
+
+    baseline = pytest.Config.fromdictargs({}, [*[str(configuration / path) for path in files], "--noconftest", "-o", "addopts="])
+    try:
+        naming = {name: baseline.getini(name) for name in ("python_files", "python_functions", "python_classes")}
+        if "python_files" not in baseline.inicfg:
+            naming["python_files"] = ["test*.py", "*_test.py", "*_tests.py"]
+        return naming, baseline.inipath
+    finally:
+        baseline._ensure_unconfigure()
 '''
 TEST_RUNNER = '''\
 import inspect
@@ -136,7 +171,7 @@ import unittest
 from pathlib import Path
 
 
-''' + UNITTEST_RESULTS + '''
+''' + UNITTEST_RESULTS + PYTEST_CONFIGURATION + '''
 
 class Results:
     def __init__(self):
@@ -222,14 +257,8 @@ if runner == "pytest":
         if parts:
             sys.modules.setdefault(".".join(parts), module)
     results = Results()
-    baseline = pytest.Config.fromdictargs({}, [*[str(configuration / path) for path in files], "--noconftest", "-o", "addopts="])
-    naming = []
-    for name in ("python_files", "python_functions", "python_classes"):
-        patterns = baseline.getini(name)
-        if name == "python_files" and name not in baseline.inicfg:
-            patterns = ["test*.py", "*_test.py", "*_tests.py"]
-        naming.extend(["-o", name + "=" + " ".join(patterns)])
-    baseline._ensure_unconfigure()
+    baseline, _ = baseline_naming(configuration, files)
+    naming = [argument for name, patterns in baseline.items() for argument in ("-o", name + "=" + " ".join(patterns))]
     status = pytest.main(["-q", "-p", "no:cacheprovider", "-rfE", "-o", "addopts=", "--maxfail=0",
                           *naming, *files], plugins=[results])
     data.update(failed=results.failed, errors=results.errors, ran=results.ran,
@@ -288,27 +317,136 @@ def git(project: Path, *args: str, check: bool = True, binary: bool = False) -> 
 
 def baseline_pytest_configs(project: Path, test_files: list[str], commit: str) -> dict[str, bytes]:
     parents = {parent for path in test_files for parent in Path(path).parents}
-    entries = [entry for entry in git(project, "ls-tree", "-r", "-z", commit).stdout.split("\0") if entry and not entry.startswith("120000 ")]
+    entries = [entry for entry in git(project, "ls-tree", "-r", "-z", commit).stdout.split("\0") if entry.startswith(("100644 ", "100755 "))]
     paths = [entry.split("\t", 1)[1] for entry in entries]
     return {path: git(project, "show", f"{commit}:{path}", binary=True).stdout
             for path in paths if Path(path).name in PYTEST_CONFIGS and Path(path).parent in parents}
 
 
-def select_runner(project: Path, test_files: list[str], commit: str) -> str:
-    configs = {path: source.decode(errors="ignore") for path, source in baseline_pytest_configs(project, test_files, commit).items()}
-    for name in PYTEST_CONFIGS:
-        if name not in configs and (project / name).is_file():
-            configs[name] = (project / name).read_text(errors="ignore")
-    if any(Path(name).name in ("pytest.toml", ".pytest.toml", "pytest.ini", ".pytest.ini") for name in configs) or (project / "conftest.py").exists():
-        return "pytest"
+def pytest_configured(configs: dict[str, bytes]) -> bool:
     for name, source in configs.items():
+        if Path(name).name in ("pytest.toml", ".pytest.toml", "pytest.ini", ".pytest.ini"):
+            return True
+        source = source.decode(errors="ignore")
         if Path(name).name in ("tox.ini", "setup.cfg"):
             ini = configparser.ConfigParser(interpolation=None)
             ini.read_string(source)
             if ini.has_section("pytest" if Path(name).name == "tox.ini" else "tool:pytest"):
-                return "pytest"
+                return True
         if Path(name).name == "pyproject.toml" and "[tool.pytest" in source:
-            return "pytest"
+            return True
+    return False
+
+
+def write_baseline_configuration(configuration: Path, configs: dict[str, bytes], files: list[str]):
+    configuration.mkdir()
+    for name, source in configs.items():
+        target = configuration / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(source)
+    if not configs:
+        (configuration / "pytest.ini").write_text("[pytest]\n")
+    for path in files:
+        target = configuration / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.touch()
+
+
+def baseline_test_files(python: str, listed: list[str], overlay: InPlace) -> list[str]:
+    files = [path for path in listed if path.endswith(".py") and Path(path).name != "conftest.py"]
+    selected = {path for path in files if is_test_file(path)}
+    configs = baseline_pytest_configs(overlay.project, files, overlay.commit)
+    if not pytest_configured(configs):
+        return [path for path in files if path in selected]
+    configured = {path: source for path, source in configs.items() if pytest_configured({path: source})}
+    with tempfile.TemporaryDirectory(prefix="preserve-selection-") as isolated:
+        configuration = Path(isolated) / "configuration"
+        write_baseline_configuration(configuration, configs, files)
+        for path in files:
+            if path not in selected:
+                (configuration / path).write_bytes(git(overlay.project, "show", f"{overlay.commit}:{path}", binary=True).stdout)
+        report = Path(isolated) / "files.json"
+        probe = "import ast, fnmatch, json, sys; from pathlib import Path\n" + PYTEST_CONFIGURATION + '''
+from _pytest.config.findpaths import load_config_dict_from_file
+from _pytest.python import path_matches_patterns
+
+
+def matches(name, patterns):
+    return any(name.startswith(pattern) or fnmatch.fnmatch(name, pattern) for pattern in patterns)
+
+
+def test_definitions(path, naming):
+    uncertain = False
+    for node in ast.parse(path.read_bytes()).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if matches(node.name, naming["python_functions"]):
+                return True
+            uncertain |= bool(node.decorator_list)
+        elif isinstance(node, ast.ClassDef):
+            if node.bases or node.keywords:
+                uncertain = True
+            elif matches(node.name, naming["python_classes"]) and any(
+                isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)) and matches(method.name, naming["python_functions"])
+                for method in node.body
+            ):
+                return True
+            else:
+                uncertain |= bool(node.decorator_list) or any(
+                    isinstance(child, ast.Call) or isinstance(child, ast.Name) and child.id == "__test__"
+                    for statement in node.body if not isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    for child in ast.walk(statement)
+                )
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            uncertain = True
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            uncertain |= any(not isinstance(target, ast.Name) or target.id == "__test__" for target in targets)
+            uncertain |= not isinstance(node.value, ast.Constant)
+            uncertain |= any(isinstance(child, ast.Call) for child in ast.walk(node))
+        elif not isinstance(node, ast.Pass) and not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)):
+            uncertain = True
+    return None if uncertain else False
+
+
+configuration = Path(sys.argv[2])
+files = json.loads(sys.argv[3])
+configured = json.loads(sys.argv[4])
+project = Path(sys.argv[5])
+already_selected = set(json.loads(sys.argv[6]))
+selected = []
+for parent in sorted({str(Path(path).parent) for path in files}):
+    naming, source = baseline_naming(configuration, [parent])
+    declared = any(Path(path).parent == Path(parent) or Path(path).parent in Path(parent).parents for path in configured)
+    if declared and (source is None or load_config_dict_from_file(source) is None):
+        raise RuntimeError("selected pytest did not recognize the baseline configuration for " + parent)
+    for path in files:
+        if path in already_selected or str(Path(path).parent) != parent or not path_matches_patterns(project / path, naming["python_files"]):
+            continue
+        owns_tests = test_definitions(configuration / path, naming)
+        if owns_tests is None:
+            raise RuntimeError("baseline pytest test ownership is unresolved for " + path + "; automatic preservation cannot safely overlay or omit this file")
+        if owns_tests:
+            selected.append(path)
+Path(sys.argv[1]).write_text(json.dumps(selected))
+'''
+        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONPYCACHEPREFIX=str(Path(isolated) / "pycache"),
+                   PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
+        env.pop("PYTEST_ADDOPTS", None)
+        env.pop("PYTEST_PLUGINS", None)
+        out = overlay.run([python, "-I", "-B", "-c", probe, str(report), str(configuration), json.dumps(files), json.dumps(list(configured)), str(overlay.project), json.dumps(list(selected))], env=env)
+        if out.returncode != 0 or not report.exists():
+            raise OSError("could not discover baseline pytest file patterns: " + (out.stdout + out.stderr).strip())
+        selected.update(json.loads(report.read_text()))
+    return [path for path in files if path in selected]
+
+
+def select_runner(project: Path, test_files: list[str], commit: str) -> str:
+    configs = baseline_pytest_configs(project, test_files, commit)
+    for name in PYTEST_CONFIGS:
+        if name not in configs and (project / name).is_file():
+            configs[name] = (project / name).read_bytes()
+    if pytest_configured(configs) or (project / "conftest.py").exists():
+        return "pytest"
     has_pytest_import = False
     for path in test_files:
         source = git(project, "show", f"{commit}:{path}", binary=True).stdout
@@ -359,21 +497,21 @@ def run_tests(python: str, files: list[str], runner: str, overlay: InPlace,
         structured_command = direct_unittest(command, python, overlay.project) if runner == "command" else None
         if runner != "command":
             configuration = Path(isolated) / "configuration"
-            configuration.mkdir()
             configs = baseline_pytest_configs(overlay.project, files, overlay.commit)
-            for name, source in configs.items():
-                target = configuration / name
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(source)
-            if not configs:
-                (configuration / "pytest.ini").write_text("[pytest]\n")
-            for path in files:
-                target = configuration / path
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.touch()
+            write_baseline_configuration(configuration, configs, files)
             cmd = [python, "-c", TEST_RUNNER, str(report), runner, str(configuration), *files]
         elif structured_command is not None:
-            cmd = [*command[:structured_command], "-c", UNITTEST_COMMAND, str(report), *command[structured_command + 2:]]
+            options = iter(command[1:structured_command])
+            interpreter_options = []
+            for option in options:
+                if option in ("-W", "-X"):
+                    value = next(options)
+                    if option != "-X" or value.split("=", 1)[0] != "pycache_prefix":
+                        interpreter_options.extend([option, value])
+                elif not (option.startswith("-X") and option[2:].split("=", 1)[0] == "pycache_prefix"):
+                    interpreter_options.append(option)
+            cmd = [command[0], *interpreter_options, "-X", f"pycache_prefix={Path(isolated) / 'pycache'}",
+                   "-c", UNITTEST_COMMAND, str(report), *command[structured_command + 2:]]
         else:
             cmd = command
         out = overlay.run(cmd, env=env)
@@ -815,14 +953,15 @@ def main(argv: list[str]) -> int:
 
     # -z keeps non-ASCII paths unquoted; a 120000 entry is a symlink, which the overlay never writes.
     entries = [e for e in git(project, "ls-tree", "-r", "-z", commit).stdout.split("\0") if e]
-    listed = [e.split("\t", 1)[1] for e in entries if not e.startswith("120000 ")]
-    test_files = [p for p in listed if is_test_file(p)]
+    listed = [e.split("\t", 1)[1] for e in entries if e.startswith(("100644 ", "100755 "))]
     support = [p for p in listed if is_support_file(p)]
-    if not test_files:
-        print(f"preserve: nothing to preserve, {commit[:10]} holds no Python test files. The gate is satisfied; a project tested in "
-              "another language runs the start commit's test files with its own runner by hand, under the same policy.")
-        return 0
     try:
+        with InPlace(project, commit, []) as discovery:
+            test_files = baseline_test_files(python, listed, discovery)
+        if not test_files and args.command is None:
+            print(f"preserve: nothing to preserve, {commit[:10]} holds no Python test files. The gate is satisfied; a project tested in "
+                  "another language runs the start commit's test files with its own runner by hand, under the same policy.")
+            return 0
         with InPlace(project, commit, test_files + support) as overlay:
             runner = "command" if args.command is not None else select_runner(project, test_files, commit)
             runner, failed, errors, summary = run_tests(python, test_files, runner, overlay, args.command)
