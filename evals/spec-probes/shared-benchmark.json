@@ -1,5 +1,14 @@
 {
   "version": 1,
+  "evaluation_policy": {
+    "decision": "Keep or revise the skill based on grounded requirement defects found without inventing product requirements.",
+    "unique_coverage": "Ambiguous specification interpretation, evidence-grounded findings, and scope restraint; activation is a separate population.",
+    "rerun_when": "Specification-review instructions or native discovery changes; replay saved answers for rubric or parser repairs.",
+    "model_required": "Whether a proposed requirement follows from the supplied specification still needs calibrated semantic review.",
+    "deterministic_checks": [
+      "tools/test_eval_artifacts.py"
+    ]
+  },
   "skill_name": "spec-probes",
   "skill_description": "Apply before implementation when writing or reviewing a spec, requirement, acceptance criterion, user story, or ticket. Probe only applicable data-shape edges and bespoke prohibitions, and give every raised item an auditable disposition.",
   "harness": {

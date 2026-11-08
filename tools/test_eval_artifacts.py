@@ -139,5 +139,60 @@ class ManifestsNameRealSkillFiles(unittest.TestCase):
                     self.assertTrue((ROOT / entry).is_file(), f"{name} names {entry}, which is not a file")
 
 
+POLICY_FIELDS = ("decision", "unique_coverage", "rerun_when", "model_required")
+
+
+def evaluation_policy_errors(manifest: dict, root: Path) -> list[str]:
+    policy = manifest.get("evaluation_policy")
+    if not isinstance(policy, dict):
+        return ["missing evaluation_policy: name the decision and why fresh model output is needed"]
+    errors = [f"evaluation_policy.{field} must be non-empty text"
+              for field in POLICY_FIELDS
+              if not isinstance(policy.get(field), str) or not policy[field].strip()]
+    checks = policy.get("deterministic_checks")
+    if not isinstance(checks, list) or not checks:
+        errors.append("evaluation_policy.deterministic_checks must name existing checks to reuse first")
+    else:
+        for check in checks:
+            if (not isinstance(check, str) or Path(check).is_absolute()
+                    or ".." in Path(check).parts or not (root / check).is_file()):
+                errors.append(f"deterministic check does not name a repository file: {check!r}")
+    return errors
+
+
+class EvaluationSpendPolicy(unittest.TestCase):
+    def test_maintained_manifests_name_the_decision_and_existing_checks(self) -> None:
+        manifests = sorted(EVALS.glob("*/shared-benchmark.json"))
+        self.assertTrue(manifests, "no maintained manifests were checked")
+        for path in manifests:
+            with self.subTest(manifest=str(path.relative_to(ROOT))):
+                self.assertEqual(evaluation_policy_errors(json.loads(path.read_text()), ROOT), [])
+
+    def test_exact_duplicate_prompts_do_not_add_paid_coverage(self) -> None:
+        seen = {}
+        for path in sorted(EVALS.glob("*/shared-benchmark.json")):
+            for case in json.loads(path.read_text())["cases"]:
+                prompt = " ".join(case.get("prompt", "").split())
+                if not prompt:
+                    continue
+                key = (case.get("kind") == "trigger", prompt, tuple(case.get("files", [])))
+                identity = f"{path.parent.name}/{case['id']}"
+                self.assertNotIn(key, seen, f"{identity} duplicates {seen.get(key)}; reuse the existing case")
+                seen[key] = identity
+
+    def test_policy_controls_reject_missing_coverage_and_missing_checks(self) -> None:
+        valid = {"evaluation_policy": {
+            **dict.fromkeys(POLICY_FIELDS, "A concrete study decision"),
+            "deterministic_checks": ["tools/test_eval_artifacts.py"],
+        }}
+        self.assertEqual(evaluation_policy_errors(valid, ROOT), [])
+        self.assertTrue(evaluation_policy_errors({}, ROOT))
+        valid["evaluation_policy"]["unique_coverage"] = " "
+        self.assertIn("evaluation_policy.unique_coverage must be non-empty text",
+                      evaluation_policy_errors(valid, ROOT))
+        valid["evaluation_policy"]["deterministic_checks"] = ["missing-check.py"]
+        self.assertTrue(any("missing-check.py" in error for error in evaluation_policy_errors(valid, ROOT)))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,7 @@
 # Direct skill evaluation
 
 This directory holds public development corpora for `verify-commands`,
-`spec-probes`, and `runtime-probes`. The corpora compare the harness's isolated
+`spec-probes`, `runtime-probes`, and `unslop`. The corpora compare the harness's isolated
 `with_skill` and `without_skill` arms. They do not represent upstream Cursor
 pstack and do not prove that a skill improves production work.
 
@@ -13,7 +13,7 @@ For guide-promise checks and general live playbook evals, see the
 [suite guide](promises/README.md).
 
 Model answers, traces, judge transcripts, raw execution reports, and unpublished
-cases stay outside Git. A committed case is tuning material, not sealed evidence.
+cases stay outside Git. `results/` holds aggregate pilot outcomes and source hashes, without model answers. A committed case is tuning material, not sealed evidence.
 Oracle and login regression fixtures under `promises/testdata/` are an exception.
 They are reduced, sanitized traces, CLI error records, and recorded verdicts used by model-free tests.
 `promises/reduce_trace.py` reduces raw traces for oracle fixtures. `promises/results/`
@@ -48,6 +48,42 @@ on their recorded cases. Existing result files and hashes remain historical.
 Native regression runs should answer a named skill or runtime change. Wider
 manual matrices and paid studies have no new recurring schedule here. Current
 maintenance expense and savings from this smaller catalog are unmeasured.
+
+## Route checks to their cheapest reliable owner
+
+Before adding a recurring model run, name the failure it detects and the decision
+its result changes. Check the existing promise owners and regression cases for
+overlap. Source invariants belong in CI. Changes to a grader or parser first use
+saved evidence. Changed skill or native runtime behavior needs affected fresh
+agent cases. Claims of added skill value need a separate held-out comparison.
+
+A deterministic grader does not eliminate the model needed to generate fresh
+behavior. Keep outcome assertions, exposure observations, and comparison validity
+separate. The pinned harness's objective rate includes process checks. Its
+outcome rate excludes process and efficiency assertion types, but remains an
+assertion fraction. Neither is a substitute for whole-task acceptance.
+
+When reflection identifies an enforceable failure, assign its structural check
+an owner and retain the minimized failure. Demonstrate a valid control passes and
+the original violation fails, then put the check in authoritative CI. Retire the
+overlapping model inspection only after showing equivalent coverage. Preserve
+native smoke coverage for discovery, permissions, or runtime behavior that the
+replacement does not measure. Review changes to acceptance criteria separately
+from an agent's repair of a failing result.
+
+Portable lint and dispatch changes belong in `skill-ci`. Reusable native parsing,
+grading, and reporting changes belong in `skill-eval-harness`. This repository
+owns its promises, task fixtures, and promotion decisions. Adopt shared changes
+through published dependency pins rather than copying their implementations here.
+
+The [coverage audit](coverage-audit.md) records the current routing and migration
+decisions. The [structured signoff pilot](results/2026-11-08-eval-efficiency.md)
+closed after four answers tied on task acceptance; it authorizes no follow-on calls. Each maintained manifest has an `evaluation_policy` with its decision,
+unique coverage, rerun condition, reason for model use, and existing deterministic
+checks. `tools/test_eval_artifacts.py` enforces those fields and check paths in CI,
+and rejects exact duplicate prompts within the same population and fixture set.
+It does not judge semantic overlap or authorize paid calls. Reuse the shared
+harness's saved-run audit and trend findings to review saturated cases.
 
 ## What is measured
 
@@ -134,7 +170,7 @@ mise run skill-audit
 
 The unittest command must execute the named module and exit zero. A missing
 Docker image, rejected valid plan, or accepted false-green plan is a failure.
-Validation must print an `OK` result for all three manifests. Audit must exit
+Validation must print an `OK` result for all four manifests. Audit must exit
 without blockers. These checks validate the instrument, not skill quality.
 
 ## Paid screen
@@ -150,11 +186,11 @@ The executable oracle keeps its prepared tree immutable to candidates.
 
 ```sh
 tools="$(git rev-parse --show-toplevel)/tools"
-skill-ci run skills/verify-commands --agent codex --runs 1 \
+skill-ci run skills/verify-commands --agent codex --runs 1 --judge-runs 1 \
   --codex-cmd "$tools/codex-project-only exec --json --skip-git-repo-check --sandbox workspace-write" \
   --codex-model gpt-6.1-sol --out /private/tmp/verify-commands-sol-screen
 
-skill-ci run skills/verify-commands --agent claude --runs 1 \
+skill-ci run skills/verify-commands --agent claude --runs 1 --judge-runs 1 \
   --model opus --judge-model sonnet --out /private/tmp/verify-commands-opus-screen
 ```
 
@@ -172,8 +208,9 @@ research decision after the screen works. It is not a CI or release gate.
 
 Use one grounded judge verdict per answer as an initial development budget.
 Inspect the prompt and rationale before repeating threshold-close or disputed
-judgments. `skill-ci run` always uses a Claude judge, so invoke the pinned
-harness directly when the design requires a cross-family comparison.
+judgments. `skill-ci run` defaults to a Claude judge. For Claude answers with a
+Codex judge, set `--judge-backend codex --judge-model MODEL`. The direct harness
+examples below also record judge transcripts explicitly.
 
 Follow the [paid-screen sandbox and adapter guidance](#paid-screen) when
 adapting this example to another corpus.
