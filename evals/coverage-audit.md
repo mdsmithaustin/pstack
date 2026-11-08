@@ -25,7 +25,7 @@ The four maintained manifests contain 54 cases: 26 answer cases and 28 trigger c
 
 ## Overlap and migration actions
 
-No exact duplicate prompt with the same trigger/answer population and attachment list exists across the maintained manifests. Similar promise names and exposure checks are not sufficient evidence of duplication.
+No exact duplicate prompt with the same trigger/answer population and resolved attachment paths exists across the maintained manifests. Prompt whitespace remains significant, and fixture paths resolve relative to their manifest. Similar promise names and exposure checks are not sufficient evidence of duplication.
 
 1. Pstack now records `evaluation_policy` in each maintained manifest. CI requires the decision, unique coverage, rerun condition, reason for model use, and existing deterministic check paths. The same CI test rejects exact duplicate prompts. This removes the need to ask a model whether those fields exist. No scheduled model job was retired. It does not judge whether their prose is convincing or forbid ad hoc paid calls.
 2. Reuse the harness's existing `audit-manifest --runs` and trend findings for saturation and expensive non-discriminating cases. These require retained runs. Do not create another model to inspect pass rates. Saturation is a review signal; a useful regression case can remain all-pass.

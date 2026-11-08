@@ -160,6 +160,14 @@ def evaluation_policy_errors(manifest: dict, root: Path) -> list[str]:
     return errors
 
 
+def duplicate_case_key(manifest: Path, case: dict) -> tuple:
+    return (
+        case.get("kind") == "trigger",
+        case.get("prompt", ""),
+        tuple((manifest.parent / path).resolve() for path in case.get("files", [])),
+    )
+
+
 class EvaluationSpendPolicy(unittest.TestCase):
     def test_maintained_manifests_name_the_decision_and_existing_checks(self) -> None:
         manifests = sorted(EVALS.glob("*/shared-benchmark.json"))
@@ -172,13 +180,27 @@ class EvaluationSpendPolicy(unittest.TestCase):
         seen = {}
         for path in sorted(EVALS.glob("*/shared-benchmark.json")):
             for case in json.loads(path.read_text())["cases"]:
-                prompt = " ".join(case.get("prompt", "").split())
-                if not prompt:
+                if not case.get("prompt", ""):
                     continue
-                key = (case.get("kind") == "trigger", prompt, tuple(case.get("files", [])))
+                key = duplicate_case_key(path, case)
                 identity = f"{path.parent.name}/{case['id']}"
                 self.assertNotIn(key, seen, f"{identity} duplicates {seen.get(key)}; reuse the existing case")
                 seen[key] = identity
+
+    def test_duplicate_key_preserves_whitespace_inside_literals(self) -> None:
+        manifest = EVALS / "unslop" / "shared-benchmark.json"
+        case = {"prompt": 'Preserve `const title = "Q3 — regional totals";`'}
+        self.assertEqual(duplicate_case_key(manifest, case), duplicate_case_key(manifest, dict(case)))
+        changed = {"prompt": 'Preserve `const title = "Q3  — regional totals";`'}
+        self.assertNotEqual(duplicate_case_key(manifest, case), duplicate_case_key(manifest, changed))
+
+    def test_duplicate_key_distinguishes_manifest_relative_fixtures(self) -> None:
+        first = EVALS / "spec-probes" / "shared-benchmark.json"
+        second = EVALS / "runtime-probes" / "shared-benchmark.json"
+        case = {"prompt": "Review this input", "files": ["fixtures/input.md"]}
+        self.assertNotEqual(duplicate_case_key(first, case), duplicate_case_key(second, case))
+        equivalent = {**case, "files": ["fixtures/./input.md"]}
+        self.assertEqual(duplicate_case_key(first, case), duplicate_case_key(first, equivalent))
 
     def test_policy_controls_reject_missing_coverage_and_missing_checks(self) -> None:
         valid = {"evaluation_policy": {

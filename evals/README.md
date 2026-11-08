@@ -82,6 +82,7 @@ closed after four answers tied on task acceptance; it authorizes no follow-on ca
 unique coverage, rerun condition, reason for model use, and existing deterministic
 checks. `tools/test_eval_artifacts.py` enforces those fields and check paths in CI,
 and rejects exact duplicate prompts within the same population and fixture set.
+It preserves prompt whitespace and resolves fixture paths relative to each manifest.
 It does not judge semantic overlap or authorize paid calls. Reuse the shared
 harness's saved-run audit and trend findings to review saturated cases.
 
