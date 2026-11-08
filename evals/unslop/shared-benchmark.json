@@ -1,5 +1,15 @@
 {
   "version": 1,
+  "evaluation_policy": {
+    "decision": "Keep or narrow the editing rules when they improve prose without losing facts or changing protected constructs.",
+    "unique_coverage": "Edited artifact boundaries, literal preservation, and residual prose quality; exact strings are graded by code.",
+    "rerun_when": "Editing instructions or native skill loading changes. Oracle-only changes use saved or hand-built answers.",
+    "model_required": "Fresh editing behavior needs a subject; semantic fidelity and prose quality are not proved by substring checks.",
+    "deterministic_checks": [
+      "evals/unslop/oracles/check_edited.py",
+      "tools/test_eval_artifacts.py"
+    ]
+  },
   "skill_name": "unslop",
   "skill_description": "Before responding to the user or writing any text, you must use this skill to remove AI tells. Required for every reply and all other writing, regardless of topic or length. Answering a question is writing, so this skill applies to ordinary question answering. Use this skill before the first visible text of every reply.",
   "harness": {

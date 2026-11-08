@@ -1,0 +1,67 @@
+{
+  "status": "closed-inconclusive",
+  "decision": "Do not expand this pilot or claim skill value. Retain controls and saved outputs for offline replay. No additional subject slots authorized by this record.",
+  "protocol_sha256": "a0b86bd9f6795f12b4615e1c127a430e09df3a908d89cbb6395aabda2ffddbd4",
+  "benchmark_sha256": "0196023745c3c4e4b1de85facbc0bbe627b4a9d620ae5ee044f762998cb7d6ab",
+  "requested_model": "gpt-6.1-sol",
+  "requested_effort": "medium",
+  "served_model": "unavailable",
+  "subject_calls": 4,
+  "judge_calls": 0,
+  "operator_interventions_during_subject_runs": 0,
+  "preflight_control_repairs": 1,
+  "results": [
+    {
+      "case": "component-health",
+      "variant": "with_skill",
+      "accepted": true,
+      "exposure_matches": true,
+      "elapsed_ms": 34533,
+      "input_tokens": 61046,
+      "output_tokens": 1039,
+      "cached_input_tokens": 55424,
+      "billed_cost_usd": null
+    },
+    {
+      "case": "component-health",
+      "variant": "without_skill",
+      "accepted": true,
+      "exposure_matches": true,
+      "elapsed_ms": 20893,
+      "input_tokens": 57192,
+      "output_tokens": 506,
+      "cached_input_tokens": 52608,
+      "billed_cost_usd": null
+    },
+    {
+      "case": "snapshot-parity",
+      "variant": "with_skill",
+      "accepted": true,
+      "exposure_matches": true,
+      "elapsed_ms": 36966,
+      "input_tokens": 77732,
+      "output_tokens": 1223,
+      "cached_input_tokens": 70016,
+      "billed_cost_usd": null
+    },
+    {
+      "case": "snapshot-parity",
+      "variant": "without_skill",
+      "accepted": true,
+      "exposure_matches": true,
+      "elapsed_ms": 32584,
+      "input_tokens": 72917,
+      "output_tokens": 1097,
+      "cached_input_tokens": 65920,
+      "billed_cost_usd": null
+    }
+  ],
+  "source_sha256": {
+    "oracles/cases.json": "78dcec06205f2f72d71c5d3824115166b06f26c37538696db668d35084d09cce",
+    "oracles/check_plan.py": "a2bd731c26cb14a7d7cbca3cea580b1535ba43906b7da0590f0267cd593b387c",
+    "oracles/projects/component_health.py": "d2a18526d69783a1b2cb2e05059ba306c9ab32354d25d3bedf9f0177200aad37",
+    "oracles/projects/snapshot_parity.py": "93c87114563dd25eb8cc5458377f8af38054fbfdb69d1b14f048bb7bc9418a38",
+    "shared-benchmark.json": "f8266777defc0e1ac41d0e0bf0aafabc711f4687dd0d2b177b37a1186ba1632e",
+    "skills/verify-commands/SKILL.md": "e279296150d7cb36cda1c316a308ea9e09ef3dd2113781b4bac3ffc8031cac65"
+  }
+}

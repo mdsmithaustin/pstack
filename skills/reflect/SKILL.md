@@ -41,6 +41,10 @@ One `Task` call, `subagent_type: general-purpose`, `model` from the `reflect jud
 
 Move any Accepted item that a lint rule, script, metadata flag, or runtime check would enforce more reliably to Backlog. Call the Skill tool with `principle-encode-lessons-in-structure`.
 
+For each such item, name the owning repository, an implementation owner, and the existing check it extends or replaces. Portable checks belong in the shared tooling that owns them. Keep task-specific checks in the consumer repository. Reuse an existing check when it already covers the failure.
+
+Close the item only after a valid control passes, the original violation fails, and authoritative CI runs the replacement. Identify the redundant model inspection or prose obligation that can then be removed. Retain behavior checks the replacement cannot cover. Changes to acceptance criteria require review separately from the repair, so an agent cannot make its own failure pass by weakening the check.
+
 ## 5. Apply
 
 Present the synthesizer's full Accepted / Rejected / Backlog output and wait for explicit approval before applying any Accepted edit. The user picks the subset and may redirect routings. Skill changes affect every future agent in the org. Do not auto-apply.

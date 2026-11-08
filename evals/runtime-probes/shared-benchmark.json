@@ -1,5 +1,14 @@
 {
   "version": 1,
+  "evaluation_policy": {
+    "decision": "Keep or revise the skill when probes find reproducible defects without promoting diagnostic-only or policy-unknown observations.",
+    "unique_coverage": "Probe selection, observed evidence, and disposition of incomplete runtime findings; activation is separate.",
+    "rerun_when": "Probe instructions or native execution changes; replay saved evidence before rerunning grader-only changes.",
+    "model_required": "Probe choice and interpretation remain behavioral questions; command receipts alone do not establish finding quality.",
+    "deterministic_checks": [
+      "tools/test_eval_artifacts.py"
+    ]
+  },
   "skill_name": "runtime-probes",
   "skill_description": "Find defects in a running product with a bounded probe pass and a strict promotion gate.",
   "harness": {

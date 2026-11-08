@@ -1,5 +1,15 @@
 {
   "version": 1,
+  "evaluation_policy": {
+    "decision": "Keep or revise the skill only when it prevents false-green completion checks without rejecting healthy controls.",
+    "unique_coverage": "Generated completion commands executed against healthy and faulty project states; trigger rows separately measure activation.",
+    "rerun_when": "The skill, native command execution, or discovery behavior changes. Replay oracle changes before buying fresh answers.",
+    "model_required": "Fresh command selection and native skill discovery are agent behavior; grading saved commands is model-free.",
+    "deterministic_checks": [
+      "evals/verify-commands/oracles/test_check_plan.py",
+      "tools/test_verify_commands.py"
+    ]
+  },
   "skill_name": "verify-commands",
   "skill_description": "Apply whenever you write or review a command that decides whether work is done: a test invocation, an acceptance check, a CI gate, a shell assertion, a grep-based verify step, or an upgrade, deployment, migration, or install whose success you will report. Names the failure signal, grounds paths, and catches the shapes that pass green while measuring nothing.",
   "harness": {
