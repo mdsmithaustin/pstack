@@ -72,6 +72,11 @@ def text(seq, body):
     return {"seq": seq, "kind": "text", "text": body}
 
 
+def open_delegation_step(skills_root=ROOT / "skills"):
+    step = next(s for s in oracles.playbook_shape("feature", skills_root)["steps"] if "below threshold" in s["text"])
+    return f"{step['n']}. {oracles.first_sentence(step['text'])}"
+
+
 def feature_items(skills_root=ROOT / "skills"):
     shape = oracles.playbook_shape("feature", skills_root)
     items = [{"text": shape["prose"][0], "state": "pending"}]
@@ -579,7 +584,7 @@ class SourceFileCount(unittest.TestCase):
                 self.assertEqual(result["verdict"], INCONCLUSIVE, result)
 
     def test_verbatim_step_copy_is_not_a_below_threshold_record(self):
-        step = next(item for item in feature_items() if item["text"].startswith("4. "))["text"]
+        step = next(item for item in feature_items() if "below threshold" in item["text"])["text"]
         quoted = step[:step.index(". ", step.index("below threshold")) + 1]
         record = "\nskipped: implementation delegation below threshold. Source count 1."
         for text, state, verdict in ((step, "completed", FAIL), (quoted, "completed", FAIL), (step + "\nImplemented directly.", "completed", FAIL),
@@ -604,8 +609,7 @@ class SourceFileCount(unittest.TestCase):
     def test_negated_note_or_note_beside_open_step_four_fails(self):
         for items in ([{"text": "4. 3 source files: not below the delegation threshold, delegate to feature role", "state": "completed"}],
                       [{"text": "3. Independent workstreams: skipped: one workstream, below delegation threshold", "state": "completed"},
-                       {"text": "4. Before implementation, record the planned source file count and independent workstream count in the worklist.",
-                        "state": "pending"}]):
+                       {"text": open_delegation_step(), "state": "pending"}]):
             with self.subTest(items=[item["text"][:50] for item in items]):
                 result = self.verdict(self.CHANGE, items)
                 self.assertEqual(result["verdict"], FAIL, result)

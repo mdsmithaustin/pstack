@@ -92,11 +92,11 @@ morning.
 
 when invoked it:
 
-1. matches your task to a [playbook](./skills/poteto-mode/playbooks/) and opens a todo list whose first items are its opening prose and its steps, copied in verbatim.
+1. matches your task to a [playbook](./skills/poteto-mode/playbooks/) and tracks progress under the mode's [worklist and completion rules](./skills/poteto-mode/SKILL.md#playbooks).
 2. routes to the other skills as the steps fire.
 3. writes unslopped replies framed for the consumer and the maintainer.
 
-the full rules and playbooks live in [`skills/poteto-mode/SKILL.md`](./skills/poteto-mode/SKILL.md).
+the mode's [Playbooks section](./skills/poteto-mode/SKILL.md#playbooks) also owns the preservation gate required before every commit. the full rules and playbooks live in [`skills/poteto-mode/SKILL.md`](./skills/poteto-mode/SKILL.md).
 
 [`/poteto-mode`](./skills/poteto-mode/SKILL.md) is also a sticky mode: once entered it stays on across turns, applying itself when a playbook matches or the task needs rigor and staying out of the way otherwise. opt out any time by saying so. after known compaction or truncation, the agent follows the mode's [recovery rule](./skills/poteto-mode/SKILL.md#recover-after-compaction-or-truncation) to continue the current task. runtime retention varies; see the [dated evidence](./skills/pstack-harness/references/skill-retention.md). if the mode stops applying, type `/poteto-mode` again.
 
@@ -298,6 +298,7 @@ CI uses Python 3.12, Bun 1.4.0, and the runner's preinstalled Node. For the git 
 
 ```sh
 python3 -m venv .venv
+.venv/bin/python -m pip install --require-hashes -r tools/harness-test-requirements.txt
 uv tool install git+https://github.com/mdsmithaustin/skill-ci.git
 lefthook install
 ```
@@ -316,6 +317,10 @@ The statechart suite runs its TLC-dependent tests only when `TLA2TOOLS` names `t
 `python3 tools/check-personal-paths.py` scans the names and current contents of every Git-tracked file for concrete account names below `/Users/<account>` or `/home/<account>`. It scans symlink target spelling without following the link, skips contents containing NUL bytes as binary, and decodes other bytes with UTF-8 replacement. Filenames are checked even for binary files. Exact file-scoped content exceptions cover existing synthetic fixtures. An unused exception fails the default working-tree check used by the gate and CI. Index and pushed-tip modes suppress exact known synthetic matches without requiring every fixture to exist in each snapshot. Diagnostics redact account names and identify the file and line without printing source contents. Line 0 identifies a filename finding. Exit 1 means a personal path was found. Exit 2 means file acquisition or exception validation failed, or no tracked text files were inspected. A successful scan exits 0 and reports the number of tracked text files checked. Pre-push exits 0 without scanning when Git supplies no nondeleted local tips. The required CI `skills` job runs this checker explicitly, alongside the shared skill-ci checks.
 
 The script needs neither mise nor the main checkout's `.venv`. It selects `PSTACK_GATE_PYTHON` when set to a Python executable, then `$HOME/.local/share/mise/installs/python/3.14.7/bin/python3.14`, then `uv` on PATH with Python 3.12. This gate runner choice uses the environment's `HOME`. The native evaluators derive their confined runtime paths from the operating system account database, as documented in [the promise suite README](./evals/promises/README.md#run-the-model-free-checks). The native version pin is deliberate because Python 3.12 fails the native fsmonitor control on the reviewed host. The test tier also needs Bun, Node, `rg`, `jq`, `gh`, and `openssl` on `PATH`. `mise run gate-lint` and `mise run gate-test` wrap the same script.
+
+Install `tools/harness-test-requirements.txt` into the interpreter selected for local checks. Without pytest, its preservation cases skip. CI installs these pinned, hashed dependencies before the harness suite, so those cases execute. To use the environment created above, set `PSTACK_GATE_PYTHON="$PWD/.venv/bin/python"` when running the gate. Dependency installation fails on a nonzero exit. Treat a nonzero harness exit or a zero-test summary as failed verification. A Python 3.9 compatibility probe can skip when that separate interpreter is unavailable.
+
+Regenerate the test dependency lock with `uv pip compile --python-version 3.12 --universal --generate-hashes --no-annotate --no-header --output-file tools/harness-test-requirements.txt tools/harness-test-requirements.in`. A nonzero exit means resolution failed. The lock targets Python 3.12 and newer.
 
 `.no-mistakes.yaml` runs the `lint` tier and then `skill-ci check` as the gate's Lint step. It leaves the Test step to the pipeline's targeted checks, because no-mistakes reserves `commands.test` for targeted validation of the change, not a full suite that mirrors CI. Run the `test` tier yourself before a large change. GitHub CI remains authoritative and additionally runs the Docker oracle and maintained canon suites, the npx installation probe, the Linux worktree-audit job, and, for statechart changes, the statechart TLC job. Those checks stay outside the local gate tiers. CI cancels superseded pull-request runs of `lint.yml`, `skill-checks.yml`, and `statechart-tlc.yml`; pushes to main never cancel. The gate fills PR bodies from `.github/pull_request_template.md` through `pr.template`, omits intent from them, keeps a minimal appendix with the risk line and head attestation, and protects `.github/workflows/**` and `.github/rulesets/**` from automatic repairs.
 

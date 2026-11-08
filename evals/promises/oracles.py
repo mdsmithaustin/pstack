@@ -1596,7 +1596,7 @@ def spawn_role(view, spawn):
 def closed_notes(view):
     want = (view.case.get("expect") or {}).get("playbook")
     shape = playbook_shape(want, view.skills_root) if want else None
-    step_four = next((step for step in (shape or {}).get("steps", []) if step["n"] == 4), None)
+    step_four = next((step for step in (shape or {}).get("steps", []) if "below threshold" in step["text"]), None)
     task_status = {str(call["input"].get("taskId")): call["input"]["status"] for call in view.tool_calls
                    if call.get("name") == "TaskUpdate" and (call.get("input") or {}).get("status")}
     notes, step_four_closed_at, numbered_four_closed = [], set(), []
@@ -1605,7 +1605,7 @@ def closed_notes(view):
             state, text = item.get("state") or "", item.get("text") or ""
             closed = state == "completed" or state.startswith("skipped")
             number = ITEM_NUMBER.match(text)
-            if step_four and number and number.group(1) == "4" and item_matches_step(text, step_four):
+            if step_four and number and number.group(1) == str(step_four["n"]) and item_matches_step(text, step_four):
                 numbered_four_closed.append(closed)
             if closed:
                 detail = state.partition(": ")[2]
@@ -1656,8 +1656,8 @@ def counts_only_source_files(view):
     if below:
         return passed(*evidence)
     if view.killed:
-        return inconclusive("run killed before step 4 closed below the delegation threshold", *evidence)
-    return failed("no worklist item closes step 4 as below the delegation threshold", *evidence)
+        return inconclusive("run killed before the delegation step closed below the threshold", *evidence)
+    return failed("no worklist item closes the delegation step as below the threshold", *evidence)
 
 
 @oracle("claude-effort-applies-via-effort-agents")

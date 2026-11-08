@@ -1,12 +1,12 @@
 ### Investigation
 
-**You own the answer. Plan, route, write.**
+**You own the answer.**
 
 Investigation requests are read-only. They produce a cited explanation or a recommendation, not a code change. No PR, no babysit, no `architect` unless the investigation precedes a code change. If it does, hand back to the user and re-route to Bug fix or Feature.
 
-1. For external, domain, or dependency research, continue in the [Research playbook](research.md). For current code behavior, call the Skill tool with `how`. For motivation questions, also call the Skill tool with `why`.
-2. Throughput checkpoint stays one line: `throughput checkpoint: n/a, read-only investigation`.
-3. Produce the `how`-shaped output (Overview / Key Concepts / How It Works / Where Things Live / Gotchas), or a recommendation with a tradeoffs table if the request is a decision between alternatives.
-4. Call the Skill tool with `unslop` on the reply.
+1. **Routed.** The question is in the hands of the skill that answers it. For external, domain, or dependency research, continue in the [Research playbook](research.md). For current code behavior, call the Skill tool with `how`. For motivation questions, also call the Skill tool with `why`.
+2. **Planned.** Throughput checkpoint stays one line: `throughput checkpoint: n/a, read-only investigation`.
+3. **Answered.** The reply cites its evidence and fits the question's shape. Produce the `how`-shaped output (Overview / Key Concepts / How It Works / Where Things Live / Gotchas), or a recommendation with a tradeoffs table if the request is a decision between alternatives.
+4. **Clean.** The reply reads without AI tells. Call the Skill tool with `unslop` on the reply.
 
 **Reply:** the investigation output. For "are we sure?" answers, include your real judgment with reasons. Push back if the premise is wrong (see Autonomy).

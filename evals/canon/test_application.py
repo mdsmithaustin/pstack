@@ -58,6 +58,10 @@ class RecordingTransport:
             for key, tree in (("project", staging / "project"), ("skills", staging / ".agents/skills")):
                 if tree.exists():
                     self.cloned_files[key] = {p.relative_to(tree).as_posix(): p.read_bytes() for p in tree.rglob("*") if p.is_file()}
+            # Model a clone whose index is written in a later second than its files.
+            index = staging / ".git/index"
+            timestamp = index.stat().st_mtime + 10
+            os.utime(index, (timestamp, timestamp))
             return self.reply()
         if args[0] == "policy":
             return subprocess.CompletedProcess(argv, 2 if self.mode == "policy_error" else 1, b'{"allowed":false}', b"")

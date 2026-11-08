@@ -16,7 +16,7 @@ A feature prompt states the behavior and what must not change:
 /poteto-mode add a --json flag. text output stays byte-identical. verify both forms.
 ```
 
-[Feature step 4](../../skills/poteto-mode/playbooks/feature.md) defines when the lead implements or delegates, what the worklist records, and the acceptance-test and specification-edge duties for both paths.
+[Feature step 4](../../skills/poteto-mode/playbooks/feature.md) defines the acceptance tests and specification edges. [Step 6](../../skills/poteto-mode/playbooks/feature.md) defines when the lead implements or delegates, the worklist records, and the implementation checks for both paths.
 
 A refactoring prompt pins behavior before structure moves:
 

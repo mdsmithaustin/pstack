@@ -39,8 +39,8 @@ class HarnessLoadingPaths(unittest.TestCase):
             with self.subTest(runtime=runtime):
                 report = self.receipt('spawn', '--runtime', runtime)
                 self.assertEqual([row['path'] for row in report['after']['files']], [
-                    PREFIX + 'SKILL.md', PREFIX + 'references/roles.md',
-                    PREFIX + 'references/delegation.md', PREFIX + 'references/portable-paths.md',
+                    PREFIX + 'SKILL.md', PREFIX + 'references/delegation.md',
+                    PREFIX + 'references/roles.md', PREFIX + 'references/portable-paths.md',
                     PREFIX + f'references/{"other-runtime" if runtime == "other" else runtime}.md',
                 ])
 
@@ -51,8 +51,8 @@ class HarnessLoadingPaths(unittest.TestCase):
     def test_persona_spawn_adds_the_persona_contract(self):
         report = self.receipt('spawn', '--runtime', 'codex', '--persona')
         self.assertEqual([row['path'] for row in report['after']['files']], [
-            PREFIX + 'SKILL.md', PREFIX + 'references/roles.md',
-            PREFIX + 'references/delegation.md', PREFIX + 'references/portable-paths.md',
+            PREFIX + 'SKILL.md', PREFIX + 'references/delegation.md',
+            PREFIX + 'references/roles.md', PREFIX + 'references/portable-paths.md',
             PREFIX + 'references/codex.md', PREFIX + 'references/named-roles.md',
         ])
         self.assertEqual([row['path'] for row in report['before']['files']], [

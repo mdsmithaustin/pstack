@@ -19,7 +19,7 @@ Read each selected reference in full before its action. Select only the actions 
 |---|---|
 | `worklist` | [Worklist procedure](references/worklist.md) |
 | `question` | [Structured questions](references/questions.md) |
-| `spawn` | [Role resolution and handoffs](references/roles.md), [Delegation and isolation](references/delegation.md), [Portable resource path contract](references/portable-paths.md), and the current runtime adapter below |
+| `spawn` | The **Spawn a role** recipe below, [Delegation and isolation](references/delegation.md), and the current runtime adapter below. Read [Role resolution and handoffs](references/roles.md) only for a handoff, a recovery, a `trail reviewer`, or a resolver that fails or prints a note, and [Portable resource path contract](references/portable-paths.md) only when `PSTACK_SKILLS_ROOT` is unset |
 | `role-handoff` | [Role resolution and handoffs](references/roles.md) |
 | `persona` | [Persona contract](references/named-roles.md) when the spawn names a persona |
 | `loop` | [Loops and wake-ups](references/loops.md) |
@@ -50,7 +50,19 @@ Read the role resolution and handoffs reference selected above before a role han
 
 ## Spawn a role
 
-Read the spawn references and current runtime adapter selected above before resolving or dispatching a role. Keep the caller's role and panel arm count.
+Every pstack spawn runs a role from the models config, such as `feature` or `how explorer`, sometimes under a persona. Keep the caller's role and panel arm count.
+
+1. Take the role from the skill or playbook step. A step that names none uses `default`. A `subagent_type` of `poteto-agent` or `comment-sicko` names a persona, and `general-purpose` names none.
+2. Resolve it once per task, and again after the harness or config changes. Run the resolver from the project root, or pass `--project <root>`, since it reads that directory's `.agents/pstack-models.md`. Do not read the config files to pick values.
+
+   ```sh
+   python3 "${PSTACK_SKILLS_ROOT:?}/setup-pstack/scripts/check-models-config.py" --resolve --harness <claude-code|codex|grok|hermes> <role>
+   ```
+
+   Failure signal: nonzero exit. It prints one JSON line per arm with `model`, `effort`, and `source`, plus `notes` to relay in the reply. If it fails or prints a note, or the role is `trail reviewer`, follow **Spawn a role** in [roles.md](references/roles.md#spawn-a-role). Never drop a spawn because the resolver failed. Spawn with model and effort omitted and report it.
+3. Build the call from the current runtime adapter. `inherit-parent` in a field means omit that field.
+4. For a persona, put its complete briefing at the top of the prompt, from `python3 "${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/subagents.py" brief <persona>`, unless the live agent catalog lists the persona's native name.
+5. Report the model and effort each arm ran on, and label a review `same-model` when it matches the work's model.
 
 ## The primitives
 
