@@ -4,7 +4,8 @@
 The agent that changes code also edits the tests that disagree with it. This script keeps the
 earlier tests out of its reach: it writes the start commit's test files into place, runs them
 against the current code, and restores their saved working-tree contents. Automatic selection runs
-exactly those test files; --command delegates selection to the repository task. The files run in
+exactly those test files when their baseline naming settings are compatible. --command delegates
+selection to the repository task. The files run in
 place because tests find the project through their own location (`Path(__file__).parent / ".."`,
 fixture directories).
 
@@ -30,6 +31,10 @@ Automatic selection uses pytest configuration and function/import hints, then ru
 evidence for undecided suites. Undecided modules load under unittest's module names and are reused
 if pytest is selected. Automatic pytest collection retains the baseline's python_files,
 python_functions, and python_classes settings through the selected pytest's configuration discovery.
+Each selected file's baseline naming settings must match the combined automatic invocation's settings.
+Pattern order and duplicates do not affect this comparison. Incompatible settings refuse with exit 2
+before tests execute, including under --report-only. Use --command with a project task that runs the
+required suites in that case.
 Without an explicit baseline python_files setting, the broader Python filename patterns still apply.
 Use --command for a repository task that needs different import naming or third-party collection
 plugins without those hints.
@@ -40,7 +45,7 @@ Exit 0 when the selected tests pass, all failures have allowed reasons, or there
 Python tests in automatic mode. With a valid committed baseline, an explicit command still runs when
 file selection is empty. Exit 1 when a failure is uncovered, tests cannot run, or no test executes, including
 an all-skipped suite. Exit 2 when the arguments, overlay, or recovery are unusable. --report-only suppresses
-test-result failures; invalid arguments, refs, and overlay setup still fail.
+test-result failures; invalid arguments, refs, incompatible automatic naming, and overlay setup still fail.
 
 Use --command <argv...> as the last argument when the repository has its own test task. It runs
 without a shell from the repository root, with baseline files restored. The task owns test selection
@@ -352,7 +357,7 @@ def write_baseline_configuration(configuration: Path, configs: dict[str, bytes],
         target.touch()
 
 
-def baseline_test_files(python: str, listed: list[str], overlay: InPlace) -> list[str]:
+def baseline_test_files(python: str, listed: list[str], overlay: InPlace, *, automatic: bool) -> list[str]:
     files = [path for path in listed if path.endswith(".py") and Path(path).name != "conftest.py"]
     selected = {path for path in files if is_test_file(path)}
     configs = baseline_pytest_configs(overlay.project, files, overlay.commit)
@@ -414,8 +419,10 @@ configured = json.loads(sys.argv[4])
 project = Path(sys.argv[5])
 already_selected = set(json.loads(sys.argv[6]))
 selected = []
+naming_by_parent = {}
 for parent in sorted({str(Path(path).parent) for path in files}):
     naming, source = baseline_naming(configuration, [parent])
+    naming_by_parent[parent] = naming
     declared = any(Path(path).parent == Path(parent) or Path(path).parent in Path(parent).parents for path in configured)
     if declared and (source is None or load_config_dict_from_file(source) is None):
         raise RuntimeError("selected pytest did not recognize the baseline configuration for " + parent)
@@ -427,13 +434,21 @@ for parent in sorted({str(Path(path).parent) for path in files}):
             raise RuntimeError("baseline pytest test ownership is unresolved for " + path + "; automatic preservation cannot safely overlay or omit this file")
         if owns_tests:
             selected.append(path)
+selected_files = already_selected | set(selected)
+if json.loads(sys.argv[7]) and selected_files:
+    combined, _ = baseline_naming(configuration, sorted(selected_files))
+    for parent in sorted({str(Path(path).parent) for path in selected_files}):
+        different = [name for name, patterns in naming_by_parent[parent].items() if set(patterns) != set(combined[name])]
+        if different:
+            raise RuntimeError("incompatible baseline pytest naming for " + parent + ": " + ", ".join(different) +
+                               " differ from the combined automatic invocation; use --command with a project test command that runs the required suites")
 Path(sys.argv[1]).write_text(json.dumps(selected))
 '''
         env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONPYCACHEPREFIX=str(Path(isolated) / "pycache"),
                    PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
         env.pop("PYTEST_ADDOPTS", None)
         env.pop("PYTEST_PLUGINS", None)
-        out = overlay.run([python, "-I", "-B", "-c", probe, str(report), str(configuration), json.dumps(files), json.dumps(list(configured)), str(overlay.project), json.dumps(list(selected))], env=env)
+        out = overlay.run([python, "-I", "-B", "-c", probe, str(report), str(configuration), json.dumps(files), json.dumps(list(configured)), str(overlay.project), json.dumps(list(selected)), json.dumps(automatic)], env=env)
         if out.returncode != 0 or not report.exists():
             raise OSError("could not discover baseline pytest file patterns: " + (out.stdout + out.stderr).strip())
         selected.update(json.loads(report.read_text()))
@@ -907,7 +922,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--project", type=Path, default=None, help="a path inside the repository (default: cwd)")
     parser.add_argument("--python", default=None, help="interpreter with project dependencies (default: project .venv/bin/python, then venv/bin/python, then python on PATH, then the running interpreter)")
     parser.add_argument("--reasons", type=Path, default=None, help="file of allowed failures: test lines, then indented input: and quote: lines per block")
-    parser.add_argument("--report-only", action="store_true", help="print test results and exit 0; invalid arguments, refs, and overlay setup still fail")
+    parser.add_argument("--report-only", action="store_true", help="print test results and exit 0; invalid arguments, refs, incompatible automatic naming, and overlay setup still fail")
     parser.add_argument("--command", nargs=argparse.REMAINDER, help="project test command, last argument; requires unittest or pytest execution summaries and forbids --reasons")
     args = parser.parse_args(argv)
     if args.recover is not None and (args.command is not None or args.reasons is not None or args.report_only or args.python is not None):
@@ -957,7 +972,7 @@ def main(argv: list[str]) -> int:
     support = [p for p in listed if is_support_file(p)]
     try:
         with InPlace(project, commit, []) as discovery:
-            test_files = baseline_test_files(python, listed, discovery)
+            test_files = baseline_test_files(python, listed, discovery, automatic=args.command is None)
         if not test_files and args.command is None:
             print(f"preserve: nothing to preserve, {commit[:10]} holds no Python test files. The gate is satisfied; a project tested in "
                   "another language runs the start commit's test files with its own runner by hand, under the same policy.")

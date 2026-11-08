@@ -16,6 +16,13 @@ CONTRACT = 'from mod import VALUE\ndef check_contract():\n    assert VALUE == "b
 EDITED = 'def check_contract():\n    assert True\n'
 CONFIG = '[pytest]\npython_files = test_*.py check_*.py\npython_functions = test_* check_*\n'
 UNITTEST = 'import unittest\nclass Example(unittest.TestCase):\n    def test_value(self):\n        self.assertEqual(__import__("mod").VALUE, "baseline")\n'
+MIXED_NAMING_FILES = {
+    'pytest.ini': '[pytest]\npython_files=test_*.py\npython_functions=test_*\n',
+    'tests/test_visible.py': 'def test_visible():\n    assert True\n',
+    'spec/pytest.ini': '[pytest]\npython_files=check_*.py\npython_functions=check_*\n',
+    'spec/check_contract.py': 'from pathlib import Path\ndef check_contract():\n    assert Path("value.txt").read_text()=="baseline"\n',
+    'value.txt': 'baseline',
+}
 
 
 class PreserveFileSelection(unittest.TestCase):
@@ -69,6 +76,115 @@ class PreserveFileSelection(unittest.TestCase):
         if automatic:
             self.assertIn('check_contract', result.stdout)
         self.assertIn('1 failed', result.stdout)
+
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
+    def test_mixed_baseline_naming_refuses_before_test_execution(self):
+        for path, source in MIXED_NAMING_FILES.items():
+            self.write(path, source)
+        self.write('conftest.py', 'from pathlib import Path\nPath("tests-executed").write_text("yes")\n')
+        self.commit()
+        self.write('reasons.txt', 'check_contract\n  input: changed production value\n  quote: "The value must change."\n')
+        for value in ('baseline', 'regression'):
+            self.write('value.txt', value)
+            if value == 'regression':
+                (self.repo / 'spec/pytest.ini').unlink()
+                self.write('pytest.ini', CONFIG)
+                (self.repo / 'pytest.ini').chmod(0o751)
+            for options in ((), ('--report-only',), ('--reasons', str(self.repo / 'reasons.txt'))):
+                with self.subTest(value=value, options=options):
+                    result = self.preserve(*options)
+                    self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                    self.assertIn('incompatible baseline pytest naming', result.stderr)
+                    self.assertIn('spec', result.stderr)
+                    self.assertIn('--command', result.stderr)
+                    self.assertNotIn('All earlier tests still pass', result.stdout)
+                    self.assertFalse((self.repo / 'tests-executed').exists())
+
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
+    def test_compatible_naming_across_configs_runs_all_selected_tests(self):
+        root = CONFIG + 'python_classes = Test* Verify*\n'
+        variants = (
+            root,
+            '[pytest]\npython_files = check_*.py test_*.py\npython_functions = check_* test_*\npython_classes = Verify* Test*\n',
+            '[pytest]\npython_files = test_*.py check_*.py test_*.py\npython_functions = test_* check_* check_*\npython_classes = Test* Verify* Test*\n',
+        )
+        self.write('pytest.ini', root)
+        self.write('tests/test_visible.py', 'def test_visible():\n    assert True\n')
+        self.write('spec/check_contract.py', CONTRACT)
+        self.write('spec/check_class.py', 'from mod import VALUE\nclass VerifyContract:\n    def check_value(self):\n        assert VALUE == "baseline"\n')
+        for nested in variants:
+            with self.subTest(nested=nested):
+                self.write('spec/pytest.ini', nested)
+                self.write('mod.py', 'VALUE = "baseline"\n')
+                self.commit()
+                result = self.preserve()
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn('3 passed', result.stdout)
+                self.write('mod.py', 'VALUE = "regression"\n')
+                result = self.preserve()
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn('2 failed, 1 passed', result.stdout)
+                self.assertIn('check_contract', result.stdout)
+                self.assertIn('check_value', result.stdout)
+
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
+    def test_each_naming_setting_must_agree_with_the_combined_invocation(self):
+        root = '[pytest]\npython_files = test_*.py\npython_functions = test_*\npython_classes = Test*\n'
+        variants = (
+            ('python_files', 'test_*.py', 'test_*.py cases.py'),
+            ('python_functions', 'test_*', 'test_* check_*'),
+            ('python_classes', 'Test*', 'Test* Verify*'),
+        )
+        self.write('pytest.ini', root)
+        self.write('tests/test_visible.py', MIXED_NAMING_FILES['tests/test_visible.py'])
+        self.write('spec/test_nested.py', 'def test_nested():\n    assert True\n')
+        for setting, previous, changed in variants:
+            with self.subTest(setting=setting):
+                self.write('spec/pytest.ini', root.replace(setting + ' = ' + previous, setting + ' = ' + changed))
+                self.commit()
+                result = self.preserve()
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn('incompatible baseline pytest naming', result.stderr)
+                self.assertIn(setting, result.stderr)
+
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
+    def test_nested_only_naming_uses_baseline_configs_despite_current_edits(self):
+        for path, source in MIXED_NAMING_FILES.items():
+            if path != 'tests/test_visible.py':
+                self.write(path, source)
+        self.commit()
+        self.write('pytest.ini', '[pytest]\npython_files = unrelated.py\n')
+        self.write('spec/pytest.ini', '[pytest]\npython_files = omitted.py\npython_functions = omitted\n')
+        self.write('spec/check_contract.py', EDITED)
+        (self.repo / 'spec/pytest.ini').chmod(0o751)
+        (self.repo / 'spec/check_contract.py').chmod(0o751)
+        result = self.preserve()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('1 passed', result.stdout)
+        self.write('value.txt', 'regression')
+        self.assert_regression(self.preserve())
+
+    @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
+    def test_incompatible_naming_keeps_explicit_command_selection_strict(self):
+        for path, source in MIXED_NAMING_FILES.items():
+            self.write(path, source)
+        self.write('examples/test_excluded.py', 'import unavailable_example_dependency\n')
+        self.commit()
+        self.write('spec/check_contract.py', EDITED)
+        (self.repo / 'spec/check_contract.py').chmod(0o751)
+        command = self.pytest_command('-c', 'spec/pytest.ini', 'spec/check_contract.py')
+        result = self.preserve(*command)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('3 baseline Python test file(s)', result.stdout)
+        self.assertIn('1 passed', result.stdout)
+        self.write('value.txt', 'regression')
+        self.assert_regression(self.preserve(*command), automatic=False)
+        self.write('reasons.txt', 'check_contract\n  input: changed production value\n  quote: "The value must change."\n')
+        result = self.preserve('--reasons', str(self.repo / 'reasons.txt'), '--command', sys.executable, '-c',
+                               'from pathlib import Path; Path("command-launched").write_text("yes")')
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn('cannot be combined with --reasons', result.stderr)
+        self.assertFalse((self.repo / 'command-launched').exists())
 
     @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
     def test_configured_custom_file_extends_mixed_automatic_selection(self):
