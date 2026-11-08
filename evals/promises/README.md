@@ -1,5 +1,10 @@
 # Guide promises and live evals
 
+The [suite outcomes and evaluation contract](../framework.md) maps representative
+guide promises to intended outcomes. This ledger tracks documented claims and
+their checks. A static quote establishes an instruction, not runtime compliance;
+passing a procedure check does not establish improvement over a baseline.
+
 The user guide in `docs/guide/` tells readers what pstack does. This directory checks that the port keeps those claims on Claude Code, Codex, Hermes, and Grok Build, and makes every upstream guide change visible at sync time.
 
 It also runs general live playbook evals independently of any external benchmark. These cases use the same runner and oracles, but their outcome checks do not need a guide claim in `ledger.json`. The ledger records guide promises. Passing cases do not guarantee model behavior on other tasks.

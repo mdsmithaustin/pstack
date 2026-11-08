@@ -1,5 +1,11 @@
 # Direct skill evaluation
 
+The [suite outcomes and evaluation contract](framework.md) connects existing
+documentation promises to spec adherence, code quality, erosion, delivery through
+PR acceptance, and total effort. It separates agreed evaluation policy from
+implemented checks and remaining decisions. It records the full agreed alignment
+after the grilling; the suite operating-design discussion remains open.
+
 This directory holds public development corpora for `verify-commands`,
 `spec-probes`, `runtime-probes`, and `unslop`. The corpora compare the harness's isolated
 `with_skill` and `without_skill` arms. They do not represent upstream Cursor

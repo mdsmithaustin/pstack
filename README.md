@@ -4,6 +4,9 @@
 
 This repository is an independent community port. It is not affiliated with, maintained by, or endorsed by Poteto. It aims to stay in sync with her upstream work while adapting it to these CLIs.
 
+For this port's agreed goals, evidence standards, and remaining measurement gaps,
+see the [suite outcomes and evaluation contract](./evals/framework.md).
+
 The introduction below is reproduced from upstream in Poteto's voice.
 
 i'm [poteto](https://x.com/poteto). i'm not a president or ceo, but i've worked with millions of lines of code at Meta, Netflix, and Cursor. i'm also on the react core team where i help build and maintain react compiler.
