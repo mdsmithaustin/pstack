@@ -164,7 +164,7 @@ def duplicate_case_key(manifest: Path, case: dict) -> tuple:
     return (
         case.get("kind") == "trigger",
         case.get("prompt", ""),
-        tuple((manifest.parent / path).resolve() for path in case.get("files", [])),
+        tuple(sorted((manifest.parent / path).resolve() for path in case.get("files", []))),
     )
 
 
@@ -201,6 +201,12 @@ class EvaluationSpendPolicy(unittest.TestCase):
         self.assertNotEqual(duplicate_case_key(first, case), duplicate_case_key(second, case))
         equivalent = {**case, "files": ["fixtures/./input.md"]}
         self.assertEqual(duplicate_case_key(first, case), duplicate_case_key(first, equivalent))
+
+    def test_reordering_the_same_attachments_adds_no_coverage(self) -> None:
+        manifest = EVALS / "runtime-probes" / "shared-benchmark.json"
+        case = {"prompt": "Review these inputs", "files": ["fixtures/first.md", "fixtures/second.md"]}
+        reordered = {**case, "files": list(reversed(case["files"]))}
+        self.assertEqual(duplicate_case_key(manifest, case), duplicate_case_key(manifest, reordered))
 
     def test_policy_controls_reject_missing_coverage_and_missing_checks(self) -> None:
         valid = {"evaluation_policy": {
