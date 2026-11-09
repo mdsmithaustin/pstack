@@ -579,32 +579,37 @@ class CompactFeatureExecution(unittest.TestCase):
                     trace = minimal(worklist=[opening], spawns=[spawn])
                     result = grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)
                     self.assertEqual(result["verdict"], INCONCLUSIVE, result)
-            roles = (("trail reviewer", PASS), ("explorer", PASS), ("feature", FAIL),
+            roles = (("trail reviewer", PASS), ("explorer", PASS), ("explore", PASS), ("plan", PASS), ("feature", FAIL),
                      ("bug-fix", FAIL), ("architect runner", FAIL), ("arena runner", FAIL),
                      ("default", INCONCLUSIVE), ("general-purpose", INCONCLUSIVE),
                      ("poteto-agent", INCONCLUSIVE), ("feature reviewer", INCONCLUSIVE),
                      (None, INCONCLUSIVE))
-            for tool, key in (("spawn_agent", "agent_type"), ("Agent", "subagent_type")):
+            roles += tuple((f" \t{role.title()}\n", expected) for role, expected in roles if role is not None)
+            for tool, keys in (("spawn_agent", ("agent_type",)), ("Agent", ("subagent_type",)),
+                               ("spawn_agent", ("agent_type", "subagent_type"))):
                 for role, expected in roles:
-                    with self.subTest(tool=tool, role=role):
+                    with self.subTest(tool=tool, keys=keys, role=role):
                         spawn = {"seq": 2, "tool": tool, "persona": "architect runner", "prompt_head": "gAAAAencrypted"}
-                        event = {"seq": 2, "kind": "tool_call", "name": tool, "input": {key: role}}
+                        event = {"seq": 2, "kind": "tool_call", "name": tool, "input": dict.fromkeys(keys, role)}
                         trace = minimal(worklist=[opening], spawns=[spawn], events=[event])
                         result = grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)
                         self.assertEqual(result["verdict"], expected, result)
             unknown = {"seq": 3, "tool": "spawn_agent", "prompt_head": "gAAAAencrypted"}
-            for known in ("feature", "architect runner", "trail reviewer"):
+            for known in ("feature", "architect runner", "trail reviewer", " Feature ", " Architect Runner ", " Trail Reviewer "):
                 with self.subTest(mixed=known):
                     events = [{"seq": 2, "kind": "tool_call", "name": "spawn_agent", "input": {"agent_type": known}}]
                     trace = minimal(worklist=[opening], spawns=[{"seq": 2, "tool": "spawn_agent"}, unknown], events=events)
                     self.assertEqual(grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)["verdict"],
-                                     INCONCLUSIVE if known == "trail reviewer" else FAIL)
+                                     INCONCLUSIVE if known in ("trail reviewer", " Trail Reviewer ") else FAIL)
             trace = minimal(worklist=[opening], spawns=[unknown], events=[read(4, "architect/references/runner-prompt.md")])
             self.assertEqual(grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)["verdict"], FAIL)
-            conflict = {"seq": 3, "kind": "tool_call", "name": "spawn_agent",
-                        "input": {"agent_type": "trail reviewer", "subagent_type": "feature"}}
-            trace = minimal(worklist=[opening], spawns=[unknown], events=[conflict])
-            self.assertEqual(grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)["verdict"], INCONCLUSIVE)
+            for assigned in ({"agent_type": "trail reviewer", "subagent_type": "feature"},
+                             {"agent_type": " Trail Reviewer ", "subagent_type": " Feature "},
+                             {"agent_type": "feature", "subagent_type": " Feature "}):
+                with self.subTest(conflict=assigned):
+                    conflict = {"seq": 3, "kind": "tool_call", "name": "spawn_agent", "input": assigned}
+                    trace = minimal(worklist=[opening], spawns=[unknown], events=[conflict])
+                    self.assertEqual(grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)["verdict"], INCONCLUSIVE)
 
     def test_later_full_plan_and_explicit_design_delegate_are_not_compact_execution(self):
         with tempfile.TemporaryDirectory() as tmp:

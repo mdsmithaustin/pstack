@@ -1651,7 +1651,7 @@ def compact_implements_directly(view):
     for spawn in view.spawns:
         given = calls.get(spawn.get("seq"), {})
         values = [given[key] for key in ("agent_type", "subagent_type") if given.get(key) is not None]
-        roles.append(values[0] if values and all(isinstance(value, str) and value == values[0] for value in values) else None)
+        roles.append(values[0].strip().lower() if values and all(isinstance(value, str) and value == values[0] for value in values) else None)
     evidence = f"roles from original spawn tool input agent_type/subagent_type: {roles}"
     if any(role in {"architect runner", "arena runner"} for role in roles):
         return failed("compact case dispatched design alternatives", evidence)
