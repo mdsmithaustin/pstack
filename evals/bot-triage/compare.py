@@ -259,7 +259,7 @@ def main(argv=None) -> int:
     parser.add_argument("--profile", help="existing Codex profile; no model/provider overrides are added")
     parser.add_argument("--workspace", type=Path, default=Path.cwd(), help="preserve this project's CLI configuration")
     parser.add_argument("--case", action="append", default=[], dest="selected")
-    parser.add_argument("--timeout", type=float, default=180, help="seconds per invocation, including bounded MCP discovery")
+    parser.add_argument("--timeout", type=float, default=180, help="seconds per case invocation; Codex MCP discovery has a separate timeout of the smaller of 30 seconds and this value")
     args = parser.parse_args(argv)
     try:
         if not math.isfinite(args.timeout) or args.timeout <= 0:
