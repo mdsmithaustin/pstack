@@ -230,7 +230,8 @@ def run_case(case: Case, args, argv: list[str], index: int) -> dict:
         if args.cli == "codex" and "codex_core::tools::router:" in stderr:
             raise ValueError("Codex reported a rejected tool attempt; comparison is invalid")
         text, usage = answer_from_output(args.cli, stdout)
-        row.update(status="answered", proposal=proposal(text, case), **usage)
+        row.update(usage)
+        row.update(status="answered", proposal=proposal(text, case))
     except (OSError, ValueError, KeyError, TypeError, OverflowError, subprocess.TimeoutExpired) as error:
         row.update(status="unavailable", error=type(error).__name__ + ": " + str(error))
     row["elapsed_seconds"] = round(time.monotonic() - started, 3)
@@ -243,10 +244,7 @@ def main(argv=None) -> int:
     parser.add_argument("--executable", help="configured CLI executable or wrapper; never evaluated by a shell")
     parser.add_argument("--profile", help="existing Codex profile; no model/provider overrides are added")
     parser.add_argument("--workspace", type=Path, default=Path.cwd(), help="preserve this project's CLI configuration")
-    parser.add_argument("--cases", type=Path, default=HERE / "cases.json")
-    parser.add_argument("--answers", type=Path, default=HERE / "answers.json")
     parser.add_argument("--case", action="append", default=[], dest="selected")
-    parser.add_argument("--output", type=Path, help="new private output directory; default: runs/<unique directory>")
     parser.add_argument("--timeout", type=float, default=180, help="seconds per invocation, including bounded MCP discovery")
     args = parser.parse_args(argv)
     try:
@@ -257,25 +255,23 @@ def main(argv=None) -> int:
             raise ValueError("workspace must be a directory")
         if args.cli == "claude" and args.profile:
             raise ValueError("--profile is a Codex option; configure the Claude CLI normally")
-        cases = read_cases(args.cases, args.selected)
-        references = parse_json(args.answers.read_text(encoding="utf-8"))
+        cases = read_cases(HERE / "cases.json", args.selected)
+        references = parse_json((HERE / "answers.json").read_text(encoding="utf-8"))
         for case in cases:
             if references[case.id]["disposition"] not in DISPOSITIONS:
                 raise ValueError("reference has an unknown disposition")
-        if args.output is None:
-            (HERE / "runs").mkdir(exist_ok=True)
-            args.output = Path(tempfile.mkdtemp(prefix="run-", dir=HERE / "runs"))
-        else:
-            args.output = args.output.resolve()
-            args.output.mkdir(mode=0o700, parents=True, exist_ok=False)
+        (HERE / "runs").mkdir(exist_ok=True)
+        args.output = Path(tempfile.mkdtemp(prefix="run-", dir=HERE / "runs"))
     except (OSError, ValueError, KeyError, TypeError) as error:
         parser.error(str(error))
 
+    started = time.monotonic()
     try:
         argv = command(args)
         rows = [run_case(case, args, argv, index) for index, case in enumerate(cases)]
     except (OSError, ValueError, KeyError, TypeError, OverflowError, subprocess.TimeoutExpired) as error:
-        rows = [{"id": case.id, "source": case.source, "status": "unavailable",
+        elapsed = round(time.monotonic() - started, 3)
+        rows = [{"elapsed_seconds": elapsed, "id": case.id, "source": case.source, "status": "unavailable",
                  "error": type(error).__name__ + ": " + str(error)} for case in cases]
     for row in rows:
         row["reference"] = references[row["id"]]

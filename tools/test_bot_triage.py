@@ -36,6 +36,9 @@ class BotTriageComparison(unittest.TestCase):
 import json, os, pathlib, sys, time
 args = sys.argv[1:]
 if "mcp" in args and "list" in args:
+    if os.environ.get("FAKE_MODE") == "discovery-failed":
+        time.sleep(0.02)
+        sys.exit(3)
     print(json.dumps([{"name": "configured.server", "enabled": True, "transport": {"type": "stdio"}}]))
     sys.exit(0)
 prompt = sys.stdin.read()
@@ -90,7 +93,7 @@ if "--tools" in args:
         depth = int(mode.split("-")[1])
         print('{"type":"result","is_error":false,"result":' + json.dumps(payload) + ',"usage":{"depth":' + "[" * depth + "0" + "]" * depth + '}}')
     else:
-        print(json.dumps({"type": "result", "is_error": False, "result": payload}))
+        print(json.dumps({"type": "result", "is_error": False, "result": payload, "usage": {"input_tokens": 10, "output_tokens": 4}, "modelUsage": {"configured": {"costUSD": 0.01}}, "total_cost_usd": 0.01}))
 else:
     if mode == "tool-call":
         print(json.dumps({"type": "item.completed", "item": {"type": "command_execution", "command": "gh pr close 1"}}))
@@ -99,16 +102,22 @@ else:
 ''')
         self.executable.chmod(0o700)
         self.capture = self.root / "capture.json"
-        self.output = self.root / "run"
 
     def run_case(self, mode="fix", cli="codex", extra=()):
         env = dict(os.environ, CAPTURE=str(self.capture), FAKE_MODE=mode,
                    OPENAI_BASE_URL="https://gateway.invalid/v1", CODEX_HOME="/configured/home")
-        return subprocess.run([
-            sys.executable, str(RUNNER), "--cli", cli, "--executable", str(self.executable),
-            "--cases", str(self.cases), "--answers", str(self.answers),
-            "--workspace", str(self.workspace), "--output", str(self.output), *extra,
+        result = subprocess.run([
+            sys.executable, "-c",
+            "import pathlib, runpy, sys; "
+            "main = runpy.run_path(sys.argv.pop(1))['main']; "
+            "main.__globals__['HERE'] = pathlib.Path(sys.argv.pop(1)); "
+            "sys.exit(main())",
+            str(RUNNER), str(self.root), "--cli", cli, "--executable", str(self.executable),
+            "--workspace", str(self.workspace), *extra,
         ], env=env, text=True, capture_output=True, timeout=10)
+        if result.returncode in (0, 1):
+            self.output = Path(json.loads(result.stdout)["report"]).parent
+        return result
 
     def report(self):
         return json.loads((self.output / "report.json").read_text())
@@ -172,7 +181,6 @@ else:
         for mode in ("malformed", "missing", "invented-evidence", "failed", "tool-call",
                      "array", "null", "bad-item", "rejected-tool"):
             with self.subTest(mode=mode):
-                self.output = self.root / mode
                 result = self.run_case(mode)
                 self.assertEqual(result.returncode, 1, result.stderr)
                 row = self.report()["results"][0]
@@ -202,7 +210,6 @@ else:
         self.answers.write_text(json.dumps(answers))
         for mode in ("surrogate", "deep-json"):
             with self.subTest(mode=mode):
-                self.output = self.root / mode
                 result = self.run_case(mode, cli="claude")
                 self.assertEqual(result.returncode, 1, result.stderr)
                 rows = self.report()["results"]
@@ -220,7 +227,6 @@ else:
         self.answers.write_text(json.dumps(answers))
         for depth in (990, 997, 1000, 10000):
             with self.subTest(depth=depth):
-                self.output = self.root / str(depth)
                 result = self.run_case("nested-" + str(depth), cli="claude")
                 self.assertIn(result.returncode, (0, 1), result.stderr)
                 self.assertTrue((self.output / "report.json").exists(), result.stderr)
@@ -240,7 +246,6 @@ else:
         for literal in ("NaN", "Infinity", "-Infinity", "1e999"):
             with self.subTest(literal=literal):
                 self.cases.write_text(original.replace('"pr": 357', '"pr": ' + literal))
-                self.output = self.root / literal
                 result = self.run_case()
                 self.assertEqual(result.returncode, 2, result.stderr)
                 self.assertFalse(self.capture.exists())
@@ -312,13 +317,54 @@ else:
         self.assertEqual(result.returncode, 2)
         self.assertFalse(self.capture.exists())
 
-    def test_existing_output_directory_is_not_overwritten(self):
-        self.output.mkdir()
-        marker = self.output / "keep"
-        marker.write_text("existing run")
+    def test_public_path_overrides_are_rejected(self):
+        for option in ("--output", "--cases", "--answers"):
+            with self.subTest(option=option):
+                result = self.run_case(extra=(option, str(self.root / "override")))
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertFalse(self.capture.exists())
+                self.assertFalse((self.root / "runs").exists())
+
+    def test_receipts_use_private_unique_ignored_run_directories(self):
         result = self.run_case()
-        self.assertEqual(result.returncode, 2)
-        self.assertEqual(marker.read_text(), "existing run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        first = self.output
+        self.assertEqual(first.parent, self.root / "runs")
+        self.assertEqual(first.stat().st_mode & 0o777, 0o700)
+        receipt = (first / "0.stdout").read_bytes()
+        self.assertTrue(receipt)
+        result = self.run_case()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotEqual(first, self.output)
+        self.assertEqual((first / "0.stdout").read_bytes(), receipt)
+        ignored = subprocess.run([
+            "git", "check-ignore", "evals/bot-triage/runs/contract/0.stdout",
+            "evals/bot-triage/runs/contract/0.stderr",
+        ], cwd=ROOT, text=True, capture_output=True)
+        self.assertEqual(ignored.returncode, 0, ignored.stderr)
+        self.assertEqual(len(ignored.stdout.splitlines()), 2)
+
+    def test_invalid_answers_preserve_available_accounting(self):
+        for cli in ("codex", "claude"):
+            for mode in ("malformed", "missing", "invented-evidence", "surrogate"):
+                with self.subTest(cli=cli, mode=mode):
+                    result = self.run_case(mode, cli=cli)
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    row = self.report()["results"][0]
+                    self.assertEqual(row["status"], "unavailable")
+                    self.assertNotIn("proposal", row)
+                    self.assertEqual(row["usage"], {"input_tokens": 10, "output_tokens": 4})
+                    self.assertGreaterEqual(row["elapsed_seconds"], 0)
+                    if cli == "claude":
+                        self.assertEqual(row["modelUsage"], {"configured": {"costUSD": 0.01}})
+                        self.assertEqual(row["total_cost_usd"], 0.01)
+
+    def test_discovery_failure_records_elapsed_time(self):
+        result = self.run_case("discovery-failed")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        row = self.report()["results"][0]
+        self.assertEqual(row["status"], "unavailable")
+        self.assertGreaterEqual(row["elapsed_seconds"], 0.02)
         self.assertFalse(self.capture.exists())
 
 
