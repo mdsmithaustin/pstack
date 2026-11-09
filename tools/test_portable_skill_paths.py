@@ -366,11 +366,52 @@ class PortableSkillPaths(unittest.TestCase):
         plan.parent.mkdir(parents=True)
         plan.write_text(template[1], encoding="utf-8")
 
-        broken = [
-            target for target in re.findall(r"\[[^\]\n]+\]\((\.\.?/[^)]+)\)", plan.read_text(encoding="utf-8"))
-            if not (plan.parent / target.partition("#")[0]).is_file()
+        procedures = [
+            ("loop procedure", "pstack-harness/references/loops.md"),
+            ("Before each commit", "deslop/SKILL.md"),
         ]
-        self.assertEqual(broken, [])
+        for _, target in procedures:
+            installed = self.source / "skills" / target
+            installed.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / "skills" / target, installed)
+
+        def read_procedures(skills_root: Path) -> None:
+            text = plan.read_text(encoding="utf-8")
+            for label, expected in procedures:
+                lines = [line for line in text.splitlines() if label in line]
+                self.assertEqual(len(lines), 1, f"missing or ambiguous procedure: {label}")
+                line = lines[0]
+                link = re.search(rf"\[{re.escape(label)}\]\(([^)]+)\)", line)
+                if link:
+                    target = shlex_quote(plan.parent / link[1].partition("#")[0])
+                elif label == "loop procedure":
+                    reference = re.search(r'`"\$PSTACK_SKILLS_ROOT/([^"\n]+)"`', line)
+                    self.assertIsNotNone(reference, f"missing installed reference: {label}")
+                    target = '"$PSTACK_SKILLS_ROOT"/' + shlex_quote(Path(reference[1]))
+                else:
+                    reference = re.search(r"call the Skill tool with `([^`]+)`", line)
+                    self.assertIsNotNone(reference, f"missing named skill: {label}")
+                    target = '"$PSTACK_SKILLS_ROOT"/' + shlex_quote(Path(reference[1]) / "SKILL.md")
+                result = self._run_contract(skills_root / "pstack-harness/SKILL.md", f"cat {target}")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, (ROOT / "skills" / expected).read_text(encoding="utf-8"))
+
+        linked = self._linked_install()
+        (linked / "deslop").symlink_to(self.source / "skills/deslop", target_is_directory=True)
+        for skills_root in (self.source / "skills", linked, self._copied_install()):
+            with self.subTest(skills_root=skills_root):
+                read_procedures(skills_root)
+
+        for original, replacement in (
+            ("references/loops.md", "references/missing-loop.md"),
+            ("with `deslop`", "with `missing-deslop`"),
+            ("loop procedure", "removed procedure"),
+            ("Before each commit", "removed procedure"),
+        ):
+            with self.subTest(mutation=original):
+                plan.write_text(template[1].replace(original, replacement), encoding="utf-8")
+                with self.assertRaises(AssertionError):
+                    read_procedures(self.source / "skills")
 
     def test_documented_validator_command_rejects_a_structurally_invalid_plan(self) -> None:
         command = inline_command(PORTABLE_PATHS, "check-plan.mjs")
