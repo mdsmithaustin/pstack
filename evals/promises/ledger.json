@@ -3022,6 +3022,12 @@
   "principle-leaf-summaries-match": {
    "check": "static",
    "claim": "Each of the 24 principle links on the principles page resolves to an existing leaf whose rule matches the one-line summary the guide gives it.",
+   "evidence": [
+    {
+     "file": "skills/principle-laziness-protocol/SKILL.md",
+     "quote": "Judge the resulting design after it absorbs the requirement. Restructure the unit being extended when that removes demonstrated complexity, even if the diff grows. Keep adequate structure and useful tests. Avoid abstractions for hypothetical requirements."
+    }
+   ],
    "harness_sensitive": false,
    "owners": [
     "skills/principle-laziness-protocol/SKILL.md",
