@@ -651,6 +651,52 @@ export function graphqlArgs(
 export const repoArg = (repository: T.Repository): string =>
   `${repository.host}/${repository.owner}/${repository.repo}`;
 
+async function branchPr(origin: T.Repository, branch: string): Promise<T.PrContext> {
+  const query = `
+    query PrForBranch($owner: String!, $repo: String!, $head: String!) {
+      repository(owner: $owner, name: $repo) {
+        defaultBranchRef { name }
+        pullRequests(headRefName: $head, first: 30, orderBy: { field: CREATED_AT, direction: DESC }) {
+          nodes { url state isCrossRepository }
+          pageInfo { hasNextPage }
+        }
+      }
+    }`;
+  const response = await runJson([
+    "gh", "api", "graphql", "-f", `query=${query}`,
+    "-f", `owner=${origin.owner}`, "-f", `repo=${origin.repo}`,
+    "-f", `head=${branch}`, "--hostname", origin.host,
+  ]);
+  const repository = at(response, ["data", "repository"]);
+  const prs = at(repository, ["pullRequests"]);
+  const hasNextPage = at(prs, ["pageInfo", "hasNextPage"]);
+  if (typeof hasNextPage !== "boolean")
+    missing("pullRequests.pageInfo.hasNextPage", hasNextPage);
+  const candidates = list(at(prs, ["nodes"]), "pullRequests.nodes")
+    .map((node) => record(node, "pullRequests.nodes[]"))
+    .filter((pr) => {
+      if (typeof pr.isCrossRepository !== "boolean")
+        missing("pullRequests.nodes[].isCrossRepository", pr.isCrossRepository);
+      return !pr.isCrossRepository;
+    });
+  const open = candidates.filter((pr) =>
+    enumValue(pr.state, ["OPEN", "CLOSED", "MERGED"], "pullRequests.nodes[].state") === "OPEN"
+  );
+  const defaultBranch = at(repository, ["defaultBranchRef"]);
+  const isDefault =
+    defaultBranch !== null &&
+    string(at(defaultBranch, ["name"]), "defaultBranchRef.name") === branch;
+  const match = open[0] ?? (isDefault ? undefined : candidates[0]);
+  if (hasNextPage || open.length > 1 || match === undefined)
+    throw new WatcherQueryError({
+      kind: "command-exit",
+      retryable: true,
+      code: 1,
+      detail: `could not find a unique PR for branch ${branch} in ${repoArg(origin)}; pass --pr`,
+    });
+  return parsePrUrl(string(match.url, "pullRequests.nodes[].url"));
+}
+
 export class GhGitHubReader implements T.GitHubReader {
   async originRepo(): Promise<T.Repository | null> {
     const result = await run(["git", "remote", "get-url", "origin"]);
@@ -700,12 +746,13 @@ export class GhGitHubReader implements T.GitHubReader {
           }
         }
       }
-      argv.push(
-        trackedPr !== undefined && trackingRepo !== null &&
+      if (trackedPr !== undefined && trackingRepo !== null &&
         repoArg(trackingRepo).toLowerCase() === repoArg(origin).toLowerCase()
-          ? trackedPr
-          : branch
-      );
+      )
+        argv.push(trackedPr);
+      else if (/^#?[+-]?\d+$/.test(branch))
+        return branchPr(origin, branch);
+      else argv.push(branch);
     }
     argv.push("--repo", repoArg(origin));
     argv.push("--json", "number,url");
@@ -836,8 +883,6 @@ export async function resolveChecks(
   const fast = await reader.checksFastPath(context);
   const direct = fast.kind === "checks" ? nonEmpty(fast.checks) : null;
   if (direct !== null) return { source: "gh-pr-checks", checks: direct };
-  // The GraphQL rollup is the proof of no checks, whatever the fast path
-  // said: an empty page loop here is a confirmed empty list, not a failure.
   const checks: T.Check[] = [];
   let after: string | null = null;
   do {
@@ -868,18 +913,26 @@ export async function resolveContext(args: {
 }): Promise<T.PrContext> {
   if (args.pr !== null) {
     const origin = await args.reader.originRepo();
+    if (args.owner !== null && args.repo !== null) {
+      const matchesOrigin =
+        origin !== null &&
+        origin.owner.toLowerCase() === args.owner.toLowerCase() &&
+        origin.repo.toLowerCase() === args.repo.toLowerCase();
+      const host = matchesOrigin
+        ? origin.host
+        : process.env.GH_HOST?.trim() || origin?.host || "github.com";
+      return {
+        host,
+        owner: args.owner,
+        repo: args.repo,
+        number: args.pr,
+      };
+    }
     if (origin !== null)
       return {
         host: origin.host,
         owner: args.owner ?? origin.owner,
         repo: args.repo ?? origin.repo,
-        number: args.pr,
-      };
-    if (args.owner !== null && args.repo !== null)
-      return {
-        host: process.env.GH_HOST?.trim() || "github.com",
-        owner: args.owner,
-        repo: args.repo,
         number: args.pr,
       };
   }

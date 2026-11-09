@@ -159,6 +159,41 @@ describe("PRs with no checks", () => {
   });
 });
 
+describe("head rollup consistency", () => {
+  for (const pendingHistory of ["include", "omit"] as const) {
+    for (const state of ["PENDING", "EXPECTED", "FAILURE", "ERROR"] as const) {
+      for (const check of [failedCheck(), pendingCheck()]) {
+        it(`preserves ${check.kind} checks with ${state} and history ${pendingHistory}`, async () => {
+          const snapshot = await readSnapshot({
+            reader: fakeReader({
+              fastPath: { kind: "checks", checks: [check] },
+              commitRollups: [{ oid: "head", state }],
+            }),
+            context: context(1),
+            pendingHistory,
+            allowDraft: false,
+          });
+          expect(snapshot).toMatchObject({
+            kind: "open",
+            ci: { kind: check.kind === "failed" ? "ci-failing" : "ci-pending" },
+          });
+        });
+      }
+    }
+    for (const state of [null, "SUCCESS"] as const) {
+      it(`preserves ready checks with rollup ${state} and history ${pendingHistory}`, async () => {
+        const snapshot = await readSnapshot({
+          reader: fakeReader({ commitRollups: [{ oid: "head", state }] }),
+          context: context(1),
+          pendingHistory,
+          allowDraft: false,
+        });
+        expect(classifyPr(snapshot)).toMatchObject({ kind: "ready" });
+      });
+    }
+  }
+});
+
 describe("snapshot query planning", () => {
   it("does not query commit rollups while queued checks are pending", async () => {
     const reader = fakeReader({

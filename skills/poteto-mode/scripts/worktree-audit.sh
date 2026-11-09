@@ -100,8 +100,10 @@ fi
 # every character that isn't a letter or digit into "-"; Codex keeps a flat
 # date tree.
 slug=$(printf '%s' "$main_wt" | sed 's/[^a-zA-Z0-9]/-/g')
-transcripts="$HOME/.claude/projects/$slug"
-[ -d "$transcripts" ] || transcripts="${CODEX_HOME:-$HOME/.codex}/sessions"
+transcripts=()
+for store in "$HOME/.claude/projects/$slug" "${CODEX_HOME:-$HOME/.codex}/sessions"; do
+	if [ -d "$store" ]; then transcripts+=("$store"); fi
+done
 now=$(date +%s)
 
 is_build_cache() {
@@ -180,8 +182,8 @@ git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r wt
 	# Case-insensitive because transcripts on case-insensitive disks can spell
 	# the path in another case.
 	last="-"; recent=no
-	if [ -d "$transcripts" ]; then
-		matches=$(rg -l -F -i -e "${wt}/" -e "${wt}\"" "$transcripts" 2>/dev/null || :)
+	if [ "${#transcripts[@]}" -gt 0 ]; then
+		matches=$(rg -l -F -i -e "${wt}/" -e "${wt}\"" "${transcripts[@]}" 2>/dev/null || :)
 		chat=$(printf '%s\n' "$matches" | python3 -c '
 import datetime
 import os

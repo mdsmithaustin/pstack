@@ -403,6 +403,17 @@ class WorktreeAuditKeptPathsTest(WorktreeAuditBaseTest):
         (transcripts / "rollout-s.jsonl").write_text(json.dumps({"cwd": f"{worktree}/"}) + "\n", encoding="utf-8")
         self.assertEqual(self.row(worktree), ("clean", "verify-recent-chat"))
 
+    def test_recent_codex_chat_found_when_claude_has_only_an_older_chat(self):
+        worktree = self.merged_worktree("wt-mixed")
+        slug = re.sub(r"[^a-zA-Z0-9]", "-", str(self.repo))
+        claude = self.tmp / "home" / ".claude" / "projects" / slug
+        codex = self.tmp / "home" / ".codex" / "sessions"
+        for directory in (claude, codex):
+            directory.mkdir(parents=True)
+            (directory / "session.jsonl").write_text(json.dumps({"cwd": str(worktree)}) + "\n", encoding="utf-8")
+        os.utime(claude / "session.jsonl", (1, 1))
+        self.assertEqual(self.row(worktree), ("clean", "verify-recent-chat"))
+
     def test_prunable_worktree_holds(self):
         worktree = self.merged_worktree("wt-gone")
         shutil.rmtree(worktree)
