@@ -6,6 +6,7 @@ import json
 import os
 import platform
 import pwd
+import re
 import shlex
 import shutil
 import signal
@@ -709,6 +710,39 @@ class _Environment:
             if path not in self.trees:
                 raise GradeRefused("unapproved_worktree", path)
         return paths
+
+    def delivery(self, reply):
+        if not isinstance(reply, str):
+            raise ValueError("the final reply is not text")
+        claims = set()
+        for line in reply.splitlines():
+            line = line.strip()
+            if not re.match(r"Delivery(?:\s|$)", line):
+                continue
+            claim = re.fullmatch(r"Delivery (refs/heads/\S+) ([0-9a-fA-F]{40})", line)
+            if claim is None:
+                raise ValueError("malformed Delivery line in the final reply")
+            ref, sha = claim.groups()
+            claims.add((ref, sha.lower()))
+        if not claims:
+            raise ValueError("no delivery branch and commit in the final reply")
+        if len(claims) > 1:
+            raise ValueError("conflicting delivery declarations in the final reply")
+        ref, sha = claims.pop()
+        branch_ref = ref.encode("utf-8") + b"\n"
+        matches = []
+        for path in sorted(self.trees):
+            branch = self.git(path, ("symbolic-ref", "--quiet", "--no-recurse", "HEAD"), text=False)
+            if branch.returncode == 0 and branch.stdout == branch_ref:
+                matches.append(Path(path))
+        if len(matches) != 1:
+            raise ValueError("the delivery branch does not name one admitted checkout")
+        project = matches[0]
+        head = self.git(project, ("rev-parse", "HEAD", "HEAD^{commit}"), text=False)
+        oid = sha.encode("ascii")
+        if head.returncode or head.stdout.splitlines() != [oid, oid]:
+            raise ValueError("the delivery commit does not match the checkout HEAD")
+        return project, ref, sha
 
     def check(self, path, command, timeout):
         if str(path) not in self.trees:
