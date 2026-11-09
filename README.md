@@ -233,7 +233,7 @@ twenty-four short skills, one principle each. `poteto-mode` indexes them inline 
 
 | principle | group | rule |
 |---|---|---|
-| [laziness-protocol](./skills/principle-laziness-protocol/SKILL.md) | core | Bias toward deletion and the smallest change that solves the problem. |
+| [laziness-protocol](./skills/principle-laziness-protocol/SKILL.md) | core | Bias toward deletion and simplicity in the resulting design. |
 | [foundational-thinking](./skills/principle-foundational-thinking/SKILL.md) | core | Apply before writing logic: choosing core types and data structures, sequencing scaffold-vs-feature work, asking what concurrent actors share. Get the data structures right so downstream code becomes obvious. |
 | [redesign-from-first-principles](./skills/principle-redesign-from-first-principles/SKILL.md) | core | Redesign as if the requirement had been a foundational assumption from day one, instead of bolting it on, and keep every behavior the requirement does not explicitly change. |
 | [attack-the-premise](./skills/principle-attack-the-premise/SKILL.md) | core | Apply when two or more fixes that share one premise have failed the same gate. Write the premise down and test it directly before you write another fix that assumes it. |

@@ -23,6 +23,14 @@ The Code review playbook opens this file at its intent, design, and deslop check
 - **Does the diff add validation deep inside typed code?** Find where the data entered the system. Flag a nil check or re-validation of data that a boundary already parsed. Leave it when the data crosses a system boundary at that point.
 - **Is business logic now tangled with framework wiring?** Flag a rule that can only run inside a handler, route, or component. Leave it when the logic is the wiring itself.
 
+## Accumulated complexity
+
+When a change extends an existing function or module, inspect its recent history with `git log -L` or the relevant path's commits. Repeated touches invite inspection. Repeated growth warrants review of the whole unit and its callers. Compare the earlier changes with this diff for growing conditionals, duplicated decisions, exceptions, and recurring repairs. Record the unit, relevant commits, and the structural trend. Report unavailable history as a gap.
+
+Assess the next likely change from requirements and history. Restructure under the existing behavioral tests when the current design carries demonstrated maintenance cost, or explain why its current structure remains adequate. Preserve useful tests and add coverage only for a missing behavioral contract. Neither a touch count nor a size threshold decides this judgment. A third extension alone does not require a refactor, and hypothetical requirements do not justify an abstraction.
+
+The independent reviewer checks the evidence and the restructure-or-keep decision. Report a concrete structural problem or a supported reason to leave the design. A larger patch for an in-scope, behavior-preserving restructure is not itself a departure from existing patterns.
+
 ## Unrequested behavior changes (**principle-redesign-from-first-principles**)
 
 - **Does the diff change behavior the task did not ask for?** List each behavior the diff changes, such as an input it now rejects or accepts, an output, an error, or a default. Match each one to a sentence in the task, spec, or issue. Flag a change with no such sentence. Leave it when the task explicitly changes that behavior. Leave it also when the diff reshapes an internal API, migrates every caller in the same diff, and leaves what users observe unchanged.

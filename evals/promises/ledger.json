@@ -4670,6 +4670,15 @@
    ],
    "text": "[`/show-me-your-work`](../../skills/show-me-your-work/SKILL.md) is what makes the run reviewable."
   },
+  "09687126aafa": {
+   "class": "promise",
+   "file": "08-principles.md",
+   "promise": "principle-leaf-summaries-match",
+   "sources": [
+    "port"
+   ],
+   "text": "[Laziness Protocol](../../skills/principle-laziness-protocol/SKILL.md) prefers deletion and simplicity in the resulting design."
+  },
   "09cf932cf4ee": {
    "class": "context",
    "file": "09-make-it-yours.md",
@@ -4851,12 +4860,13 @@
    "text": "```text\n/setup-pstack\n```"
   },
   "119ed4d122dc": {
-   "class": "promise",
+   "class": "substituted",
    "file": "08-principles.md",
-   "promise": "principle-leaf-summaries-match",
+   "ported_as": [
+    "09687126aafa"
+   ],
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "[Laziness Protocol](../../skills/principle-laziness-protocol/SKILL.md) prefers deletion and the smallest change that solves the problem."
   },

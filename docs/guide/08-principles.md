@@ -30,7 +30,7 @@ Each phrase lands because the rule behind it is specific. The agent still has to
 
 The core principles decide how much to build and when to rethink the design:
 
-- [Laziness Protocol](../../skills/principle-laziness-protocol/SKILL.md) prefers deletion and the smallest change that solves the problem.
+- [Laziness Protocol](../../skills/principle-laziness-protocol/SKILL.md) prefers deletion and simplicity in the resulting design.
 - [Foundational Thinking](../../skills/principle-foundational-thinking/SKILL.md) chooses the core data structures before writing logic.
 - [Redesign from First Principles](../../skills/principle-redesign-from-first-principles/SKILL.md) integrates a new requirement as if it had been there from day one, and keeps every behavior the requirement does not explicitly change.
 - [Attack the Premise](../../skills/principle-attack-the-premise/SKILL.md) writes down the premise that two or more failed fixes shared and tests it directly before the next fix.
