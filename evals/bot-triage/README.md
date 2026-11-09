@@ -15,7 +15,7 @@ From another directory, use the absolute path to `compare.py`. The subprocess cl
 
 `--workspace PATH` selects the CLI working directory. `--executable PATH` selects a trusted executable or wrapper. The runner never evaluates that argument in a shell. `--profile NAME` selects an existing Codex profile. Model, provider, authentication, HOME, CODEX_HOME, and environment variables remain under CLI control. There are no direct HTTP calls or API-key requirements added by this runner. Subscription eligibility and gateway routing depend on the installed CLI and its configuration; the report does not independently verify billing.
 
-`--case ID` selects a case and can repeat. `--timeout SECONDS` defaults to 180 seconds per invocation. Codex MCP discovery has a maximum of 30 seconds within that limit. Cases run sequentially in fresh ephemeral sessions.
+`--case ID` selects a case and can repeat. `--timeout SECONDS` defaults to 180 seconds per case invocation. Before the cases run, Codex MCP discovery runs once with a separate timeout of the smaller of 30 seconds and `--timeout`. Cases run sequentially in fresh ephemeral sessions.
 
 The runner creates a private directory under `runs/`, which Git ignores. It writes `report.json`. Successful output capture also produces numbered stdout and stderr receipts, including nonzero CLI exits. Capture or MCP-discovery failures can leave only the error recorded in the report. Capture failures include timeouts, unsupported wait durations, and output decoding errors. Those receipts can contain host configuration diagnostics. They are local evidence, not publication artifacts.
 
@@ -41,7 +41,7 @@ Each case has a unique `id`, a `source` object, and an `input` object with a non
 
 These cases come from public PR findings and committed source, not private session transcripts. Each fixture records its source URL and commit. The PR #491 control is a constructed missing-evidence case. Its companion uses the public independent reproduction and native-evidence limits. The companion projects a historical tracked follow-up into `ask`; a `fix` disagreement requires human review, not automatic relabeling. Its reference does not reproduce the historical decision to defer the ambiguity. Cases from the same PR are correlated and must stay together in any future data split.
 
-Nine curated cases cannot establish accuracy, a latency distribution, or readiness for automation. Reference agreement is a smoke check, not independent proof that a judgment is correct. The runner records elapsed invocation time, including failed discovery, and available accounting from valid captured JSON records even when the invocation or answer is rejected. CLI startup and configuration contribute to elapsed time. Reported token usage or estimated cost does not establish subscription billing.
+Nine curated cases cannot establish accuracy, a latency distribution, or readiness for automation. Reference agreement is a smoke check, not independent proof that a judgment is correct. The runner records elapsed case invocation time and available accounting from valid captured JSON records even when the invocation or answer is rejected. Successful MCP discovery is outside the case timings. If discovery fails, each unavailable row records the elapsed discovery time. CLI startup and configuration contribute to elapsed time. Reported token usage or estimated cost does not establish subscription billing.
 
 ## Execution restrictions
 
