@@ -4235,12 +4235,10 @@ HELD_OUT_TIMEOUT_S = 1200
 HELD_OUT_BUDGET_S = 1080
 
 
-def lead_test_files(view):
-    """The test files the lead's own tool calls wrote, relative to the project. A file written in a git worktree maps to
-    its path in the project, where the merged copy sits."""
+def lead_test_files(view, project):
     rels = {view.tree_rel(path) for _, path, _ in view.edits()}
     return sorted(rel for rel in rels if TEST_FILE.search(rel) and not rel.startswith(("/", "..", *PRIVATE_PREFIXES))
-                  and _is_file(view.project / rel))
+                  and _is_file(project / rel))
 
 
 @oracle("feature-delivers-spec-edges")
@@ -4249,17 +4247,25 @@ def feature_delivers_spec_edges(view):
     `measures` holds the counts an arm tally reads, such as which edges the delivered code and its own tests handle."""
     if not (view.project and _is_dir(view.project)):
         return inconclusive("no project to run the held-out checks against")
-    lead = lead_test_files(view)
+    project = view.project
+    delivery_evidence = []
+    if _IO:
+        try:
+            project, ref, sha = _IO.delivery(view.final_reply)
+        except ValueError as error:
+            return inconclusive(str(error))
+        delivery_evidence.append(f"selected live checkout {project} on {ref} at HEAD {sha}")
+    lead = lead_test_files(view, project)
     script = case_dir(view.case) / view.case["expect"]["held_out"]
-    argv = [sys.executable, "-I", "-B", str(script), str(view.project), "--budget-s", str(HELD_OUT_BUDGET_S),
+    argv = [sys.executable, "-I", "-B", str(script), str(project), "--budget-s", str(HELD_OUT_BUDGET_S),
             *(["--lead-tests", ",".join(lead)] if lead else [])]
     try:
-        run = (_IO.check(view.project, shlex.join(argv), HELD_OUT_TIMEOUT_S) if _IO else
-               subprocess.run(argv, cwd=view.project, capture_output=True, text=True, timeout=HELD_OUT_TIMEOUT_S))
+        run = (_IO.check(project, shlex.join(argv), HELD_OUT_TIMEOUT_S) if _IO else
+               subprocess.run(argv, cwd=project, capture_output=True, text=True, timeout=HELD_OUT_TIMEOUT_S))
     except subprocess.TimeoutExpired:
-        return inconclusive(f"held-out checks timed out after {HELD_OUT_TIMEOUT_S}s")
+        return inconclusive(f"held-out checks timed out after {HELD_OUT_TIMEOUT_S}s", *delivery_evidence)
     if run.returncode:
-        return inconclusive(f"held-out checks exited {run.returncode}: {run.stderr.strip().splitlines()[-1:]}")
+        return inconclusive(f"held-out checks exited {run.returncode}: {run.stderr.strip().splitlines()[-1:]}", *delivery_evidence)
     report = json.loads(run.stdout)
     checks = report["checks"]
     by_kind = {kind: {cid: c["ok"] for cid, c in checks.items() if c["kind"] == kind} for kind in ("edge", "core")}
@@ -4276,7 +4282,7 @@ def feature_delivers_spec_edges(view):
                 "delivered_catches": caught(delivered), "lead_test_files": report["lead_files"],
                 "lead_catches": caught(report["lead"]), "spec_probes_lead_loads": loads, "spec_probes_delegate": delegate,
                 "killed": view.killed, "gap_lines": [line.strip()[:240] for line in view.final_reply.splitlines() if GAP_LINE.search(line)][:20]}
-    evidence = [f"edge checks passed: {measures['edges_passed']} of {measures['edges_total']}",
+    evidence = [*delivery_evidence, f"edge checks passed: {measures['edges_passed']} of {measures['edges_total']}",
                 f"core checks passed: {measures['core_passed']} of {measures['core_total']}",
                 f"delivered tests passing on the reference: {delivered['passing_on_reference']} of {delivered['tests']}",
                 f"edges the delivered tests catch: {sorted(e for e, hit in measures['delivered_catches'].items() if hit)}",

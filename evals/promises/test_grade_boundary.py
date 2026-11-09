@@ -832,8 +832,58 @@ class NativeParentBoundary(BoundaryFixtures):
         self.assertEqual(feature["measures"]["core_passed"], 7)
         self.assertEqual(feature["measures"]["lead_test_files"], ["tests/test_boundary.py"])
         self.assertTrue(feature["measures"]["lead_catches"]["boundary"])
+        self.assertTrue(any(all(part in line for part in (str(delivery), "refs/heads/delivered", sha))
+                            for line in feature["evidence"]), feature)
         self.assertEqual(self.git("rev-parse", "HEAD", project=run.project).strip(), run.baseline[-1])
         self.assertEqual(live.grade(authority), result)
+
+    def test_feature_grades_live_files_on_the_declared_primary_checkout(self):
+        case = live.load_case("feature-edges-run")
+        run = live.Run(self.root, "codex", case, "synthetic-no-model", 60)
+        live.make_project(case, run.project)
+        run.baseline = live.baseline(run.project)
+        authority = _before_turns(run)
+        self.git("worktree", "add", "-q", "-b", "helper", ".worktrees/helper", project=run.project)
+        reference = live.CASES / case["id"] / "reference" / "strides"
+        shutil.copytree(reference, run.project / "strides", dirs_exist_ok=True)
+        self.assertIn("strides/__main__.py", self.git("diff", "--name-only", project=run.project).splitlines())
+        self.assertIn("strides/streaks.py", self.git("ls-files", "--others", "--exclude-standard",
+                                                   project=run.project).splitlines())
+        sha = run.baseline[-1]
+        declaration = f"Delivery refs/heads/main {sha}"
+        _seal(authority, live.meta(run), {**self.trace(), "final_reply": f"{declaration}\n{declaration}"})
+        feature = live.grade(authority)["promises"]["feature-delivers-spec-edges"]
+        self.assertEqual(feature["verdict"], "PASS", feature)
+        self.assertTrue(any(all(part in line for part in (str(run.project), "refs/heads/main", sha))
+                            for line in feature["evidence"]), feature)
+
+    def test_feature_requires_one_current_delivery_before_running_checks(self):
+        case = live.load_case("feature-edges-run")
+        run = live.Run(self.root, "codex", case, "synthetic-no-model", 60)
+        live.make_project(case, run.project)
+        run.baseline = live.baseline(run.project)
+        sha = run.baseline[-1]
+        self.git("branch", "parked", project=run.project)
+        entry = run.project / "strides" / "__main__.py"
+        entry.write_text("from pathlib import Path\nPath('held-out-started').touch()\n" + entry.read_text())
+        replies = {
+            "missing": "Done.",
+            "abbreviated": f"Delivery refs/heads/main {sha[:12]}",
+            "conflicting": f"Delivery refs/heads/main {sha}\nDelivery refs/heads/parked {sha}",
+            "stale": f"Delivery refs/heads/main {run.baseline[0]}",
+            "not checked out": f"Delivery refs/heads/parked {sha}",
+            "multiple checkouts": f"Delivery refs/heads/main {sha}",
+        }
+        for state, reply in replies.items():
+            with self.subTest(state=state):
+                authority = _before_turns(run)
+                if state == "multiple checkouts":
+                    duplicate = run.project.parent / "duplicate"
+                    self.git("worktree", "add", "-q", "--force", str(duplicate), "main", project=run.project)
+                _seal(authority, live.meta(run), {**self.trace(), "final_reply": reply})
+                feature = live.grade(authority)["promises"]["feature-delivers-spec-edges"]
+                self.assertEqual(feature["verdict"], "INCONCLUSIVE", feature)
+                self.assertFalse((run.project / "held-out-started").exists())
 
     def test_recorded_and_legacy_baselines_and_absent_project_keep_existing_grades(self):
         case = self.deslop()

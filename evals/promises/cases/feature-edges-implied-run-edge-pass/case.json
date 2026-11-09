@@ -7,7 +7,7 @@
  "skills_at": "19bd25de59f3a338bc54e2069d0d1a42e4dc9631",
  "entry": "poteto-mode",
  "turns": [
-  "add the streaks command described in docs/streaks.md. verify it."
+  "add the streaks command described in docs/streaks.md. verify it. In your final reply, identify the delivery on its own plain-text line using the format Delivery refs/heads/<branch> <commit>. Use the checked-out branch and its full 40-character HEAD commit ID."
  ],
  "timeout_s": {
   "default": 1800,
