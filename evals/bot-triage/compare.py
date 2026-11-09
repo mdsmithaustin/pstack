@@ -180,15 +180,29 @@ def proposal(text: str, case: Case) -> dict:
     return value
 
 
+def accounting_from_output(cli: str, stdout: str) -> dict:
+    accounting = {}
+    for text in ([stdout] if cli == "claude" else stdout.split("\n")):
+        if not text:
+            continue
+        try:
+            record = parse_json(text)
+        except ValueError:
+            continue
+        if isinstance(record, dict):
+            accounting.update({key: record[key] for key in
+                               ("usage", "modelUsage", "total_cost_usd") if key in record})
+    return accounting
+
+
 def answer_from_output(cli: str, stdout: str) -> tuple[str, dict]:
     if cli == "claude":
         record = parse_json(stdout)
         if not isinstance(record, dict) or record.get("is_error") or record.get("type") != "result":
             raise ValueError("Claude did not return a successful result")
-        return record["result"], {key: record[key] for key in ("usage", "modelUsage", "total_cost_usd") if key in record}
+        return record["result"], {}
     final = None
     completed = False
-    usage = {}
     diagnostics = []
     for line in stdout.split("\n"):
         if not line:
@@ -211,10 +225,9 @@ def answer_from_output(cli: str, stdout: str) -> tuple[str, dict]:
                 final = item["text"]
         if event.get("type") == "turn.completed":
             completed = True
-            usage = event.get("usage", {})
     if not completed or final is None:
         raise ValueError("Codex did not complete with an answer")
-    return final, {"usage": usage, "diagnostics": diagnostics}
+    return final, {"diagnostics": diagnostics}
 
 
 def run_case(case: Case, args, argv: list[str], index: int) -> dict:
@@ -223,14 +236,15 @@ def run_case(case: Case, args, argv: list[str], index: int) -> dict:
     row = {"id": case.id, "source": case.source}
     try:
         code, stdout, stderr = capture(argv, prompt, args.workspace, args.timeout)
+        row.update(accounting_from_output(args.cli, stdout))
         (args.output / f"{index}.stdout").write_text(stdout, encoding="utf-8")
         (args.output / f"{index}.stderr").write_text(stderr, encoding="utf-8")
         if code:
             raise ValueError(f"CLI exited {code}; see private stderr receipt")
         if args.cli == "codex" and "codex_core::tools::router:" in stderr:
             raise ValueError("Codex reported a rejected tool attempt; comparison is invalid")
-        text, usage = answer_from_output(args.cli, stdout)
-        row.update(usage)
+        text, metadata = answer_from_output(args.cli, stdout)
+        row.update(metadata)
         row.update(status="answered", proposal=proposal(text, case))
     except (OSError, ValueError, KeyError, TypeError, OverflowError, subprocess.TimeoutExpired) as error:
         row.update(status="unavailable", error=type(error).__name__ + ": " + str(error))

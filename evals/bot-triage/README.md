@@ -41,7 +41,7 @@ Each case has a unique `id`, a `source` object, and an `input` object with a non
 
 These cases come from public PR findings and committed source, not private session transcripts. Each fixture records its source URL and commit. The PR #491 control is a constructed missing-evidence case. Its companion uses the public independent reproduction and native-evidence limits. The companion projects a historical tracked follow-up into `ask`; a `fix` disagreement requires human review, not automatic relabeling. Its reference does not reproduce the historical decision to defer the ambiguity. Cases from the same PR are correlated and must stay together in any future data split.
 
-Nine curated cases cannot establish accuracy, a latency distribution, or readiness for automation. Reference agreement is a smoke check, not independent proof that a judgment is correct. The runner records elapsed invocation time, including failed discovery, and available usage even when answer validation fails. CLI startup and configuration contribute to elapsed time. Reported token usage or estimated cost does not establish subscription billing.
+Nine curated cases cannot establish accuracy, a latency distribution, or readiness for automation. Reference agreement is a smoke check, not independent proof that a judgment is correct. The runner records elapsed invocation time, including failed discovery, and available accounting from valid captured JSON records even when the invocation or answer is rejected. CLI startup and configuration contribute to elapsed time. Reported token usage or estimated cost does not establish subscription billing.
 
 ## Execution restrictions
 

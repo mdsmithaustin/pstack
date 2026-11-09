@@ -47,6 +47,11 @@ pathlib.Path(os.environ["CAPTURE"]).write_text(json.dumps({
     "home": os.environ["HOME"], "codex_home": os.environ.get("CODEX_HOME"),
     "gateway": os.environ.get("OPENAI_BASE_URL"),
 }))
+if "FAKE_RECEIPT" in os.environ:
+    receipt = json.loads(os.environ["FAKE_RECEIPT"])
+    print(receipt["stdout"])
+    print(receipt.get("stderr", ""), file=sys.stderr)
+    sys.exit(receipt.get("code", 0))
 mode = os.environ.get("FAKE_MODE", "fix")
 if mode in ("array", "null"):
     print("[]" if mode == "array" else "null")
@@ -103,9 +108,11 @@ else:
         self.executable.chmod(0o700)
         self.capture = self.root / "capture.json"
 
-    def run_case(self, mode="fix", cli="codex", extra=()):
+    def run_case(self, mode="fix", cli="codex", extra=(), receipt=None):
         env = dict(os.environ, CAPTURE=str(self.capture), FAKE_MODE=mode,
                    OPENAI_BASE_URL="https://gateway.invalid/v1", CODEX_HOME="/configured/home")
+        if receipt is not None:
+            env["FAKE_RECEIPT"] = json.dumps(receipt)
         result = subprocess.run([
             sys.executable, "-c",
             "import pathlib, runpy, sys; "
@@ -358,6 +365,55 @@ else:
                     if cli == "claude":
                         self.assertEqual(row["modelUsage"], {"configured": {"costUSD": 0.01}})
                         self.assertEqual(row["total_cost_usd"], 0.01)
+
+    def test_rejected_invocations_preserve_captured_accounting(self):
+        usage = {"input_tokens": 27, "output_tokens": 9}
+        answer = json.dumps({"disposition": "fix", "reason": "Supported",
+                             "evidence": ["code"], "missing": []})
+        message = json.dumps({"type": "item.completed", "item": {
+            "type": "agent_message", "text": answer}})
+        completion = json.dumps({"type": "turn.completed", "usage": usage})
+        invalid_events = [
+            "not JSON", "null", "[]",
+            json.dumps({"type": "error"}),
+            json.dumps({"type": "turn.failed"}),
+            json.dumps({"type": "item.completed", "item": "bad"}),
+            json.dumps({"type": "item.completed", "item": {"type": "command_execution"}}),
+            json.dumps({"type": "item.completed", "item": {"type": "agent_message"}}),
+        ]
+        receipts = [
+            {"stdout": "\n".join([message, completion]), "code": 3},
+            {"stdout": "\n".join([message, completion]),
+             "stderr": "codex_core::tools::router: rejected"},
+            {"stdout": completion},
+            {"stdout": message + "\n" + json.dumps({"type": "turn.failed", "usage": usage})},
+        ]
+        for event in invalid_events:
+            receipts.extend({"stdout": "\n".join(events)} for events in (
+                [event, message, completion], [message, completion, event]))
+        for receipt in receipts:
+            with self.subTest(cli="codex", receipt=receipt):
+                result = self.run_case(receipt=receipt)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                row = self.report()["results"][0]
+                self.assertEqual(row["status"], "unavailable")
+                self.assertNotIn("proposal", row)
+                self.assertEqual(row["usage"], usage)
+        accounting = {"usage": usage, "modelUsage": {"configured": {"costUSD": 0.02}},
+                      "total_cost_usd": 0.02}
+        for fields, code in (({"type": "result", "result": answer}, 3),
+                             ({"type": "result", "is_error": True, "result": answer}, 0),
+                             ({"type": "unexpected", "result": answer}, 0),
+                             ({"type": "result"}, 0)):
+            with self.subTest(cli="claude", fields=fields, code=code):
+                result = self.run_case(cli="claude", receipt={
+                    "stdout": json.dumps(dict(accounting, **fields)), "code": code})
+                self.assertEqual(result.returncode, 1, result.stderr)
+                row = self.report()["results"][0]
+                self.assertEqual(row["status"], "unavailable")
+                self.assertNotIn("proposal", row)
+                for key, value in accounting.items():
+                    self.assertEqual(row[key], value)
 
     def test_discovery_failure_records_elapsed_time(self):
         result = self.run_case("discovery-failed")
