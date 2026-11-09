@@ -324,6 +324,8 @@ Regenerate the test dependency lock with `uv pip compile --python-version 3.12 -
 
 `.no-mistakes.yaml` runs the `lint` tier and then `skill-ci check` as the gate's Lint step. It leaves the Test step to the pipeline's targeted checks, because no-mistakes reserves `commands.test` for targeted validation of the change, not a full suite that mirrors CI. Run the `test` tier yourself before a large change. GitHub CI remains authoritative and additionally runs the Docker oracle and maintained canon suites, the npx installation probe, the Linux worktree-audit job, and, for statechart changes, the statechart TLC job. Those checks stay outside the local gate tiers. CI cancels superseded pull-request runs of `lint.yml`, `skill-checks.yml`, and `statechart-tlc.yml`; pushes to main never cancel. The gate fills PR bodies from `.github/pull_request_template.md` through `pr.template`, omits intent from them, keeps a minimal appendix with the risk line and head attestation, and protects `.github/workflows/**` and `.github/rulesets/**` from automatic repairs.
 
+The repository also enables CI repair for green GitHub PRs that are behind main. No-mistakes carries Review approval only when it proves a pure replay.
+
 To reproduce the Docker suites and installation probe manually, use the commands below. Follow the [application and grader instructions](./evals/canon/README.md) for their prerequisites.
 
 ```sh
