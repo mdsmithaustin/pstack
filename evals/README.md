@@ -31,6 +31,7 @@ Raw execution evidence stays outside Git.
 
 | Component | Maintained purpose |
 | --- | --- |
+| `bot-triage/` | [Historical review comparison through a configured CLI](bot-triage/README.md). Recommendations stay comparison-only; no fixes or dismissals run. |
 | `promises/` | [Guide-promise checks and general live playbook evals](promises/README.md). |
 | `verify-commands/` | Executable false-green controls and public development cases. |
 | `runtime-probes/`, `spec-probes/`, `unslop/` | Small development corpora. Findings, scope restraint, and preservation matter more than requested vocabulary or loading alone. |
