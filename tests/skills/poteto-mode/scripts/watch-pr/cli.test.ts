@@ -226,28 +226,44 @@ describe("main", () => {
     });
   });
 
-  it("reports a query blocker when checks appear on the same head after empty reads", async () => {
-    const reader = fakeReader({
-      facts: { mergeStateStatus: "BLOCKED" },
-      fastPath: { kind: "checks", checks: [] },
-      rollupPages: [{ checks: [], endCursor: null }],
-      commitRollups: [{ oid: "head", state: "PENDING" }],
-    });
-    const harness = testRuntime(reader);
-    const code = await main(
-      ["--owner", "owner", "--repo", "repo", "--pr", "1", "--max-query-errors", "1"],
-      harness.runtime
-    );
-    expect(code).toBe(7);
-    expect(harness.stdout).toHaveLength(1);
-    expect(JSON.parse(harness.stdout[0])).toMatchObject({
-      kind: "BLOCKER",
-      blocker: {
-        kind: "status-query",
-        failure: { kind: "checks-unavailable", retryable: true },
-      },
-    });
-  });
+  for (const state of ["PENDING", "EXPECTED", "FAILURE", "ERROR"] as const) {
+    for (const source of ["empty", "fast-path", "graphql"] as const) {
+      for (const mode of ["single", "queued-stack"] as const) {
+        it(`blocks ${mode} readiness for a newer ${state} rollup after ${source} checks`, async () => {
+          const reader = fakeReader({
+            facts: { mergeStateStatus: "CLEAN" },
+            fastPath: {
+              kind: "checks",
+              checks: source === "fast-path" ? [passingCheck("lint")] : [],
+            },
+            rollupPages: [{
+              checks: source === "graphql" ? [passingCheck("lint")] : [],
+              endCursor: null,
+            }],
+            commitRollups: [{ oid: "head", state }],
+          });
+          const harness = testRuntime(reader);
+          const code = await main(
+            [
+              "--owner", "owner", "--repo", "repo", "--pr", "1",
+              "--max-query-errors", "1",
+              ...(mode === "queued-stack" ? ["--queued-stack", "--stack-prs", "1"] : []),
+            ],
+            harness.runtime
+          );
+          expect(code).toBe(7);
+          expect(harness.stdout).toHaveLength(mode === "queued-stack" ? 2 : 1);
+          expect(JSON.parse(harness.stdout[harness.stdout.length - 1])).toMatchObject({
+            kind: "BLOCKER",
+            blocker: {
+              kind: "status-query",
+              failure: { kind: "checks-unavailable", retryable: true },
+            },
+          });
+        });
+      }
+    }
+  }
 
   it("shows help without touching the reader", async () => {
     const reader = fakeReader();
