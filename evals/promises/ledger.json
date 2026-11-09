@@ -2470,7 +2470,7 @@
   },
   "opening-a-pr-gated-unattended-passes-yes": {
    "check": "static",
-   "claim": "In an unattended run the agent checks for user or playbook reservations before each gate call, passes `--yes` when none applies, lists each fixed ask-user finding in its final report, and otherwise omits `--yes` and reports the reserved decision as blocked.",
+   "claim": "In an unattended run the agent omits `--yes` whenever Test or another operator-reserved decision is reachable, including reattachment and responses before Test. It leaves Test exceptions parked without approval of the specific gap, never skips Test to enable unattended driving, and lists fixed ask-user findings in its final report.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
@@ -2482,7 +2482,11 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "If none does, pass `--yes`. If one does, do not pass `--yes`, and report that decision as blocked."
+     "quote": "Omit `--yes` whenever Test can be reached, including reattachment and responses before Test."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "A Test exception needs the operator's approval of the specific gap, even after a fix round."
     }
    ],
    "harness_sensitive": false,
@@ -5142,15 +5146,6 @@
    ],
    "text": "`/poteto-mode` is sticky."
   },
-  "1843e8c93eb6": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "opening-a-pr-gated-unattended-passes-yes",
-   "sources": [
-    "port"
-   ],
-   "text": "In an unattended run, the agent passes `--yes` instead and lists each fixed `ask-user` finding in its final report."
-  },
   "1865703ed86c": {
    "class": "substituted",
    "file": "07-overnight.md",
@@ -5338,6 +5333,15 @@
     "port"
    ],
    "text": "One fresh agent per PR proves the behavior live, and the agent that judges a change is never the one that wrote it."
+  },
+  "1bcf94a53e13": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-unattended-passes-yes",
+   "sources": [
+    "port"
+   ],
+   "text": "A Test exception stays parked until you approve the specific gap."
   },
   "1bd7e7c6fc3f": {
    "class": "promise",
@@ -9020,6 +9024,15 @@
    ],
    "text": "That's the price of the rigor."
   },
+  "7e4232cd580b": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-unattended-passes-yes",
+   "sources": [
+    "port"
+   ],
+   "text": "In an unattended run, the agent omits `--yes` whenever Test or another operator-reserved decision is reachable."
+  },
   "7e5a74fa4959": {
    "class": "promise",
    "file": "07-overnight.md",
@@ -10831,6 +10844,15 @@
     "port"
    ],
    "text": "Babysit watches the PR, with a bundled watcher on GitHub or the Origin CLI when it's available, and takes blockers in order: conflicts, then review threads and bot findings that live only in a review body, then CI."
+  },
+  "aed4de06e351": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-unattended-passes-yes",
+   "sources": [
+    "port"
+   ],
+   "text": "The agent lists each fixed `ask-user` finding in its final report."
   },
   "aee91387e5dc": {
    "class": "context",
