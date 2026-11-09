@@ -3,16 +3,16 @@
 This framework records the agreed purposes and evaluation policy. It connects
 the existing documentation promises to evidence of useful work. It does not
 change skill instructions, declare the suite effective, or implement new gates.
-The detailed suite operating choices and numeric improvement thresholds remain
-open for discussion.
+The agreed suite operating principles are recorded below. Numeric improvement
+thresholds and their implementation remain open.
 
 ## Alignment status
 
-Agreed on 2026-11-08 after the evaluation discussion. This document records the
-accepted decisions, not the interview transcript. The discussion established
-how evaluations should substantiate suite claims. It did not settle the suite's
-full operating design. Approval of this evaluation framework is not approval of
-every existing workflow, delegation step, or review cost.
+Agreed on 2026-11-08 through the evaluation and suite discussions. This document
+records the accepted decisions, not the interview transcript. Approval of these
+principles is not approval of every existing workflow, delegation step, or review
+cost. The [suite alignment assessment](suite-alignment-audit.md) maps these
+decisions to existing mechanisms and distinguishes gaps from missing evidence.
 
 ## Two purposes
 
@@ -27,6 +27,77 @@ cheapest trustworthy evidence, with deterministic checks wherever sufficient.
 PR acceptance means required checks pass and required reviewers approve the
 reviewed revision. Merge is a separate event. This measurement endpoint does not
 replace the existing shipping playbook or shorten a user's requested task.
+
+## Suite operating principles
+
+Optimize both new work and maintenance of existing software. Measure them
+separately so improvement in one does not conceal degradation in the other.
+Greenfield features, prototypes, and investigations need acceptance criteria
+appropriate to their purpose; code evolution also needs preservation evidence.
+
+Keep the suite as small as possible while protecting promises and demonstrated
+benefits. Size includes instruction volume, overlapping skills, runtime context,
+repeated reviews, and maintenance burden. Consolidation is useful only when
+agents still discover and apply the shared rule. Prefer an existing mechanism
+that works. A new skill or review step requires evidence of an unmet need.
+
+Less code means avoiding maintenance cost without meaningful outcome value,
+not optimizing line count. Tests must protect an identifiable behavior or
+consequential failure and justify coverage that existing tests already provide.
+Prefer assertions that survive behavior-preserving refactors. Complexity needs
+a current requirement or demonstrated constraint. Preserve justified complexity
+and useful tests even when deleting them would improve a size metric.
+
+Orchestration should fit the task's risk and uncertainty. Use a lightweight,
+standard, or intensive approach with an explicit reason for extra agents,
+repeated attempts, or deeper review. These are agreed planning choices, not
+implemented configuration labels. Set a task-specific effort budget and escalation
+rule. If effort grows without useful evidence or progress, change the approach.
+Ask the user when the next step changes agreed scope, cost limits, or authority.
+
+Every code change needs independent scrutiny. Its scope and method depend on
+immediate and accumulated risk, not just diff size. Existing human PR review can
+satisfy that responsibility; another model reviewer is not always necessary.
+A small review examines the diff and surrounding design. Structural warning
+signs justify examining the component and its change history. Review the next
+likely change using requirements and history, without speculative abstractions.
+
+Task risk is grounded in observable evidence:
+
+| Factor | Evidence |
+| --- | --- |
+| Consequence | Data loss, permissions, incorrect results, compatibility, and user-visible disruption. |
+| Reach | Shared callers, public interfaces, dependencies, and affected workflows. |
+| Uncertainty | Unclear requirements, unfamiliar code, weak tests, and behavior that cannot be reproduced. |
+| Accumulated complexity | Repeated changes, growing conditionals, duplication, exceptions, recurring defects, and increasing repair effort. |
+| Reversibility and detection | Failure visibility, rollback options, and whether recovery preserves data. |
+
+Use Git history, dependency analysis, static checks, and existing test results
+before commissioning model judgment. Unknown context is not low risk. Repeated
+touches invite inspection; they do not prove deterioration. Deeper review follows
+structural trends or consequential uncertainty, not an arbitrary edit count.
+Calibrate any numerical thresholds from repository evidence.
+
+Stop reviewing when acceptance criteria are satisfied and no material uncertainty
+remains. Another pass needs a named unresolved concern. After repairs, recheck
+affected behavior and newly exposed risks. Reuse valid evidence for unchanged
+scope, keep missing evidence explicit, and honor repository-required gates.
+
+The user's intent and persistent authorization determine completion. Investigation
+ends with evidence; implementation can end at a reviewable PR; merging requires
+the applicable authorization. Proceed autonomously on reversible work within
+that boundary without repeating permission requests.
+
+Support is specific to capabilities and workflows, not just skill installation.
+Document alternatives only when they preserve the promise. Mark unavailable
+workflows and unverified runtime behavior explicitly.
+
+Before changing the suite, map each requirement to an existing skill, script,
+check, or review step. Distinguish missing behavior, unclear instructions,
+unreliable execution, and missing evidence. Prefer deletion, consolidation, or
+deterministic enforcement when equivalent coverage is demonstrated. Measure
+recovery effort as well as instruction and execution savings. Do not simplify
+by silently narrowing promises.
 
 ## Existing promises and their evidence
 
@@ -174,9 +245,9 @@ The [closed efficiency pilot](results/2026-11-08-eval-efficiency.md) and other
 historical comparisons retain their limits. This framework authorizes no fresh
 model calls and claims no measured token savings.
 
-The next suite discussion must settle which work and users the suite optimizes
-for, how much orchestration is justified, the acceptable quality and effort
-tradeoffs, and which promises need narrowing. Evaluation follow-up must define
-representative change sequences, PR observations, thresholds, harness coverage
-and cadence, and complete cost accounting. Existing procedure coverage does not
+The suite principles above are settled. Follow-up must define representative
+new-work and evolution cases, PR observations, thresholds, harness coverage and
+cadence, and complete cost accounting. The source-level assessment identifies
+implementation candidates; it does not authorize removing a promise or assert
+that an existing workflow is ineffective. Existing procedure coverage does not
 settle these outcome questions.
