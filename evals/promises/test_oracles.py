@@ -506,6 +506,31 @@ class WorklistOracle(unittest.TestCase):
 
 
 class CompactFeatureExecution(unittest.TestCase):
+    def test_unknown_assignment_preserves_implementation_failure_precedence(self):
+        assignments = ({}, {"agent_type": "default"}, {"subagent_type": "general-purpose"},
+                       {"agent_type": "unknown"}, {"subagent_type": "unknown"},
+                       {"agent_type": "trail reviewer", "subagent_type": "feature"})
+        for assigned in assignments:
+            with self.subTest(assigned=assigned), tempfile.TemporaryDirectory() as tmp:
+                project = make_repo(tmp, 1, {"roster/__main__.py": "print('text')\n"})
+                opening = {"seq": 1, "carrier": "update_plan", "items": [
+                    {"text": "Compact playbooks/feature.md start abc1234.", "state": "completed"}]}
+                trace = minimal(worklist=[opening], spawns=[{"seq": 2, "tool": "spawn_agent"}],
+                                events=[{"seq": 2, "kind": "tool_call", "name": "spawn_agent", "input": assigned}])
+                case = load_case("feature-source-count-run")
+                pid = "feature-compact-implements-directly"
+                self.assertEqual(grade(pid, trace, case, project)["verdict"], FAIL)
+                source = project / "roster/__main__.py"
+                source.write_text("print('json')\n")
+                self.assertEqual(grade(pid, trace, case, project)["verdict"], INCONCLUSIVE)
+                source.write_text("print('text')\n")
+                added = project / "roster/new.py"
+                added.write_text("value = 1\n")
+                self.assertEqual(grade(pid, trace, case, project)["verdict"], INCONCLUSIVE)
+                added.unlink()
+                git_in(project, "worktree", "add", "-q", "--detach", str(Path(tmp) / "alternate"))
+                self.assertEqual(grade(pid, trace, case, project)["verdict"], INCONCLUSIVE)
+
     def test_direct_delivery_and_violating_controls(self):
         with tempfile.TemporaryDirectory() as tmp:
             project = make_repo(tmp, 1, {"roster/__main__.py": "print('text')\n"})

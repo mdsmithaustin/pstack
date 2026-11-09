@@ -1659,8 +1659,6 @@ def compact_implements_directly(view):
         return failed("compact case delegated implementation", evidence)
     if "architect/references/runner-prompt.md" in view.all_reads():
         return failed("compact case read the architect runner instructions", evidence)
-    if any(role not in READER_ROLES and role not in NO_CODE_AGENTS for role in roles):
-        return inconclusive("a spawn assignment has no recognized original structured role", evidence)
     base = view.base_shas()
     paths = (view.case.get("expect") or {}).get("implementation_paths")
     if not base or not paths:
@@ -1674,6 +1672,8 @@ def compact_implements_directly(view):
         return inconclusive("no project repository to inspect")
     if not changed.strip() and not untracked.strip():
         return failed("supplied project has no change in the case implementation paths")
+    if any(role not in READER_ROLES and role not in NO_CODE_AGENTS for role in roles):
+        return inconclusive("a spawn assignment has no recognized original structured role", evidence)
     return passed("Feature record and changed case implementation paths in the supplied checkout",
                   evidence, "no observed implementation role, named design role or architect runner instruction read",
                   "no full-step worklist observed; equivalent expanded plans may not be recognized",
