@@ -259,7 +259,7 @@ def steps_in_order(items, shape, start=1):
 def compact_feature_plan(items):
     text = items[0].get("text", "").lower() if items else ""
     return all(re.search(pattern, text) for pattern in (
-        r"playbooks/feature\.md", r"\bstart(?: commit\b|\s+(?:[0-9a-f]{7,40}|no commits)\b)",
+        r"playbooks/feature\.md", r"\bstart(?: commit\b|\s+(?:[0-9a-f]{7,40}|no commits)\b|ing at\s+[0-9a-f]{7,40}\b)",
     ))
 
 
