@@ -1,5 +1,8 @@
 commands:
   lint: tools/gate-check.sh lint && skill-ci check
+ci:
+  rebase_behind: true
+  carry_review_on_replay: true
 pr:
   template: .github/pull_request_template.md
   publish_intent: false
