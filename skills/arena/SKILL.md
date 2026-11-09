@@ -34,7 +34,7 @@ Read every candidate's rationale end to end before picking. Read a candidate's f
 
 Score each candidate against the rubric criterion by criterion, not on holistic feel, from its rationale and the cross-judge's evidence for that criterion. Where those cannot settle a criterion, read that part of the artifact. Compare against the cross-judge when Phase C ran one. Wait for its verdict before you pick. If it recommends a base other than the one it scored highest, treat the verdict as unresolved: send it back once to explain the gap, and read that explanation before you pick. Your own explanation does not replace the judge's. Agreement on the base confirms the pick. Name the models you, the runners, and the cross-judge ran on before you call any agreement or convergence confirmation, because arms on one model are one opinion. Disagreement means one of you is biased or the rubric was ambiguous. Read both rationales before deciding. If you still pick a different base, record the criterion that decided it.
 
-Pick the base a future maintainer can extend most easily without breaking invariants. When two feel tied, prefer the cleaner boundary or smaller API, per the Laziness Protocol.
+Pick the base a future maintainer can extend most easily without breaking invariants. When two feel tied, prefer the cleaner boundary or smaller API, per the Laziness Protocol. A larger diff for behavior-preserving restructuring of the extended unit is not a penalty. Judge the resulting structure and its demonstrated maintenance cost.
 
 Start no graft, and spawn no implementation of the result, before you pick the base.
 
