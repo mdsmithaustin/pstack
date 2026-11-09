@@ -1,5 +1,6 @@
 import json
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -31,6 +32,18 @@ class CallIds(unittest.TestCase):
         parsed = codex.harvest_rollout(self.lines("rollout-s.jsonl", rows).read_bytes())
         self.assertEqual([(e["kind"], e.get("id"), e.get("ok")) for e in parsed["events"]],
                          [("tool_call", "x1", None), ("tool_call", "x2", None), ("tool_result", "x2", False), ("tool_result", "x1", True)])
+
+    def test_review_assignment_keeps_the_original_agent_type(self):
+        for role in ("trail reviewer", "poteto-agent", "default"):
+            with self.subTest(role=role):
+                arguments = {"agent_type": role, "message": "Review as trail reviewer", "fork_turns": "none"}
+                rows = [{"type": "session_meta", "payload": {"cwd": "/w", "id": "s"}},
+                        {"type": "response_item",
+                         "payload": {"type": "function_call", "name": "spawn_agent", "call_id": "x",
+                                     "arguments": json.dumps(arguments)}}]
+                data = "".join(json.dumps(row) + "\n" for row in rows).encode()
+                event, = codex.harvest_rollout(data)["events"]
+                self.assertEqual(event["input"], arguments)
 
 
 class SkillListing(unittest.TestCase):
@@ -75,6 +88,26 @@ class Compaction(unittest.TestCase):
         self.run_ = SimpleNamespace(root=root, project=root / "w" / "relay", model=None, effort=None, timeout_s=60,
                                     case={"id": "c", "turns": ["what does relay do?", "/compact"]},
                                     turns=[{"index": 0, "session_id": "thread-1", "argv": ["codex", "what does relay do?"]}])
+
+    def test_initial_and_resumed_turns_confine_writes_to_the_fixture_and_run_scratch(self):
+        def execute(argv, cwd, env, timeout_s, stdout, stderr):
+            stdout.write_text("")
+            self.assertEqual(cwd, self.run_.project)
+            self.assertEqual(env["TMPDIR"], str(self.run_.root / "tmp"))
+            flags = tomllib.loads("\n".join(value for option, value in zip(argv, argv[1:]) if option == "-c"))
+            self.assertEqual(flags["approval_policy"], "never")
+            self.assertEqual(flags["sandbox_mode"], "workspace-write")
+            self.assertEqual(flags["sandbox_workspace_write"], {
+                "writable_roots": [str(self.run_.project / ".git"), env["TMPDIR"]],
+                "exclude_slash_tmp": True,
+                "exclude_tmpdir_env_var": True,
+            })
+            return {"argv": argv}
+
+        with mock.patch.object(codex.live, "execute", side_effect=execute):
+            for index, text in enumerate(self.run_.case["turns"]):
+                with self.subTest(index=index):
+                    codex.turn(self.run_, text, index)
 
     def test_a_compact_turn_resumes_with_a_small_auto_compact_limit(self):
         def execute(argv, cwd, env, timeout_s, stdout, stderr):

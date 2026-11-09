@@ -21,6 +21,7 @@ class Role:
     background: bool
     skills: tuple[str, ...]
     signature: str | None
+    native_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -111,7 +112,7 @@ def render_brief(role: Role, skills_root: Path) -> str:
         + json.dumps(str(skills_root), ensure_ascii=False) + ".\n"
     )
     guidance += "".join(f"- {name}: {json.dumps(str(path), ensure_ascii=False)}\n" for name, path in zip(role.skills, paths))
-    if role.signature is None:
+    if role.signature is None and role.native_name is None:
         guidance += f"Put the exact line `persona: {role.id}` on its own line in your first reply.\n"
     return guidance + "\n" + role.body
 
@@ -125,7 +126,7 @@ def render_native(role: Role, destination: Destination, brief: str) -> bytes:
         content += "---\n\n" + brief
         marker = "<!-- pstack-generated:v1:{role}:{digest} -->\n"
     else:
-        content = f"name = {quote(role.id)}\ndescription = {quote(role.description)}\ndeveloper_instructions = {quote(brief)}\n"
+        content = f"name = {quote(role.native_name or role.id)}\ndescription = {quote(role.description)}\ndeveloper_instructions = {quote(brief)}\n"
         marker = "# pstack-generated:v1:{role}:{digest}\n"
     encoded = (content + "\n").encode("utf-8")
     return encoded + marker.format(role=role.id, digest=hashlib.sha256(encoded).hexdigest()).encode("ascii")
@@ -302,6 +303,14 @@ def main() -> int:
                 parser.error(f"unknown pstack persona: {args.persona}")
             sys.stdout.write(render_brief(role, skills_root))
             return 0
+        if destination and destination.harness == "codex":
+            reviewer = skill_directory / "references/subagents/trail-reviewer.md"
+            roles += (Role(
+                id="trail-reviewer", aliases=(), native_name="trail reviewer",
+                description="Independent read-only reviewer for a change or decision trail.",
+                body=reviewer.read_text(encoding="utf-8"),
+                background=False, skills=("pstack-harness",), signature=None,
+            ),)
         for role in roles:
             render_brief(role, skills_root)
         delegate_body = load_delegate(skill_directory)

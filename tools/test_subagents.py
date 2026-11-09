@@ -201,6 +201,37 @@ class SubagentCommands(unittest.TestCase):
         self.assertEqual(parsed["developer_instructions"], self.run_cli("brief", "Comment Sicko").stdout)
         self.assertIn(addition, parsed["developer_instructions"])
 
+    def test_codex_registers_the_exact_trail_reviewer_role(self):
+        report = json.loads(self.native().stdout)
+        path = self.role_path("trail-reviewer")
+        row = next(row for row in report["roles"] if row["id"] == "trail-reviewer")
+        self.assertEqual((row["path"], row["action"]), (str(path), "installed"))
+        before = path.read_bytes(), path.stat().st_mtime_ns
+        parsed = tomllib.loads(before[0].decode())
+        self.assertEqual(set(parsed), {"name", "description", "developer_instructions"})
+        self.assertEqual(parsed["name"], "trail reviewer")
+        body = (self.installed / "pstack-harness/references/subagents/trail-reviewer.md").read_text()
+        self.assertIn(body, parsed["developer_instructions"])
+        self.native(command="check")
+        self.native()
+        self.assertEqual((path.read_bytes(), path.stat().st_mtime_ns), before)
+        self.run_cli("brief", "trail reviewer", expected=2)
+        for harness, command in (("claude-code", "install"), ("hermes", "check")):
+            with self.subTest(harness=harness):
+                report = json.loads(self.native(harness, command=command).stdout)
+                self.assertEqual({row["id"] for row in report["roles"]}, {"poteto-agent", "comment-sicko"})
+
+    def test_a_conflicting_trail_reviewer_preflights_the_codex_install(self):
+        path = self.role_path("trail-reviewer")
+        path.parent.mkdir(parents=True)
+        original = 'name = "user reviewer"\n'
+        path.write_text(original)
+        report = json.loads(self.native(expected=1).stdout)
+        row = next(row for row in report["roles"] if row["id"] == "trail-reviewer")
+        self.assertEqual(row["native_file"], "conflict")
+        self.assertEqual(list(path.parent.iterdir()), [path])
+        self.assertEqual(path.read_text(), original)
+
     def test_repeated_installs_are_noops_and_preserve_models(self):
         model = self.project / ".agents/pstack-models.md"
         model.parent.mkdir()

@@ -13,7 +13,7 @@ from harnesses.login import Login, LoginRequired, check_status
 
 SKILLS_DIR = ".agents/skills"
 PRIVATE_DIRS = [".agents/", ".codex/"]
-SHARES_HOST_TMP = True
+SHARES_HOST_TMP = False
 
 APP_BIN = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"
 MODEL = "gpt-6.1-sol"
@@ -98,11 +98,15 @@ def prepare(run):
 def config_flags(run):
     project = run.project
     plan = str(run.case.get("env", {}).get("todo_tools") is not False).lower()
+    trusted_project = json.dumps(str(project), ensure_ascii=False)
+    writable_roots = json.dumps([str(project / ".git"), str(run.root / "tmp")], ensure_ascii=False)
     return ["--disable", "apps", "-c", f'model="{run.model or MODEL}"', "-c", f'model_reasoning_effort="{run.effort or EFFORT}"',
             "-c", 'approval_policy="never"', "-c", 'sandbox_mode="workspace-write"',
             "-c", f"tools.update_plan.enabled={plan}",
-            "-c", f'projects={{"{project}"={{trust_level="trusted"}}}}',
-            "-c", f'sandbox_workspace_write.writable_roots=["{project}/.git"]']
+            "-c", f'projects={{{trusted_project}={{trust_level="trusted"}}}}',
+            "-c", f"sandbox_workspace_write.writable_roots={writable_roots}",
+            "-c", "sandbox_workspace_write.exclude_slash_tmp=true",
+            "-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true"]
 
 
 def thread_id(stream):
