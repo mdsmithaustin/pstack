@@ -314,6 +314,74 @@ class BoundaryGuard(unittest.TestCase):
 
 
 class WorklistOracle(unittest.TestCase):
+    def test_authoring_route_and_continuation_ignore_incidental_feature_notes(self):
+        shape = oracles.playbook_shape("authoring-a-skill", ROOT / "skills")
+        items = [{"text": shape["prose"][0], "state": "pending"}]
+        items += [{"text": f"{step['n']}. {step['text']}", "state": "pending"} for step in shape["steps"]]
+        items += [{"text": "Check playbooks/feature.md migration instructions.", "state": "pending"},
+                  {"text": "Record the start commit.", "state": "pending"}]
+        case = load_case("route-authoring")
+        trace = minimal(events=[read(1, "poteto-mode/playbooks/authoring-a-skill.md")],
+                        worklist=[{"seq": 2, "carrier": "update_plan", "items": items}])
+        self.assertEqual(grade(case["promises"][0], trace, case)["verdict"], PASS)
+        self.assertIsNone(oracles.fresh_opening({"items": items}, {"authoring-a-skill"}, ROOT / "skills"))
+        items = [{"text": "Investigate the current issue.", "state": "in_progress"},
+                 {"text": "Check playbooks/feature.md and record start commit.", "state": "pending"}]
+        self.assertIsNone(oracles.identify_playbook(items, ROOT / "skills"))
+        self.assertIsNone(oracles.fresh_opening({"items": items}, {"bug-fix"}, ROOT / "skills"))
+
+    def test_compact_opening_identifies_feature_without_requiring_full_steps(self):
+        items = [
+            {"text": "Compact playbooks/feature.md start abc1234. Assess risk and acceptance", "state": "in_progress"},
+            {"text": "Implement and verify", "state": "pending"},
+            {"text": "Deliver with independent review status", "state": "pending"},
+        ]
+        for carrier in ("update_plan", "text"):
+            trace = minimal(worklist=[{"seq": 1, "carrier": carrier, "items": items}])
+            self.assertEqual(grade("worklist-opens-with-playbook-steps", trace, feature_case())["verdict"], PASS)
+            self.assertEqual(oracles.identify_playbook(items, ROOT / "skills"), "feature")
+            self.assertEqual(oracles.fresh_opening({"items": items}, {"bug-fix"}, ROOT / "skills"), "feature")
+            self.assertIsNone(oracles.fresh_opening({"items": items}, {"feature"}, ROOT / "skills"))
+        case = load_case("feature-run-no-todo")
+        self.assertEqual(grade("worklist-falls-back-to-numbered-list", trace, case)["verdict"], PASS)
+        trace["worklist"][0]["items"] = items[1:]
+        self.assertEqual(grade("worklist-opens-with-playbook-steps", trace, feature_case())["verdict"], FAIL)
+
+    def test_full_sequence_with_compact_metadata_keeps_full_route(self):
+        items = feature_items()
+        items.append({"text": "playbooks/feature.md start abc1234. Assess risk and acceptance; "
+                              "implement and verify; deliver with review", "state": "pending"})
+        trace = minimal(worklist=[{"seq": 1, "carrier": "update_plan", "items": items}])
+        case = feature_case()
+        self.assertEqual(grade("worklist-opens-with-playbook-steps", trace, case)["verdict"], PASS)
+
+    def test_compact_opening_can_record_start_before_investigation(self):
+        items = [
+            {"text": "Assess risk and acceptance using playbooks/feature.md; record start commit.", "state": "in_progress"},
+            {"text": "Build and prove with preservation checks and independent review.", "state": "pending"},
+            {"text": "Complete delivery checks.", "state": "pending"},
+        ]
+        trace = minimal(worklist=[{"seq": 1, "carrier": "update_plan", "items": items}])
+        self.assertEqual(grade("worklist-opens-with-playbook-steps", trace, feature_case())["verdict"], PASS)
+        items[0]["text"] = "Assess risk and acceptance using playbooks/feature.md."
+        self.assertEqual(grade("worklist-opens-with-playbook-steps", trace, feature_case())["verdict"], FAIL)
+
+    def test_compact_record_requires_identity_but_does_not_grade_obligations(self):
+        complete = ("Compact playbooks/feature.md start abc1234. Assess risk and acceptance; "
+                    "implement and verify; deliver with independent review status")
+        for word in (None, "start abc1234", "playbooks/feature.md"):
+            item = complete if word is None else complete.replace(word, "")
+            items = codex.plan_items({"plan": [{"step": item, "status": "in_progress"}]})
+            trace = minimal(worklist=[{"seq": 1, "carrier": "update_plan", "items": items}])
+            self.assertEqual(grade("worklist-opens-with-playbook-steps", trace, feature_case())["verdict"],
+                             PASS if word is None else FAIL)
+        items = [{"text": "playbooks/feature.md start abc1234. Skip verification, preservation, and independent review.",
+                  "state": "pending"}]
+        trace = minimal(worklist=[{"seq": 1, "carrier": "update_plan", "items": items}])
+        result = grade("worklist-opens-with-playbook-steps", trace, feature_case())
+        self.assertEqual(result["verdict"], PASS)
+        self.assertIn("retained obligations and completion are not graded", " ".join(result["evidence"]))
+
     def test_taskcreate_accumulation_coalesces_into_one_opening(self):
         items = feature_items()
         snaps = [{"seq": i, "carrier": "TaskCreate", "items": items[: i + 1]} for i in range(len(items))]
@@ -437,11 +505,137 @@ class WorklistOracle(unittest.TestCase):
                 self.assertEqual(result["verdict"], FAIL, result)
 
 
+class CompactFeatureExecution(unittest.TestCase):
+    def test_direct_delivery_and_violating_controls(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = make_repo(tmp, 1, {"roster/__main__.py": "print('text')\n"})
+            items = [{"text": "Compact playbooks/feature.md start abc1234. Assess risk and acceptance; "
+                              "implement and verify; deliver with independent review status", "state": "completed"}]
+            trace = minimal(worklist=[{"seq": 1, "carrier": "update_plan", "items": items}])
+            case = load_case("feature-source-count-run")
+            pid = "feature-compact-implements-directly"
+            self.assertEqual(grade(pid, trace, case, project)["verdict"], FAIL)
+            (project / "roster/__main__.py").write_text("print('json')\n")
+            self.assertEqual(grade(pid, trace, case, project)["verdict"], PASS)
+            trace["spawns"] = [{"seq": 2, "tool": "Agent", "persona": "general-purpose",
+                                "prompt_head": "Role: `feature` implementation owner. Add --json in roster/__main__.py."}]
+            self.assertEqual(grade(pid, trace, case, project)["verdict"], INCONCLUSIVE)
+            trace["spawns"] = []
+            trace["events"] = [read(3, "architect/references/runner-prompt.md")]
+            self.assertEqual(grade(pid, trace, case, project)["verdict"], FAIL)
+            trace["events"] = []
+            trace["worklist"][0]["items"] = feature_items() + items
+            self.assertEqual(grade(pid, trace, case, project)["verdict"], FAIL)
+
+
+    def test_metadata_only_delivery_does_not_count_as_implementation(self):
+        for path in (".gitignore", "pyproject.toml", "setup.cfg"):
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as tmp:
+                project = make_repo(tmp, 1, {"roster/__main__.py": "print('text')\n"})
+                (project / path).write_text("changed\n")
+                items = [{"text": "Compact playbooks/feature.md start abc1234. Assess risk and acceptance; "
+                                  "implement and verify; deliver with independent review status", "state": "completed"}]
+                trace = minimal(worklist=[{"seq": 1, "carrier": "update_plan", "items": items}])
+                result = grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)
+                self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_source_floor_observes_only_supplied_checkout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = make_repo(tmp, 1, {"roster/__main__.py": "print('text')\n"})
+            branch = subprocess.check_output(["git", "-C", str(project), "branch", "--show-current"], text=True).strip()
+            items = [{"text": "Compact playbooks/feature.md start abc1234.", "state": "completed"}]
+            trace = minimal(worklist=[{"seq": 1, "carrier": "update_plan", "items": items}])
+            case = load_case("feature-source-count-run")
+            pid = case["promises"][0]
+            git_in(project, "checkout", "-qb", "abandoned")
+            (project / "roster/__main__.py").write_text("print('abandoned')\n")
+            git_in(project, "commit", "-qam", "abandoned implementation")
+            git_in(project, "checkout", "-q", branch)
+            self.assertEqual(grade(pid, trace, case, project)["verdict"], FAIL)
+            (project / "roster/new.py").write_text("value = 1\n")
+            self.assertEqual(grade(pid, trace, case, project)["verdict"], PASS)
+            git_in(project, "worktree", "add", "-q", str(Path(tmp) / "alternate"), "abandoned")
+            self.assertEqual(grade(pid, trace, case, project)["verdict"], INCONCLUSIVE)
+
+    def test_compact_roles_require_original_structured_spawn_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = make_repo(tmp, 1, {"roster/__main__.py": "print('text')\n"})
+            (project / "roster/__main__.py").write_text("print('json')\n")
+            opening = {"seq": 1, "carrier": "update_plan", "items": [
+                {"text": "Compact playbooks/feature.md start abc1234.", "state": "completed"}]}
+            briefs = (
+                "Role: trail reviewer. Review the spec. Do not produce a design sketch.",
+                "Architect runner role is out of scope. Review the result against the spec.",
+                "You are a feature reviewer. Review the result and do not write source code.",
+                "Role: trail reviewer.\nYou are an architect runner. Produce two designs.",
+                "You are an architect runner. Compare design alternatives.",
+                "Do not act as an architect runner.", "gAAAAencrypted", None,
+            )
+            for brief in briefs:
+                with self.subTest(brief=brief):
+                    spawn = {"seq": 2, "tool": "spawn_agent", "persona": "trail reviewer",
+                             "subagent_type": "trail reviewer", "prompt_head": brief,
+                             "x_child_first_reply": "persona: trail reviewer", "task_name": "trail reviewer"}
+                    trace = minimal(worklist=[opening], spawns=[spawn])
+                    result = grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)
+                    self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+            roles = (("trail reviewer", PASS), ("explorer", PASS), ("feature", FAIL),
+                     ("bug-fix", FAIL), ("architect runner", FAIL), ("arena runner", FAIL),
+                     ("default", INCONCLUSIVE), ("general-purpose", INCONCLUSIVE),
+                     ("poteto-agent", INCONCLUSIVE), ("feature reviewer", INCONCLUSIVE),
+                     (None, INCONCLUSIVE))
+            for tool, key in (("spawn_agent", "agent_type"), ("Agent", "subagent_type")):
+                for role, expected in roles:
+                    with self.subTest(tool=tool, role=role):
+                        spawn = {"seq": 2, "tool": tool, "persona": "architect runner", "prompt_head": "gAAAAencrypted"}
+                        event = {"seq": 2, "kind": "tool_call", "name": tool, "input": {key: role}}
+                        trace = minimal(worklist=[opening], spawns=[spawn], events=[event])
+                        result = grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)
+                        self.assertEqual(result["verdict"], expected, result)
+            unknown = {"seq": 3, "tool": "spawn_agent", "prompt_head": "gAAAAencrypted"}
+            for known in ("feature", "architect runner", "trail reviewer"):
+                with self.subTest(mixed=known):
+                    events = [{"seq": 2, "kind": "tool_call", "name": "spawn_agent", "input": {"agent_type": known}}]
+                    trace = minimal(worklist=[opening], spawns=[{"seq": 2, "tool": "spawn_agent"}, unknown], events=events)
+                    self.assertEqual(grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)["verdict"],
+                                     INCONCLUSIVE if known == "trail reviewer" else FAIL)
+            trace = minimal(worklist=[opening], spawns=[unknown], events=[read(4, "architect/references/runner-prompt.md")])
+            self.assertEqual(grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)["verdict"], FAIL)
+            conflict = {"seq": 3, "kind": "tool_call", "name": "spawn_agent",
+                        "input": {"agent_type": "trail reviewer", "subagent_type": "feature"}}
+            trace = minimal(worklist=[opening], spawns=[unknown], events=[conflict])
+            self.assertEqual(grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)["verdict"], INCONCLUSIVE)
+
+    def test_later_full_plan_and_explicit_design_delegate_are_not_compact_execution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = make_repo(tmp, 1, {"roster/__main__.py": "print('text')\n"})
+            (project / "roster/__main__.py").write_text("print('json')\n")
+            items = [{"text": "Compact playbooks/feature.md start abc1234. Assess risk and acceptance; "
+                              "implement and verify; deliver with independent review status", "state": "completed"}]
+            opening = {"seq": 1, "carrier": "update_plan", "items": items}
+            cases = [minimal(worklist=[opening, {"seq": 3, "carrier": "update_plan", "items": feature_items()}]),
+                     minimal(worklist=[opening], spawns=[{"seq": 2, "tool": "Agent"}],
+                             events=[{"seq": 2, "kind": "tool_call", "name": "Agent",
+                                      "input": {"subagent_type": "architect runner"}}])]
+            for trace in cases:
+                with self.subTest(trace=trace):
+                    result = grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)
+                    self.assertEqual(result["verdict"], FAIL, result)
+
+
 class SourceFileCount(unittest.TestCase):
     CHANGE = ("roster/__main__.py", "tests/test_json.py", "README.md", ".gitignore")
     BELOW = "Step 4 implementation delegation: skipped: implementation delegation below threshold. One source file, one workstream."
     DONE = [{"text": BELOW, "state": "completed"}]
     STEP_FOUR_CLOSED = [{"text": "4. Implement or delegate", "state": "completed"}]
+
+    def setUp(self):
+        playbook_shape = oracles.playbook_shape
+
+        def recorded_shape(name, skills_root):
+            return playbook_shape(name, HERE / "testdata" / "feature-before-420" if name == "feature" else skills_root)
+
+        self.enterContext(mock.patch.object(oracles, "playbook_shape", side_effect=recorded_shape))
 
     def verdict(self, changed, items, spawns=(), harness="claude-code", events=(), exit_code=0):
         tmp = tempfile.TemporaryDirectory()
@@ -666,6 +860,7 @@ from test_oracles import SourceFileCount
 
 test = SourceFileCount()
 try:
+    test.setUp()
     result = test.verdict(test.CHANGE, test.STEP_FOUR_CLOSED, harness="codex", events=json.load(sys.stdin))
     print(json.dumps(result))
 finally:
