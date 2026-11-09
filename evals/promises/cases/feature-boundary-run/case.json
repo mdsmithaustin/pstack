@@ -1,9 +1,19 @@
 {
- "promises": ["poteto-mode-triggers-architect-on-boundary-crossing"],
+ "promises": [
+  "poteto-mode-triggers-architect-on-boundary-crossing"
+ ],
  "fixture": "relay",
  "entry": "poteto-mode",
- "turns": ["imports from flaky partner feeds sometimes die halfway. retry each source with backoff, record the attempt count on every stored record, and let the cli set the retry policy. verify it end to end."],
- "timeout_s": {"default": 2400, "codex": 3000},
- "expect": {"playbook": "feature"},
- "note": "near-miss guard for design-ladder-spares-small-changes: this change spans sources, ingest, store, retry, and the cli, so architect must still run. This case grades design fan-out, not full-route selection or obligation retention"
+ "turns": [
+  "Partner imports can exit after some deliveries have reached disk, even before the importer sees a successful write return. Add bounded retries with backoff and a CLI retry policy, and let an operator rerun an interrupted import after restarting the process. For the same unchanged feed and store, recovery and subsequent reruns must deliver every record exactly once in source order, without removing or replaying the already delivered prefix. Exhausted retries must report failure without losing progress. Empty feeds succeed without deliveries, and a one-record feed is delivered once across reruns. For this change, assume one importer at a time and unique record IDs within the unchanged feed; changing feeds and cross-feed identity are outside scope. Verify recovery end to end."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "expect": {
+  "playbook": "feature"
+ },
+ "note": "Case-local history adds durable append-only deliveries with no replay protection. Retry and restart recovery must reconcile a persisted delivery with an unacknowledged write, preserving downstream delivery order and uniqueness. The existing read retry helper does not settle that storage decision. This case grades design fan-out only, not recovery correctness, full-route selection, or design timing.",
+ "history": "relay-delivery-journal"
 }

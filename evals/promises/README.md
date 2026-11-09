@@ -286,3 +286,23 @@ The source-count oracle remains for historical traces. Its controls use `testdat
 The direct-execution oracle observes changes in the case's `expect.implementation_paths` in the supplied project checkout, including tracked dirty and untracked files. It does not collect changes from other branches. The registered-run grader supplies the fixture checkout, not an independently selected delivery reference. Multiple worktrees leave delivery selection inconclusive. The roster case observes Python files under `roster/`; a change there is only an implementation precondition, not proof of the requested behavior.
 
 The oracle reads role names only from the original spawn tool call's `agent_type` or `subagent_type` fields. It strips surrounding whitespace and lowercases the string before matching registered roles. When both fields have non-null values, they must agree before that normalization. Known implementation roles, architect and arena runner roles fail; known read-only roles (`trail reviewer`, `how explorer`, and the other registered reader roles, plus `explore`, `plan`, `explorer`, and `comment-sicko`) permit the check to continue. Missing, generic, conflicting or unrecognized values are inconclusive. Normalized persona fields, task names, brief text and child replies never establish assignments, even when they contain a role declaration. An encrypted brief can be graded only when its original structured role is available. Independently observed violations, including an architect runner instruction read or another spawn's known implementation/design role, still fail when an assignment is unknown. Recognized full-step worklists also fail. These are bounded observations: they do not establish semantic role equivalence, implementation correctness, acceptance coverage, preservation, independent review status or sound risk assessment. Equivalent expanded plans may escape the full-step recognizer. The boundary case grades design fan-out only. No efficiency improvement follows from these checks.
+
+`feature-boundary-run` uses the case-local `relay-delivery-journal` history.
+The base relay fixture eagerly loads and parses before writing, so its read
+retry helper can settle a simple retry request without a consequential design
+choice. The history instead appends synced deliveries consumed in order by
+external readers. A process exit can leave a durable prefix, including a write
+whose caller never received success. Restart recovery must avoid duplicate or
+missing deliveries while retaining that prefix. The case limits the task to one
+writer and an unchanged feed with unique IDs. It does not prescribe a recovery
+design or ask for a named role. The earlier retry-only case's native failure
+remains historical evidence; it is not a pass for this revision.
+
+`python3 -m unittest discover -s evals/promises -p test_recovery_fixture.py`
+executes the history through the real fixture builder and importer in child
+processes. A nonzero exit or zero tests run is a failed check. These controls
+show durable partial effects, source ordering, empty and singleton inputs, and
+reject a whole-import retry or naive restart as duplicate delivery. They check
+the fixture's premise, not a model's recovery implementation. The unchanged
+boundary oracle observes design fan-out; it does not prove recovery correctness,
+full-route selection, or scrutiny before implementation.

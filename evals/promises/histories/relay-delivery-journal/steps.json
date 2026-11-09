@@ -1,0 +1,10 @@
+{
+  "fixture": "relay",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "store: append durable deliveries for downstream consumers",
+      "delete": []
+    }
+  ]
+}
