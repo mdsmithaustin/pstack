@@ -95,10 +95,17 @@ export async function readSnapshot(args: {
     };
   else {
     const merge = await mergeAssessment(args.reader, facts);
-    if (checks.checks.length === 0 && merge.earlierHadChecks)
-      throw new ChecksUnavailable(
-        "the head has no checks yet, but an earlier commit had checks"
-      );
+    if (checks.checks.length === 0) {
+      const state = merge.github.headRollupState;
+      if (state !== null && state !== "SUCCESS" && merge.github.kind !== "refused")
+        throw new ChecksUnavailable(
+          `the head check rollup is ${state}, but no checks were returned`
+        );
+      if (merge.earlierHadChecks)
+        throw new ChecksUnavailable(
+          "the head has no checks yet, but an earlier commit had checks"
+        );
+    }
     const base = {
       source: checks.source,
       all: checks.checks,

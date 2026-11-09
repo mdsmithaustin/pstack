@@ -143,11 +143,14 @@ export class GhGitMergePort implements MergePort {
    * ref was updated.
    */
   async patchId(baseRef: string, headSha: CommitSha): Promise<PatchId> {
-    const fetch = await exec("git", ["git", "fetch", "origin", baseRef, headSha]);
+    const baseBranch = `refs/heads/${baseRef}`;
+    const fetch = await exec("git", [
+      "git", "fetch", "origin", baseBranch, headSha,
+    ]);
     if (fetch.code !== 0)
       throw new MergeGateError(
         "git",
-        `git fetch origin ${baseRef} ${headSha} failed: ${firstLine(fetch.stderr)}`
+        `git fetch origin ${baseBranch} ${headSha} failed: ${firstLine(fetch.stderr)}`
       );
     const base = await exec("git", [
       "git",

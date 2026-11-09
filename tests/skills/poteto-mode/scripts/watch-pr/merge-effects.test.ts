@@ -153,7 +153,7 @@ describe("GhGitMergePort.patchId against a real repository", () => {
         `await port.patchId("main", parseCommitSha(${JSON.stringify(missing)}));`
       );
       expect(out.source).toBe("git");
-      expect(out.error).toStartWith(`git fetch origin main ${missing} failed:`);
+      expect(out.error).toStartWith(`git fetch origin refs/heads/main ${missing} failed:`);
     } finally {
       cleanup();
     }

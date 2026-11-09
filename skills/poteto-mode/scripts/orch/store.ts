@@ -13,6 +13,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { parseRemote } from "../watch-pr/remote.ts";
+import type { Repository } from "../watch-pr/types.ts";
 import {
   currentAttempts,
   parseAckDecisions,
@@ -1597,16 +1598,17 @@ function currentBranch(repo: string): string {
 }
 
 function githubPullRequest(value: unknown): GithubPullRequest {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new UserError("gh pr list returned a malformed pull request row");
+  if (!isRecord(value)) {
+    throw new UserError("gh api graphql returned a malformed pull request row");
   }
-  const row = value as Record<string, unknown>;
-  const pr = row.number;
-  const branches = row.headRefName;
-  const sha = row.headRefOid;
-  const base = row.baseRefName;
-  const state = row.state;
-  const isCrossRepository = row.isCrossRepository;
+  const {
+    number: pr,
+    headRefName: branches,
+    headRefOid: sha,
+    baseRefName: base,
+    isCrossRepository,
+  } = value;
+  const state = frontierPrStateOrNull(value.state);
   if (
     typeof pr !== "number" ||
     !Number.isSafeInteger(pr) ||
@@ -1618,11 +1620,124 @@ function githubPullRequest(value: unknown): GithubPullRequest {
     typeof base !== "string" ||
     base.length === 0 ||
     typeof isCrossRepository !== "boolean" ||
-    (state !== "OPEN" && state !== "MERGED" && state !== "CLOSED")
+    state === null
   ) {
-    throw new UserError("gh pr list returned a malformed pull request row");
+    throw new UserError("gh api graphql returned a malformed pull request row");
   }
   return { pr, branches, sha, base, state, isCrossRepository };
+}
+
+const GITHUB_FRONTIER_QUERY = `
+query Frontier($owner: String!, $repo: String!, $after: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequests(first: 100, after: $after, orderBy: {field: CREATED_AT, direction: ASC}) {
+      totalCount
+      pageInfo { hasNextPage endCursor }
+      nodes { number state headRefName headRefOid baseRefName isCrossRepository }
+    }
+  }
+}
+`;
+
+function githubPullRequests(
+  repo: string,
+  identity: Repository
+): readonly GithubPullRequest[] {
+  const { GH_REPO: _ignoredRepo, ...env } = process.env;
+  const { host, owner, repo: name } = identity;
+  const rows: GithubPullRequest[] = [];
+  const seenPrs = new Set<number>();
+  const seenCursors = new Set<string>();
+  let expectedCount: number | undefined;
+  let after: string | null = null;
+  do {
+    const args = [
+      "api",
+      "graphql",
+      "--hostname",
+      host,
+      "-f",
+      `owner=${owner}`,
+      "-f",
+      `repo=${name}`,
+      "-f",
+      `query=${GITHUB_FRONTIER_QUERY}`,
+    ];
+    if (after !== null) {
+      args.push("-f", `after=${after}`);
+    }
+    let raw: string;
+    try {
+      raw = execFileSync("gh", args, {
+        cwd: repo,
+        encoding: "utf8",
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (error) {
+      if (errorCode(error) === "ENOENT") {
+        throw new UserError(
+          "GitHub frontier discovery requires gh; install GitHub CLI, or pass --graphite for a stack Graphite tracks"
+        );
+      }
+      throw new UserError(
+        `gh api graphql failed for ${host}/${owner}/${name}: ${errorMessage(error)}`
+      );
+    }
+
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(raw);
+    } catch (error) {
+      throw new UserError(`gh api graphql returned invalid JSON: ${errorMessage(error)}`);
+    }
+    const data = isRecord(decoded) && !("errors" in decoded) ? decoded.data : undefined;
+    const repository = isRecord(data) ? data.repository : undefined;
+    const page = isRecord(repository) ? repository.pullRequests : undefined;
+    if (!isRecord(page) || !isRecord(page.pageInfo)) {
+      throw new UserError("gh api graphql returned an invalid pull request page");
+    }
+    const { totalCount, nodes } = page;
+    const { hasNextPage, endCursor } = page.pageInfo;
+    if (
+      typeof totalCount !== "number" ||
+      !Number.isSafeInteger(totalCount) ||
+      totalCount < 0 ||
+      !isUnknownArray(nodes) ||
+      nodes.length > 100 ||
+      typeof hasNextPage !== "boolean" ||
+      (endCursor === null) !== (nodes.length === 0) ||
+      (endCursor !== null &&
+        (typeof endCursor !== "string" ||
+          endCursor.trim() === "" ||
+          seenCursors.has(endCursor))) ||
+      (hasNextPage && endCursor === null)
+    ) {
+      throw new UserError("gh api graphql returned invalid pull request pagination");
+    }
+    for (const value of nodes) {
+      const row = githubPullRequest(value);
+      if (seenPrs.has(row.pr)) {
+        throw new UserError(`gh api graphql returned duplicate PR #${row.pr}`);
+      }
+      seenPrs.add(row.pr);
+      rows.push(row);
+    }
+    if (
+      (expectedCount !== undefined && totalCount !== expectedCount) ||
+      rows.length > totalCount ||
+      hasNextPage !== (rows.length < totalCount)
+    ) {
+      throw new UserError("gh api graphql returned incomplete pull request history");
+    }
+    expectedCount = totalCount;
+    if (endCursor !== null) {
+      seenCursors.add(endCursor);
+    }
+    after = hasNextPage ? endCursor : null;
+  } while (after !== null);
+
+  return rows;
 }
 
 function githubFrontier(repo: string): readonly FrontierPr[] {
@@ -1651,62 +1766,8 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
     );
   }
 
-  let raw: string;
-  try {
-    const { GH_REPO: _ignoredRepo, ...env } = process.env;
-    raw = execFileSync(
-      "gh",
-      [
-        "pr",
-        "list",
-        "--repo",
-        `${identity.host}/${identity.owner}/${identity.repo}`,
-        "--state",
-        "all",
-        "--limit",
-        "1000",
-        "--json",
-        "number,state,headRefName,headRefOid,baseRefName,isCrossRepository",
-      ],
-      {
-        cwd: repo,
-        encoding: "utf8",
-        env,
-        stdio: ["ignore", "pipe", "pipe"],
-      }
-    );
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") {
-      throw new UserError(
-        "GitHub frontier discovery requires gh; install GitHub CLI, or pass --graphite for a stack Graphite tracks"
-      );
-    }
-    throw new UserError(`gh pr list failed: ${errorMessage(error)}`);
-  }
-
-  let decoded: unknown;
-  try {
-    decoded = JSON.parse(raw);
-  } catch (error) {
-    throw new UserError(`gh pr list returned invalid JSON: ${errorMessage(error)}`);
-  }
-  if (!Array.isArray(decoded)) {
-    throw new UserError("gh pr list returned an invalid response");
-  }
-  if (decoded.length === 1000) {
-    throw new UserError(
-      "gh pr list reached its 1000 PR limit; cannot prove complete repository history; pass --graphite for a stack Graphite tracks before resolving the frontier"
-    );
-  }
-
   const byBranch = new Map<string, GithubPullRequest[]>();
-  const byPr = new Set<number>();
-  for (const value of decoded) {
-    const row = githubPullRequest(value);
-    if (byPr.has(row.pr)) {
-      throw new UserError(`gh pr list returned duplicate PR #${row.pr}`);
-    }
-    byPr.add(row.pr);
+  for (const row of githubPullRequests(repo, identity)) {
     const rows = byBranch.get(row.branches) ?? [];
     rows.push(row);
     byBranch.set(row.branches, rows);
@@ -1717,15 +1778,6 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
     const active = rows.filter((row) => row.state === "OPEN");
     if (active.length > 0) {
       byBranch.set(branch, active);
-    }
-  }
-
-  const children = new Map<string, GithubPullRequest[]>();
-  for (const rows of byBranch.values()) {
-    for (const row of rows) {
-      const childrenForBase = children.get(row.base) ?? [];
-      childrenForBase.push(row);
-      children.set(row.base, childrenForBase);
     }
   }
 
@@ -1785,14 +1837,33 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
       break;
     }
     if (seen.has(parent.branches)) {
-      throw new UserError("gh pr list contains a cyclic stack");
+      throw new UserError("GitHub frontier discovery found a cyclic stack");
     }
     seen.add(parent.branches);
     ancestors.unshift(parent);
     cursor = parent;
   }
 
-  for (const row of [...ancestors, selected]) {
+  const activeOrAnchored = new Set([...ancestors, selected]);
+  const pending = [...byBranch.values()].flat().filter((row) => row.state === "OPEN");
+  for (let row = pending.pop(); row !== undefined; row = pending.pop()) {
+    if (activeOrAnchored.has(row)) {
+      continue;
+    }
+    activeOrAnchored.add(row);
+    for (const parent of byBranch.get(row.base) ?? []) {
+      pending.push(parent);
+    }
+  }
+
+  const children = new Map<string, GithubPullRequest[]>();
+  for (const row of activeOrAnchored) {
+    const siblings = children.get(row.base) ?? [];
+    siblings.push(row);
+    children.set(row.base, siblings);
+  }
+
+  for (const row of ancestors) {
     if ((children.get(row.branches) ?? []).length > 1) {
       throw new UserError(
         `GitHub frontier discovery found a branched stack above ${row.branches}`
@@ -1821,7 +1892,7 @@ function githubFrontier(repo: string): readonly FrontierPr[] {
       );
     }
     if (seen.has(child.branches)) {
-      throw new UserError("gh pr list contains a cyclic stack");
+      throw new UserError("GitHub frontier discovery found a cyclic stack");
     }
     seen.add(child.branches);
     descendants.push(child);

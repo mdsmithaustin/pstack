@@ -316,40 +316,60 @@ async function withFakeGithub<T>({
   directory,
   operation,
   output,
-  upstreamOutput = output,
 }: {
   directory: string;
   operation: () => Promise<T>;
   output: string;
-  upstreamOutput?: string;
 }): Promise<T> {
   const bin = join(directory, "github-bin");
-  const outputPath = join(directory, "github-output.json");
   await mkdir(bin);
-  await writeFile(outputPath, output);
-  const upstreamPath = join(directory, "upstream-output.json");
-  await writeFile(upstreamPath, upstreamOutput);
+  await writeFile(join(directory, "github-output.json"), output);
   const gh = join(bin, "gh");
   await writeFile(
     gh,
-    `#!/usr/bin/env bash
-set -euo pipefail
-if [ "$(pwd -P)" != "${realpathSync(join(directory, "repo"))}" ]; then
-  printf 'gh ran outside the fixture repo: %s\\n' "$(pwd -P)" >&2
-  exit 2
-fi
-case "$*" in
-  "pr list --state all --limit 1000 --json number,state,headRefName,headRefOid,baseRefName,isCrossRepository")
-    cat "${upstreamPath}"
-    ;;
-  "pr list --repo github.com/personal/project --state all --limit 1000 --json number,state,headRefName,headRefOid,baseRefName,isCrossRepository")
-    bun -e 'console.log(JSON.stringify(JSON.parse(await Bun.file(process.argv[1]).text()).slice(0, 1000)))' "${outputPath}"
-    ;;
-  *)
-    printf 'unexpected gh arguments: %s\\n' "$*" >&2
-    exit 2
-    ;;
-esac
+    `#!/usr/bin/env bun
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
+
+const directory = ${JSON.stringify(directory)};
+const args = process.argv.slice(2);
+const [api, graphql, hostnameFlag, host, ownerFlag, owner, repoFlag, repo, queryFlag, query, afterFlag, after] = args;
+const identity = [host, owner?.slice(6), repo?.slice(5)].join("/");
+appendFileSync(join(directory, "gh-calls.txt"), identity + "\\n");
+if (
+  process.cwd() !== ${JSON.stringify(realpathSync(join(directory, "repo")))} ||
+  process.env.GH_REPO !== undefined ||
+  api !== "api" || graphql !== "graphql" || hostnameFlag !== "--hostname" ||
+  !["github.com", "example.com"].includes(host) ||
+  ownerFlag !== "-f" || owner !== "owner=personal" ||
+  repoFlag !== "-f" || repo !== "repo=project" ||
+  queryFlag !== "-f" || !query?.startsWith("query=") ||
+  !query.includes("first: 100, after: $after") ||
+  (args.length !== 10 && (args.length !== 12 || afterFlag !== "-f" || !/^after=page-[1-9]\\d*$/.test(after)))
+) {
+  console.error("unexpected gh invocation", args);
+  process.exit(2);
+}
+if (await Bun.file(join(directory, "gh-fails")).exists()) {
+  console.error("ordinary fixture query failure");
+  process.exit(3);
+}
+const offset = after === undefined ? 0 : Number(after.slice("after=page-".length));
+const override = Bun.file(join(directory, "github-page-" + offset + ".json"));
+if (await override.exists()) {
+  process.stdout.write(await override.text());
+  process.exit(0);
+}
+const rows = await Bun.file(join(directory, "github-output.json")).json();
+const nodes = rows.slice(offset, offset + 100);
+const end = offset + nodes.length;
+console.log(JSON.stringify({
+  data: { repository: { pullRequests: {
+    totalCount: rows.length,
+    pageInfo: { hasNextPage: end < rows.length, endCursor: nodes.length ? "page-" + end : null },
+    nodes,
+  } } },
+}));
 `
   );
   await chmod(gh, 0o755);
@@ -792,6 +812,13 @@ describe("Store", () => {
         ).rejects.toThrow(
           "frontier pin mismatch: missing from GitHub: 12; extra in GitHub: 13"
         );
+        git({ repo: stack.repo, args: ["checkout", "stack/merged"] });
+        const fromBase = await store.frontier.set({ repo: stack.repo });
+        expect(fromBase.prs.map(({ pr, state }) => [pr, state])).toEqual([
+          [10, "MERGED"],
+          [13, "CLOSED"],
+          [11, "OPEN"],
+        ]);
       },
     });
   });
@@ -878,13 +905,6 @@ describe("Store", () => {
     await withFakeGithub({
       directory,
       output: JSON.stringify(rows),
-      upstreamOutput: JSON.stringify(
-        Array.from({ length: 1000 }, (_, index) => ({
-          ...rows[0],
-          number: index + 100,
-          headRefName: `upstream/${index}`,
-        }))
-      ),
       operation: async () => {
         const env = { ...process.env, GH_REPO: "unrelated/project" };
         expect(runCli(["--store", storeDirectory, "init"], env).code).toBe(0);
@@ -931,7 +951,6 @@ describe("Store", () => {
     await withFakeGithub({
       directory,
       output: JSON.stringify([...rows, selected]),
-      upstreamOutput: JSON.stringify([selected]),
       operation: async () => {
         expect(await store.frontier.set({ repo: stack.repo })).toEqual({
           generation: 1,
@@ -942,7 +961,7 @@ describe("Store", () => {
     });
   });
 
-  it("resolves origin history below the limit", async () => {
+  it("keeps the saved frontier when a later GitHub page is incomplete or malformed", async () => {
     const { directory, store } = await initializedStore();
     const stack = await makeGitStack(directory);
     const selected = {
@@ -953,20 +972,84 @@ describe("Store", () => {
       baseRefName: "main",
       isCrossRepository: false,
     };
-    const rows = Array.from({ length: 998 }, (_, index) => ({
+    const history = Array.from({ length: 100 }, (_, index) => ({
       ...selected,
       number: index + 100,
+      state: "MERGED",
       headRefName: `unrelated/${index}`,
     }));
+    const lastPage = {
+      totalCount: 101,
+      pageInfo: { hasNextPage: false, endCursor: "page-101" },
+      nodes: history.slice(-1),
+    };
+    const response = (pullRequests: object) => ({
+      data: { repository: { pullRequests } },
+    });
+    const cases = [
+      {
+        body: response({ ...lastPage, nodes: [], pageInfo: { hasNextPage: false, endCursor: null } }),
+        error: "incomplete pull request history",
+      },
+      {
+        body: response({ ...lastPage, totalCount: 100 }),
+        error: "incomplete pull request history",
+      },
+      {
+        body: response({ ...lastPage, pageInfo: { hasNextPage: true, endCursor: null } }),
+        error: "invalid pull request pagination",
+      },
+      {
+        body: response({ ...lastPage, pageInfo: { hasNextPage: true, endCursor: "page-100" } }),
+        error: "invalid pull request pagination",
+      },
+      {
+        body: response({ ...lastPage, nodes: [selected] }),
+        error: "duplicate PR #11",
+      },
+      {
+        body: response({ ...lastPage, nodes: [null] }),
+        error: "malformed pull request row",
+      },
+      {
+        body: { ...response(lastPage), errors: [{ message: "partial response" }] },
+        error: "invalid pull request page",
+      },
+    ];
     await withFakeGithub({
       directory,
-      output: JSON.stringify([selected, ...rows]),
+      output: JSON.stringify([selected, ...history]),
       operation: async () => {
-        expect(await store.frontier.set({ repo: stack.repo })).toEqual({
-          generation: 1,
-          prs: [{ pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" }],
-          lowestUnmerged: 11,
-        });
+        expect((await store.frontier.set({ repo: stack.repo })).prs.map((row) => row.pr)).toEqual([11]);
+        const saved = await readFile(join(directory, "frontier.json"));
+        for (const { body, error } of cases) {
+          await writeFile(join(directory, "github-page-100.json"), JSON.stringify(body));
+          await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(error);
+          expect(await readFile(join(directory, "frontier.json"))).toEqual(saved);
+        }
+      },
+    });
+  });
+
+  it("requires a checked-out GitHub PR even when trunk has a live child", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    git({ repo: stack.repo, args: ["checkout", "main"] });
+    await withFakeGithub({
+      directory,
+      output: JSON.stringify([{
+        number: 11,
+        state: "OPEN",
+        headRefName: "stack/open",
+        headRefOid: stack.openSha,
+        baseRefName: "main",
+        isCrossRepository: false,
+      }]),
+      operation: async () => {
+        await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
+          "found no PR for checked out branch main"
+        );
+        expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
       },
     });
   });
@@ -988,14 +1071,6 @@ describe("Store", () => {
       output: JSON.stringify([selected]),
       operation: async () => {
         const callsPath = join(directory, "gh-calls.txt");
-        await writeFile(join(directory, "github-bin", "gh"), `#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\\n' "$@" >> "${callsPath}"
-case "$4" in
-  https://github.com/personal/project.git|github.com/personal/project) cat "${join(directory, "github-output.json")}" ;;
-  *) printf 'repository rejected: %s\\n' "$4" >&2; exit 2 ;;
-esac
-`);
         expect(runCli(["--store", storeDirectory, "init"]).code).toBe(0);
         const args = ["--store", storeDirectory, "--json", "frontier", "set", "--repo", stack.repo];
         const valid = runCli(args);
@@ -1069,17 +1144,6 @@ esac
       operation: async () => {
         const callsPath = join(directory, "gh-calls.txt");
         const failurePath = join(directory, "gh-fails");
-        await writeFile(join(directory, "github-bin", "gh"), `#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\\n' "$@" >> "${callsPath}"
-if [ "$#" -ne 10 ] || [ "$3" != "--repo" ] || [ "\${GH_REPO+x}" = x ] || [ "$(pwd -P)" != "${realpathSync(stack.repo)}" ]; then exit 2; fi
-case "$4" in
-  github.com/personal/project|example.com/personal/project) ;;
-  *) exit 2 ;;
-esac
-if [ -f "${failurePath}" ]; then printf 'ordinary fixture query failure\\n' >&2; exit 3; fi
-cat "${join(directory, "github-output.json")}"
-`);
         expect(runCli(["--store", storeDirectory, "init"]).code).toBe(0);
         git({ repo: stack.repo, args: ["config", "remote.origin.pushurl", "https://github.com/upstream/project.git"] });
         git({ repo: stack.repo, args: ["config", "url.https://github.com/.insteadOf", "pstack-fixture:"] });
@@ -1102,16 +1166,14 @@ cat "${join(directory, "github-output.json")}"
             prs: [{ pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" }],
             lowestUnmerged: 11,
           });
-          expect(await readFile(callsPath, "utf8")).toBe(
-            `pr\nlist\n--repo\n${identity}\n--state\nall\n--limit\n1000\n--json\nnumber,state,headRefName,headRefOid,baseRefName,isCrossRepository\n`
-          );
+          expect(await readFile(callsPath, "utf8")).toBe(`${identity}\n`);
         }
         const before = await readFile(join(storeDirectory, "frontier.json"));
         await writeFile(failurePath, "");
         const failed = runCli(args);
         expect(failed.code).toBe(1);
         expect(failed.stdout).toBe("");
-        expect(failed.stderr).toContain("gh pr list failed");
+        expect(failed.stderr).toContain("gh api graphql failed");
         expect(failed.stderr).toContain("ordinary fixture query failure");
         expect(failed.stderr).toContain("github.com/personal/project");
         expect(failed.stderr).not.toContain("pstack-fixture:");
@@ -1166,21 +1228,8 @@ cat "${join(directory, "github-output.json")}"
       await withFakeGithub({
         directory,
         output: JSON.stringify([selected]),
-        upstreamOutput: JSON.stringify([{ ...selected, number: 911 }]),
         operation: async () => {
           const callsPath = join(directory, "gh-calls.txt");
-          await writeFile(join(directory, "github-bin", "gh"), `#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\\n' "$4" >> "${callsPath}"
-if [ "$#" -ne 10 ] || [ "$3" != "--repo" ]; then
-  exit 2
-fi
-case "$4" in
-  github.com/personal/project) cat "${join(directory, "github-output.json")}" ;;
-  "") cat "${join(directory, "upstream-output.json")}" ;;
-  *) exit 2 ;;
-esac
-`);
           expect(runCli(["--store", storeDirectory, "init"]).code).toBe(0);
           const args = ["--store", storeDirectory, "--json", "frontier", "set", "--repo", stack.repo];
           const valid = runCli(args);
@@ -1236,6 +1285,15 @@ esac
       {
         rows: [selected, parent, { ...selected, number: 12, headRefName: "stack/sibling" }],
         error: "branched stack above stack/merged",
+      },
+      {
+        rows: [
+          { ...selected, baseRefName: "main" },
+          { ...parent, state: "CLOSED", baseRefName: "stack/open" },
+          { ...selected, number: 12, headRefName: "stack/open-through-closed" },
+          { ...selected, number: 14, headRefName: "stack/sibling", baseRefName: "stack/open" },
+        ],
+        error: "branched stack above stack/open",
       },
       {
         rows: [selected, { ...parent, baseRefName: "stack/open" }],
