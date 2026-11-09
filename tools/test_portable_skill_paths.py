@@ -359,6 +359,19 @@ class PortableSkillPaths(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("Verify, live lacks", result.stderr)
 
+    def test_plan_template_links_resolve_after_copy_into_the_agent_store(self) -> None:
+        template = re.search(r"^`{4}markdown\n(.*?)^`{4}$", PLAN_PLAYBOOK.read_text(encoding="utf-8"), re.M | re.S)
+        self.assertIsNotNone(template)
+        plan = self.consumer / "agent store" / "docs" / "plan.md"
+        plan.parent.mkdir(parents=True)
+        plan.write_text(template[1], encoding="utf-8")
+
+        broken = [
+            target for target in re.findall(r"\[[^\]\n]+\]\((\.\.?/[^)]+)\)", plan.read_text(encoding="utf-8"))
+            if not (plan.parent / target.partition("#")[0]).is_file()
+        ]
+        self.assertEqual(broken, [])
+
     def test_documented_validator_command_rejects_a_structurally_invalid_plan(self) -> None:
         command = inline_command(PORTABLE_PATHS, "check-plan.mjs")
         plan = self.consumer / "invalid plan.md"

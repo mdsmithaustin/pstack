@@ -106,6 +106,28 @@ describe("GhGitMergePort.patchId against a real repository", () => {
     }
   });
 
+  it("hashes the diff against the base branch when a tag has the same name", () => {
+    const root = mkdtempSync(join(tmpdir(), "merge-gate-tag-"));
+    try {
+      const origin = join(root, "origin");
+      const work = join(root, "work");
+      git(root, "init", "--initial-branch=main", "origin");
+      git(origin, "commit", "--allow-empty", "-m", "root");
+      git(origin, "tag", "main");
+      commitFile(origin, "a.txt", "one\ntwo\n");
+      git(origin, "checkout", "-b", "feature");
+      const head = commitFile(origin, "a.txt", "one\ntwo\nthree\n");
+      git(root, "clone", "--branch", "main", origin, "work");
+
+      expect(runPort(
+        work,
+        `console.log(JSON.stringify({ id: await port.patchId("main", parseCommitSha(${JSON.stringify(head)})) }));`
+      )).toEqual({ id: "e1a9243ae8a08b53e41d07c7bb3ca3a48104a3d9" });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("gives a different patch-id once the head carries a different change", () => {
     const { work, head, cleanup } = scenario();
     try {

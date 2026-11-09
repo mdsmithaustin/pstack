@@ -226,6 +226,29 @@ describe("main", () => {
     });
   });
 
+  it("reports a query blocker when checks appear on the same head after empty reads", async () => {
+    const reader = fakeReader({
+      facts: { mergeStateStatus: "BLOCKED" },
+      fastPath: { kind: "checks", checks: [] },
+      rollupPages: [{ checks: [], endCursor: null }],
+      commitRollups: [{ oid: "head", state: "PENDING" }],
+    });
+    const harness = testRuntime(reader);
+    const code = await main(
+      ["--owner", "owner", "--repo", "repo", "--pr", "1", "--max-query-errors", "1"],
+      harness.runtime
+    );
+    expect(code).toBe(7);
+    expect(harness.stdout).toHaveLength(1);
+    expect(JSON.parse(harness.stdout[0])).toMatchObject({
+      kind: "BLOCKER",
+      blocker: {
+        kind: "status-query",
+        failure: { kind: "checks-unavailable", retryable: true },
+      },
+    });
+  });
+
   it("shows help without touching the reader", async () => {
     const reader = fakeReader();
     const harness = testRuntime(reader);

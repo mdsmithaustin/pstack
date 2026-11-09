@@ -343,7 +343,7 @@ case "$*" in
     cat "${upstreamPath}"
     ;;
   "pr list --repo github.com/personal/project --state all --limit 1000 --json number,state,headRefName,headRefOid,baseRefName,isCrossRepository")
-    cat "${outputPath}"
+    bun -e 'console.log(JSON.stringify(JSON.parse(await Bun.file(process.argv[1]).text()).slice(0, 1000)))' "${outputPath}"
     ;;
   *)
     printf 'unexpected gh arguments: %s\\n' "$*" >&2
@@ -796,6 +796,50 @@ describe("Store", () => {
     });
   });
 
+  it("ignores an abandoned closed sibling from either live branch", async () => {
+    const { directory, store } = await initializedStore();
+    const stack = await makeGitStack(directory);
+    const base = {
+      number: 11,
+      state: "OPEN",
+      headRefName: "stack/open",
+      headRefOid: stack.openSha,
+      baseRefName: "main",
+      isCrossRepository: false,
+    };
+    await withFakeGithub({
+      directory,
+      output: JSON.stringify([
+        base,
+        {
+          ...base,
+          number: 14,
+          headRefName: "stack/draft",
+          headRefOid: stack.draftSha,
+          baseRefName: "stack/open",
+        },
+        {
+          ...base,
+          number: 15,
+          state: "CLOSED",
+          headRefName: "stack/abandoned",
+          baseRefName: "stack/open",
+        },
+      ]),
+      operation: async () => {
+        for (const branch of ["stack/open", "stack/draft"]) {
+          git({ repo: stack.repo, args: ["checkout", branch] });
+          const frontier = await store.frontier.set({ repo: stack.repo });
+          expect(frontier.prs).toEqual([
+            { pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" },
+            { pr: 14, branches: "stack/draft", sha: stack.draftSha, state: "OPEN" },
+          ]);
+          expect(frontier.lowestUnmerged).toBe(11);
+        }
+      },
+    });
+  });
+
   it("resolves a personal fork through the CLI despite upstream history and GH_REPO", async () => {
     const directory = await makeDirectory();
     const stack = await makeGitStack(directory);
@@ -867,7 +911,7 @@ describe("Store", () => {
     });
   });
 
-  it("rejects incomplete origin history even when upstream history is small", async () => {
+  it("resolves a frontier after at least 1000 unrelated historical PRs", async () => {
     const { directory, store } = await initializedStore();
     const stack = await makeGitStack(directory);
     const selected = {
@@ -878,20 +922,22 @@ describe("Store", () => {
       baseRefName: "main",
       isCrossRepository: false,
     };
-    const rows = Array.from({ length: 999 }, (_, index) => ({
+    const rows = Array.from({ length: 1000 }, (_, index) => ({
       ...selected,
       number: index + 100,
+      state: "MERGED",
       headRefName: `unrelated/${index}`,
     }));
     await withFakeGithub({
       directory,
-      output: JSON.stringify([selected, ...rows]),
+      output: JSON.stringify([...rows, selected]),
       upstreamOutput: JSON.stringify([selected]),
       operation: async () => {
-        await expect(store.frontier.set({ repo: stack.repo })).rejects.toThrow(
-          "gh pr list reached its 1000 PR limit"
-        );
-        expect(await readFile(join(directory, "frontier.json"), "utf8")).toBe("{}\n");
+        expect(await store.frontier.set({ repo: stack.repo })).toEqual({
+          generation: 1,
+          prs: [{ pr: 11, branches: "stack/open", sha: stack.openSha, state: "OPEN" }],
+          lowestUnmerged: 11,
+        });
       },
     });
   });

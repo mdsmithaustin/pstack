@@ -159,8 +159,8 @@ describe("repository host inference", () => {
     ).toBe(true);
   });
 
-  it("binds every public GitHub query despite ambient GH_HOST", () => {
-    const result = commandOutput("https://github.com/team/project.git", "example.invalid");
+  it("binds every public GitHub query to the matching origin despite ambient GH_HOST", () => {
+    const result = commandOutput("https://github.com/explicit/override.git", "example.invalid");
     expect(result.context).toEqual({
       host: "github.com",
       owner: "explicit",
@@ -188,9 +188,34 @@ describe("repository host inference", () => {
     );
     expect(result.commands).toContain("--hostname\nexample.com\n");
   });
+
+  it("uses GH_HOST for a fully specified PR in a different repository", () => {
+    const result = commandOutput(
+      "https://example.com/team/project.git",
+      "github.com"
+    );
+    expect(result.context).toEqual({
+      host: "github.com",
+      owner: "explicit",
+      repo: "override",
+      number: 14,
+    });
+    expect(result.commands).toContain(
+      "--repo\ngithub.com/explicit/override\n"
+    );
+    expect(result.commands).toContain("--hostname\ngithub.com\n");
+  });
 });
 
-function currentPrRun(gitScript: string, branchPr = 14): {
+function currentPrRun(
+  gitScript: string,
+  branchPr = 14,
+  branchMatches: readonly {
+    number: number;
+    state: "OPEN" | "CLOSED" | "MERGED";
+    isCrossRepository: boolean;
+  }[] = []
+): {
   result: { context?: unknown; error?: string };
   commands: string[][];
 } {
@@ -200,12 +225,30 @@ function currentPrRun(gitScript: string, branchPr = 14): {
     writeFileSync(log, "");
     const git = join(directory, "git");
     const gh = join(directory, "gh");
+    const branchResponse = {
+      data: {
+        repository: {
+          defaultBranchRef: { name: "main" },
+          pullRequests: {
+            nodes: branchMatches.map((pr) => ({
+              ...pr,
+              url: `https://example.com/team/project/pull/${pr.number}`,
+            })),
+            pageInfo: { hasNextPage: false },
+          },
+        },
+      },
+    };
     writeFileSync(git, `#!/bin/sh\n${gitScript}\n`);
     writeFileSync(
       gh,
       `#!/bin/sh
 printf '%s\\n' '---' "$@" >> "$WATCH_PR_COMMANDS"
-case "$3" in 14) number=14;; *) number=${branchPr};; esac
+if [ "$1" = api ] && [ "$2" = graphql ]; then
+  printf '%s\\n' '${JSON.stringify(branchResponse)}'
+  exit
+fi
+case "$3" in 14|123) number="$3";; *) number=${branchPr};; esac
 case "$5" in example.com/*) host=example.com;; *) host=github.com;; esac
 printf '{"number":%s,"url":"https://%s/team/project/pull/%s"}\\n' "$number" "$host" "$number"
 `
@@ -280,6 +323,52 @@ describe("current PR lookup without --pr", () => {
     expect(commands).toEqual([
       ["pr", "view", "feature-x", "--repo", "example.com/team/project", "--json", "number,url"],
     ]);
+  });
+
+  it("looks up a numeric branch by name on the origin host", () => {
+    const { result, commands } = currentPrRun(
+      gitScript("ssh://git@example.com/team/project.git", "123"),
+      123,
+      [
+        { number: 50, state: "OPEN", isCrossRepository: true },
+        { number: 42, state: "CLOSED", isCrossRepository: false },
+      ]
+    );
+    expect(result.context).toEqual({
+      host: "example.com",
+      owner: "team",
+      repo: "project",
+      number: 42,
+    });
+    expect(commands).toHaveLength(1);
+    expect(commands[0].slice(0, 3)).toEqual(["api", "graphql", "-f"]);
+    expect(commands[0].slice(-8)).toEqual([
+      "-f", "owner=team", "-f", "repo=project", "-f", "head=123", "--hostname", "example.com",
+    ]);
+  });
+
+  it("prefers an open PR over newer history for the numeric branch", () => {
+    const { result } = currentPrRun(
+      gitScript("ssh://git@example.com/team/project.git", "123"),
+      123,
+      [
+        { number: 55, state: "MERGED", isCrossRepository: false },
+        { number: 42, state: "OPEN", isCrossRepository: false },
+      ]
+    );
+    expect(result.context).toMatchObject({ number: 42 });
+  });
+
+  it("asks for a PR number when the numeric branch has multiple open PRs", () => {
+    const { result } = currentPrRun(
+      gitScript("ssh://git@example.com/team/project.git", "123"),
+      123,
+      [
+        { number: 55, state: "OPEN", isCrossRepository: false },
+        { number: 42, state: "OPEN", isCrossRepository: false },
+      ]
+    );
+    expect(result.error).toContain("pass --pr");
   });
 
   it("stops without calling gh when HEAD is detached", () => {
