@@ -1,0 +1,47 @@
+{
+  "pr357-command-before": {
+    "disposition": "fix",
+    "basis": "Public author reply identifies e1c051fe as the fix. The two snapshots bracket that change. This curated reference is not an independent gold label.",
+    "reference": "https://github.com/mdsmithaustin/pstack/pull/357#discussion_r4457473424"
+  },
+  "pr357-command-after": {
+    "disposition": "dismiss",
+    "basis": "Public author reply identifies e1c051fe as the fix. The two snapshots bracket that change. This curated reference is not an independent gold label.",
+    "reference": "https://github.com/mdsmithaustin/pstack/pull/357#discussion_r4457473424"
+  },
+  "pr485-runner-exit-one": {
+    "disposition": "fix",
+    "basis": "The supplied historical source permits exit 1 without parsed failures. Reference is a curated source judgment, not a measured model-quality label.",
+    "reference": "https://github.com/mdsmithaustin/pstack/pull/485#discussion_r4499216399"
+  },
+  "pr491-insufficient-dispatch-evidence": {
+    "disposition": "ask",
+    "basis": "Constructed missing-evidence control. The actual historical reply deferred the ambiguity to issue 441; this narrower packet cannot establish that disposition.",
+    "reference": "https://github.com/mdsmithaustin/pstack/pull/491#discussion_r4516054906"
+  },
+  "pr357-partial-artifact-read": {
+    "disposition": "fix",
+    "basis": "Public reply confirms a separate real partial-read defect, unlike the stale argument-matching finding. Scenario is a curated reproduction input.",
+    "reference": "https://github.com/mdsmithaustin/pstack/pull/357#discussion_r4457738926"
+  },
+  "pr407-missing-port-relationship": {
+    "disposition": "fix",
+    "basis": "Both retained upstream units and their replacement port units are supplied. Public repair 0f69cbb6 maps 2dee704a0086 to ea58a58f42fb and d30ea081316c to 9a9cac62d609, c7761e9fc81b, and 94abf5e9dc8f.",
+    "reference": "https://github.com/mdsmithaustin/pstack/pull/407#discussion_r4474448960"
+  },
+  "pr412-delegation-scope": {
+    "disposition": "dismiss",
+    "basis": "Historical source review read the Arena instruction within the For delegation paragraph. This is a curated interpretation reference, not proof of model behavior. An ask disagreement should receive human review.",
+    "reference": "https://github.com/mdsmithaustin/pstack/pull/412#discussion_r4475703753"
+  },
+  "pr485-mixed-suite-followup": {
+    "disposition": "fix",
+    "basis": "A later real finding in the same PR after the initial runner-exit repair. Public reply confirms mixed-style discovery needed a further fix.",
+    "reference": "https://github.com/mdsmithaustin/pstack/pull/485#discussion_r4503128052"
+  },
+  "pr491-synthetic-versus-native": {
+    "disposition": "ask",
+    "basis": "The historical outcome was a tracked follow-up under a known-oracle-gap policy, not a claim that the synthetic defect was false. ask is a curated projection into this three-way vocabulary because the packet cannot settle fix-forward eligibility. fix is a meaningful disagreement for human review.",
+    "reference": "https://github.com/mdsmithaustin/pstack/issues/441#issuecomment-6747262034"
+  }
+}
