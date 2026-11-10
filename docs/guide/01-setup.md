@@ -51,7 +51,7 @@ pstack spends extra tokens on subagents and review panels. That's the price of t
 - Rerun `/setup-pstack` and pick a smaller reasoning budget or cheaper models. A strong model in the main chat with cheaper, faster models in the code roles is a good split.
 - Set a role to `auto` or `inherit-parent` so it runs on the chat's own model.
 - Shorten a panel list. Each entry runs one subagent.
-- Say `keep this lightweight` for a small change you understand. `/poteto-mode` then works directly, with no delegate and no design panel.
+- Say `keep this lightweight` for a small change you understand. `/poteto-mode` then works directly, with no design panel and no delegate for the work. A review that a rule requires still runs.
 - Save `/poteto-mode` for work that needs rigor. A small, obvious edit doesn't.
 
 ## Run your first task
