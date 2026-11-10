@@ -7,6 +7,10 @@ This assessment inspects instructions and existing evaluation documentation.
 It does not establish runtime compliance, quantify savings, or approve deletion.
 No model benchmark calls were run.
 
+The table below describes commit `3dfcb0c`. Its Feature rows are out of date.
+The [reassessment on 2026-11-10](#reassessment-on-2026-11-10) covers the whole
+suite at commit `6ec0c01` and adds the two principles agreed that day.
+
 ## Existing mechanisms and gaps
 
 | Agreed requirement | Existing mechanism inspected | Assessment and smallest next action |
@@ -62,3 +66,280 @@ The next implementation decision should select one demonstrated gap and its
 smallest existing owner. Numerical budgets, risk thresholds, benchmark population
 sizes, and broad recurring schedules remain unset. This assessment recommends
 no new skill and makes no measured savings claim.
+
+## Reassessment on 2026-11-10
+
+Source-level reassessment of the whole suite at commit
+`6ec0c0147253875bea4fdebadfc96e01a23d930c`, against the framework including
+[scope and rule ownership](framework.md#scope-and-rule-ownership) and the
+[lead model floor](framework.md#lead-model-floor-and-subtraction). No model
+calls were run. The recommendations rest on source inspection, this
+repository's prior results, published research, and vendor guidance. They are
+design choices to review, not measured improvements.
+
+### What changed since the first assessment
+
+Commit `6ec0c01` added a risk-based compact route, credit for existing human
+review, review reuse after repairs, and an accumulated complexity check. All
+four landed in [Feature](../skills/poteto-mode/playbooks/feature.md) and the
+[review lens](../skills/poteto-mode/references/review-lens.md). Bug fix,
+Refactoring, Perf issue, and the always-on task triggers did not change. The
+agreed principles therefore hold on one route.
+
+### Facts that needed a whole-repository reading
+
+No single file states the facts below. Each one took several files to
+establish, so they are recorded here with the command or path that reproduces
+them. Byte counts are UTF-8 source bytes at the commit above. They are not
+provider tokens.
+
+**What the router loads before it reads any code.**
+
+| Item | Size | Source |
+| --- | --- | --- |
+| Mode entry | 15,904 of a 16,000 byte budget | `python3 tools/check-mode-entry-size.py` |
+| Entry, Playbooks section | 7,798 bytes. Its first paragraph holds 26 sentences of rules. | `skills/poteto-mode/SKILL.md` |
+| Entry, Principles section | 5,746 bytes listing 24 leaves with a trigger each | Same file |
+| Task triggers | 9,177 bytes, 25 triggers, read on every invocation, resume, and scope change | `references/task-triggers.md` |
+| Sentences in entry plus triggers | About 280 | Counted by sentence terminator |
+
+**Gates that run on every code task, whatever its risk.**
+
+| Gate | Frequency | Stated in |
+| --- | --- | --- |
+| Restate the goal | First message and each final report | Task triggers |
+| `unslop` | Every prose surface, the reply included | Entry and task triggers |
+| `deslop`, with a complete reread of its 10 KB file and retained evidence | Every commit or amend, including work-in-progress commits | Task triggers, Opening a PR, [deslop](../skills/deslop/SKILL.md#before-each-commit) |
+| `unslop` over comments, names, and messages | Every commit | Task triggers |
+| `technical-writing` | Every commit body, PR title, and PR description | Task triggers and Opening a PR |
+| `preserve.py` | Every commit | Entry |
+| `no-comments` | Before review, when comments or suppressions changed | Task triggers |
+| `documentation-impact`, then a different-agent review when it asks for one | Before reporting a substantive change complete | Task triggers |
+| `pr-recap` | After a PR opens and after every push that changes its diff | Task triggers and Opening a PR |
+
+Opening a PR also says to commit liberally, which multiplies the per-commit
+rows. A compact Feature that ends in a pull request still reads about 155 KB
+of instructions across the entry, triggers, playbook, harness skill, and these
+gates. That figure is a sum of the files' sizes, not an observed trace.
+
+**Independent scrutiny by playbook.** Feature requires it and can credit human
+review. Bug fix, Refactoring, and Perf issue name no independent reviewer and
+no rule for crediting one. Their lead reviews a delegate's diff, which is not
+independent of the plan.
+
+**Fixed intensity by playbook.** Bug fix directs the lead to delegate both
+investigation and the fix and to spawn two subagents before reading source.
+Refactoring makes 11 skill calls, always writes a new pin, and always delegates
+the mechanical edits. Neither has a lighter route.
+
+**Skill visibility.** All 65 skills are model-invocable by frontmatter.
+`agents/openai.yaml` withholds 54 from implicit invocation on Codex. Claude
+Code ignores that file, so the same gating exists there only after
+`/setup-pstack` writes name-only listing overrides. Eleven skills list with
+full descriptions on both. `ls skills/*/agents/openai.yaml` reproduces the
+count.
+
+**Cost of removing a skill.** A skill's name appears in many files outside its
+own directory. `git grep -l <name> -- . ':!skills/<name>'` reports 57 files for
+`unslop`, 48 for `deslop`, 34 for `no-comments`, 27 for `documentation-impact`,
+23 for `technical-writing`, and 16 for `pr-recap`. No manifest lists what
+depends on a skill.
+
+**Promises per owner.** Inverting `owners` in the [ledger](promises/ledger.json)
+gives 55 promises on the mode entry, 52 on `setup-pstack`, and 48 on
+`pstack-harness`. `pr-recap` owns none and has no corpus, yet it runs on every
+push. `verify-commands` and `runtime-probes` own none in the ledger but have
+their own corpora.
+
+**Deterministic helpers that already exist.**
+
+| Script | What it decides without a model |
+| --- | --- |
+| `setup-pstack/scripts/check-models-config.py --resolve` | Role to model and effort, per harness |
+| `pstack-harness/scripts/subagents.py brief` | A persona's complete briefing text |
+| `pstack-harness/scripts/preserve.py` | Whether the start commit's tests still pass |
+| `pstack-harness/scripts/read-plan.py` | Commands that read a file within an output cap |
+| `pstack-harness/scripts/loading-path.py` | Files and bytes one harness action loads |
+| `poteto-mode/scripts/check-plan.mjs` | Whether a multi-phase plan has the required structure |
+| `poteto-mode/scripts/orch` | Durable unit, ledger, and inbox state for Orchestrate |
+| `poteto-mode/scripts/watch-pr` | PR state, merge gate verdict, failed check evidence |
+| `tools/check-mode-entry-size.py` | The entry's byte budget |
+
+Route choice, worklist creation, gate selection, brief assembly, and evidence
+freshness have no script. The lead performs each from prose.
+
+**Lead models in the evidence.** Results name Sonnet, Opus, Fable, GPT-6.1 Sol,
+and Grok 4.7 Build in different waves. No ledger field records which lead model
+and effort verified a promise. The suite's fit for a mid-tier lead at medium
+effort cannot be read from existing results.
+
+### Assessment by principle, whole suite
+
+| Principle | State at `6ec0c01` | Gap |
+| --- | --- | --- |
+| Scope and rule ownership | Risk route, review credit, and review reuse live in Feature. One design-smell sentence is copied in Feature and Refactoring. The preserve command appears in 9 files. | Run rules sit in a playbook. Other playbooks cannot cite them. |
+| Purpose, new work and evolution measured separately | Unchanged. Workflows exist. Separate populations do not. | Evidence gap, not an instruction gap. |
+| Smallest suite | 65 skills and 834 KB of Markdown under `skills/`. The entry sits at 99 percent of its byte budget. | The budget is a ceiling being approached. Nothing ratchets size down or reports bytes per route. |
+| Tests and complexity | Leaves own these rules. Refactoring still orders a new pin when coverage may already exist. | One sentence in Refactoring step 1. |
+| Proportionate orchestration, budget, escalation | Feature only. No playbook sets a task budget or an escalation rule. | Router owns none of this. |
+| Independent scrutiny scaled to risk | Feature only. | Bug fix, Refactoring, and Perf issue have no scrutiny rule. |
+| Stop and reuse evidence | Documentation impact and Feature reuse evidence. `deslop` repeats in full on every commit. Code review repeats its aggregate pass after any fix or rebase. | Freshness is judged from prose and memory. |
+| Completion follows intent | The entry runs commit, push, and PR steps without being asked. Only a refusal changes the endpoint. | A stated endpoint does not govern publication. |
+| Support is demonstrated | Unchanged. | No capability-by-workflow view. |
+| Evidence before change | Both matched baselines were saturated. | No task has headroom to show benefit. Not addressed here by design. |
+| Lead model floor | The entry and triggers hold about 280 standing sentences. The lead chooses among 25 playbooks and 24 principle triggers, assembles briefs from about ten required clauses, and tracks evidence freshness itself. | The design assumes a top-tier lead. |
+| Subtraction | Removal touches 16 to 57 files. No dependency manifest, no removal check, no record of why a compensating instruction exists. | Addition is cheap. Removal is expensive. |
+
+### Recommendations
+
+The work is ordered so that each phase is a small, reviewable change that the
+next one builds on. Phases 1 and 2 remove more text than they add. No phase
+adds a skill.
+
+**Phase 1. Move run rules to the router.** Instruction edits only.
+
+1. Move the risk record and the route choice out of Feature into the Playbooks
+   section of the mode entry. Name three routes, lightweight, standard, and
+   intensive. Feature's compact route becomes lightweight.
+2. Add a lightweight route to Bug fix, Refactoring, and Perf issue by citing
+   the router rule. Lightweight means direct work by the lead, no panel, and
+   only the leaves the step needs.
+3. Move the paragraph that credits existing review or briefs one
+   `trail reviewer` from Feature step 7 into the review lens. Each code-changing
+   playbook's Proven step links it.
+4. Add two fields to the opening worklist item for every playbook. `endpoint`
+   takes evidence, local commits, reviewable PR, or merge. A stated endpoint
+   governs, including a host instruction such as "do not open a pull request
+   unless asked". `budget` names what would make the lead change approach.
+5. State once, in the router, that another review pass needs a named
+   unresolved concern.
+6. In Refactoring step 1, reuse an adequate existing pin before writing one.
+
+**Phase 2. Make routing a lookup.** One manifest and one script.
+
+1. Add `skills/poteto-mode/routes.json`. For each playbook it lists the steps,
+   the skills each step loads, the gates, and which routes include each. It is
+   the only place a playbook step names a gate skill.
+2. Add `skills/poteto-mode/scripts/plan.py`. The lead passes the playbook and
+   five categorical risk facts, each `low`, `material`, or `unknown` with one
+   line of evidence. The script prints the route, the worklist items with
+   their outcome sentences, the loads for each step in the current harness's
+   own wording, the gates, the scrutiny requirement, and the endpoint and
+   budget fields to fill. `unknown` never yields lightweight.
+3. Add `skills/poteto-mode/scripts/risk-facts.py`. It gathers the evidence a
+   command can gather: commit count and churn on the touched paths, caller
+   count, and whether tests cover them. The lead judges consequence and
+   uncertainty. This follows the framework's order of Git history and static
+   checks before model judgment.
+4. Cut the mode entry to a contract, a playbook table, and the instruction to
+   run `plan.py`. Remove the Principles list from the entry, since the plan
+   names each step's leaves. Lower the entry budget in
+   `tools/check-mode-entry-size.py` from 16,000 to 8,000 bytes.
+5. Put the nine daily routes in the entry table: Investigation, Code review,
+   Bug fix, Feature, Refactoring, Perf issue, Prototype, Babysit, and Shipping.
+   Move the program, session, and specialty routes to one linked table.
+6. Fold the always-on task triggers into the manifest's gates. Keep in prose
+   only the triggers that need judgment.
+
+**Phase 3. Gate by evidence, not by repetition.**
+
+1. Add `pstack-harness/scripts/gate.py` with `record` and `check`. It stores
+   the gate name, the Git tree ID, and the result under `.git/pstack/`. `check`
+   answers whether a gate's evidence still describes the current tree and
+   which paths changed since. The lead stops judging freshness.
+2. Run `deslop`, comment `unslop`, and `technical-writing` once per published
+   head on the lightweight and standard routes. Keep per-commit runs for the
+   intensive route and for machine-consumed playbooks.
+3. Drop the rule that rereads all of `deslop` before each pass. `gate.py`
+   records that the pass ran against a tree.
+4. Move the mechanical writing rules to a lint: the long dash, the mid-sentence
+   colon, the Conventional Commits title, and the required PR body headings.
+   Keep `unslop` and `technical-writing` for what a pattern cannot judge.
+5. Run `pr-recap` when the user asks or the repository opts in. It owns no
+   promise and has no corpus.
+6. Move Gated publish, Snapshot cleanup, and Gated merge preparation out of
+   Opening a PR into a reference that loads only when the gate is detected.
+
+**Phase 4. Delegate up or out, never sideways.**
+
+1. State one spawn rule in delegation. Spawn for parallel independent streams,
+   for bulk reading that would fill the lead's context, for independent
+   scrutiny, or to send a named hard problem to a stronger model. A single
+   stream on the lead's own tier stays with the lead.
+2. Keep the reviewer at or above the lead's tier. A mid-tier author with a
+   stronger reviewer is the pairing to protect.
+3. Extend `subagents.py brief` to print the required brief clauses from its
+   arguments: the source path, start commit, branch, preserve command, commit
+   evidence rule, and attended state. The lead adds scope and judgment.
+4. Reserve the three-arm panels in `arena`, `architect`, and `interrogate` for
+   the intensive route.
+
+**Phase 5. Make subtraction cheap, then subtract.**
+
+1. Add a removal check to the lint tier. For each routed skill it confirms the
+   name appears only in the skill's directory, the manifest, generated lists,
+   and the ledger.
+2. Add `ledger.py owners --invert` so a skill's promises are one command away.
+   A unit with no promise and no corpus is a removal candidate by default.
+3. Extend `loading-path.py` to report bytes per route from the manifest. Add a
+   budget per route that CI lets only tighten.
+4. Record in `PORTING.md`, for each port addition that compensates for a model
+   weakness, the failure it answers, the model, and the date. Review the list
+   when the floor model changes.
+5. First candidates, each needing the framework's independent maintainer
+   review: `pr-recap` as a default step, the per-commit `deslop` reread, the
+   Principles list in the entry, and the copied design-smell sentence.
+
+**Phase 6. Record the floor.** Add `lead_model` and `lead_effort` to live
+result records so later targeted runs can show which promises hold on a
+mid-tier lead. This phase adds a field. It authorizes no runs.
+
+### Decisions the maintainers need to make
+
+1. Phase 2 derives a route from recorded categorical facts through a fixed
+   table. Feature currently says not to assign scores or commission a risk
+   classifier, and the first assessment advised against risk scoring. A lookup
+   on recorded facts involves no model and no numeric score, but it does
+   replace the lead's judgment of the route. Confirm that this is wanted.
+2. The suite tracks upstream. Phases 1 to 4 edit upstream-derived playbooks and
+   the entry, which raises the cost of each sync. The manifest and scripts are
+   port-owned and add none. Decide how much divergence in the entry is
+   acceptable.
+3. Defaults when the user states no endpoint. This assessment keeps a
+   reviewable pull request as the default and lets any stated endpoint win.
+
+### Basis for these choices
+
+- [How Many Instructions Can LLMs Follow at Once?](https://arxiv.org/abs/2507.11538)
+  measured 20 models from 10 to 500 simultaneous instructions. Smaller and
+  non-reasoning models degraded early, errors shifted toward omission, and
+  earlier instructions were favored. The task was keyword inclusion, so it
+  indicates direction, not a threshold for this suite.
+- Anthropic's [skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices)
+  advise concise skills, progressive disclosure, utility scripts for
+  deterministic operations, and testing on every model tier in use, since
+  guidance that suits the strongest model can be insufficient for a smaller one.
+- Anthropic's [context engineering guidance](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+  states the goal as the smallest set of high-signal tokens that produces the
+  outcome, with context loaded when needed.
+- This repository's [cross-reference phrasing study](../docs/skill-cross-reference-phrasing.md)
+  found that one wording change moved a required skill load from 1 of 3 runs to
+  3 of 3 on Claude Code. Loads that depend on the lead noticing a sentence are
+  fragile, which favors printing each step's loads.
+- The [port value comparison](port-value/results/2026-10-19.md) recorded the
+  current port at about 2.6 times the input tokens of native and upstream arms
+  with equal acceptance, under the limits the framework states.
+- `preserve.py`, `check-models-config.py --resolve`, and `orch` already show
+  the pattern recommended here. A script holds the policy and prints the next
+  action.
+
+### Not recommended
+
+- A new skill, a risk-scoring model call, or a reviewer panel for any of this.
+- Separate instructions per model tier. One structure built for the floor
+  serves stronger leads with less text.
+- Merging or rewriting principle leaves. They are small, upstream-owned, and
+  already load on demand.
+- Hill climbing or broad harness runs to tune thresholds in this work.
+- Removing any promise. Each cut above goes through the framework's review for
+  weakening coverage.

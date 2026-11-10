@@ -14,6 +14,11 @@ principles is not approval of every existing workflow, delegation step, or revie
 cost. The [suite alignment assessment](suite-alignment-audit.md) maps these
 decisions to existing mechanisms and distinguishes gaps from missing evidence.
 
+Two principles were added on 2026-11-10 after that assessment was applied to
+one playbook only. [Scope and rule ownership](#scope-and-rule-ownership) and
+[Lead model floor and subtraction](#lead-model-floor-and-subtraction) record
+them. Both are agreed design intent. Neither has runtime evidence yet.
+
 ## Two purposes
 
 The skill suite's purpose is to deliver spec-correct, maintainable changes through
@@ -29,6 +34,70 @@ reviewed revision. Merge is a separate event. This measurement endpoint does not
 replace the existing shipping playbook or shorten a user's requested task.
 
 ## Suite operating principles
+
+### Scope and rule ownership
+
+The principles govern the whole suite. Each rule has one owner, chosen by what
+it decides. A playbook cites rules. It does not restate them or hold one that
+another playbook needs.
+
+| Owner | Owns | Loaded |
+| --- | --- | --- |
+| Router ([mode entry](../skills/poteto-mode/SKILL.md) and [task triggers](../skills/poteto-mode/references/task-triggers.md)) | How a task is run. This covers intensity, independent scrutiny, the stop rule, the effort budget, and the completion endpoint. | Always, before a playbook is chosen. |
+| `principle-*` leaf skill | One judgment about the artifact, such as its design, tests, or complexity. | When its trigger arrives. |
+| Shared reference, such as the [review lens](../skills/poteto-mode/references/review-lens.md) or [delegation](../skills/poteto-mode/references/delegation.md) | The procedure for applying a rule. This covers the questions, the evidence, and when to leave the code alone. | When the step arrives. |
+| Playbook | The outcomes and their order for one task type. | When matched. |
+
+Three consequences follow.
+
+- A rule about how a task is run cannot live in a leaf or a playbook. It decides
+  which leaves, agents, and steps load, so it applies before any of them.
+- Where a leaf already owns a rule, the rule stays there. The test rule belongs
+  to `principle-test-behavior-not-implementation`. The complexity rule belongs
+  to `principle-laziness-protocol`. Proceeding on reversible work belongs to
+  `principle-never-block-on-the-human`.
+- A rule that two playbooks need belongs in neither. A principle implemented in
+  one playbook is not implemented.
+
+Some leaves describe both the artifact and the run, such as
+`principle-prove-it-works` and `principle-sequence-verifiable-units`. Leave them
+where they are until a demonstrated failure justifies a move.
+
+### Lead model floor and subtraction
+
+The router and every default route must work when the lead is a mid-tier model
+at medium reasoning effort. On 2026-11-10 that means Claude Sonnet 5.5, GPT-6.1
+Sol, or Grok 4.7, each at medium. A stronger lead is an upgrade, never a
+requirement. No default route may depend on the lead holding hundreds of
+standing instructions, choosing among dozens of similar skills, or tracking
+evidence freshness from memory.
+
+Design for the floor with one structure, not a branch per model tier.
+
+- **Scripts carry what is deterministic.** Route selection from recorded facts,
+  worklist creation, skill and gate lists, role resolution, brief assembly,
+  evidence freshness, and format checks belong in small scripts that print the
+  next action. Instructions carry judgment only. A script gives the same answer
+  on every model and harness.
+- **The lead decides little, and decides it early.** The lead supplies facts
+  and judgment. It does not derive policy. Identification of a skill, a
+  subagent role, an effort level, and a risk route must each be a short lookup,
+  not a reading of the whole suite.
+- **Less is more, and more so over time.** Models keep improving. An
+  instruction that compensates for a model weakness is temporary. Record why it
+  exists so it can be removed when the floor model no longer needs it.
+- **Subtraction is a supported operation.** Removing a skill, gate, playbook,
+  or rule must be one small change with a deterministic check that nothing
+  still depends on it. A structure that only makes addition cheap fails this
+  principle.
+
+This floor is a design target. No evaluation in this repository establishes
+that the current router meets it. Structural choices made toward it rest on
+published research, vendor guidance, and this repository's prior results, as
+the [suite alignment assessment](suite-alignment-audit.md#reassessment-on-2026-11-10)
+records. Report the floor as unverified until targeted evidence exists.
+
+### Operating principles
 
 Optimize both new work and maintenance of existing software. Measure them
 separately so improvement in one does not conceal degradation in the other.
@@ -244,6 +313,15 @@ because they are deferred. The ledger's static category is not runtime proof.
 The [closed efficiency pilot](results/2026-11-08-eval-efficiency.md) and other
 historical comparisons retain their limits. This framework authorizes no fresh
 model calls and claims no measured token savings.
+
+The [port value comparison](port-value/results/2026-10-19.md) is the only
+matched run that includes an arm without the suite. All three arms passed every
+task, so it shows no benefit and no harm to acceptance. The current port arm
+recorded 4,294,087 input tokens against 1,635,247 for native Codex and
+1,541,349 for upstream pstack. It did not activate poteto-mode, used two
+repetitions, and could not confirm whether parent usage includes child work.
+Treat it as an observed cost of installed skills on those tasks, not as a
+measured cost of the mode.
 
 The suite principles above are settled. Follow-up must define representative
 new-work and evolution cases, PR observations, thresholds, harness coverage and
