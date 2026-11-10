@@ -447,7 +447,7 @@ The follow-up change makes each outcome a strict prefix, as [PORTING.md](../PORT
 - **The manifest holds run policy only.** It keeps the gates and their cadence, the panel list, the skills a lightweight route keeps, and the flags of the seven playbooks that change code or take a risk route. That is the part a script must apply the same way every time, and the part a single edit should be able to subtract.
 - **The manifest holds nothing derivable.** File paths and the daily list are gone from it. A playbook with no flag has no entry, so a new upstream playbook needs no manifest change.
 
-The strict prefix keeps nine upstream-derived playbooks comparable with upstream after one sentence per step. No run has measured the rewording.
+The strict prefix keeps nine upstream-derived playbooks comparable with upstream after one sentence per step, except the four steps that PORTING.md lists as departures. No run has measured the rewording.
 ### What a lightweight Feature loads, by evidence
 
 Size is what a route places in the lead's context, and an instruction needs evidence that the floor model fails without it. This table applies that test to the 16 files a lightweight Feature loads at this branch's head, 128,497 bytes of Markdown plus 4,172 bytes of plan output. `python3 tools/check-route-bytes.py --report` reproduces the sizes. The labels come from results already recorded in this repository. No model ran for this table.

@@ -265,7 +265,7 @@ class GradeRun(unittest.TestCase):
         self.assertNotIn("deslop", trace["x_implicit_off"])
         self.assertIn('model="gpt-6-luna"', trace["x_turns"][0]["argv"])
         self.assertIn('model_reasoning_effort="xhigh"', trace["x_turns"][0]["argv"])
-        self.assertEqual(sorted(record), ["baseline", "case", "harness", "project", "skills_at", "timeout_s", "turns"])
+        self.assertEqual(sorted(record), ["baseline", "case", "harness", "lead_effort", "lead_model", "project", "skills_at", "timeout_s", "turns"])
         self.assertEqual(verdict["promises"]["deslop-hands-unsettled-comments-to-no-comments"]["failures"], ["deslop never loaded"])
 
     def test_a_run_with_host_skill_hits_writes_inconclusive_for_every_promise(self):

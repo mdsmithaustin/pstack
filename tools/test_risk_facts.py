@@ -49,6 +49,11 @@ class RiskFacts(unittest.TestCase):
         self.assertEqual(reach["files"], ["cart.py", "pricing.py"])
         self.assertEqual(reach["tests"], ["tests/test_pricing.py"])
 
+    def test_a_caller_with_a_non_ascii_name_keeps_its_real_path(self):
+        self.write("café.py", "from pricing import total\n", "add café")
+        reach = self.facts("pricing.py", "--symbol", "total")["symbols"][0]
+        self.assertIn("café.py", reach["files"])
+
     def test_untracked_path_is_flagged(self):
         (self.repo / "new.py").write_text("x = 1\n")
         entry = self.facts("new.py")["paths"][0]

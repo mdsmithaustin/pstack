@@ -121,7 +121,7 @@ For a migration, state the bar in the prompt:
 You might be wondering whether every change needs this. No. Most changes need none of it. A rough ladder:
 
 - A small, finished change you're unsure about needs `/interrogate` alone.
-- On the intensive route, a change that crosses two or more source files and admits several plausible shapes earns `/architect`, which brings `/arena` with it. On the standard route the lead compares the shapes itself. Feature chooses its route from risk evidence, not module count. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary.
+- In Bug fix, Feature, Refactoring, and Perf issue, `/architect` runs on the intensive route only. A change that crosses two or more source files and admits several plausible shapes earns `/architect`, which brings `/arena` with it. On the standard route the lead compares the shapes itself. Every other playbook keeps `/architect` as written. Feature chooses its route from risk evidence, not module count. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary.
 - A standalone decision where independent attempts would help, like naming, formats, or an algorithm, is `/arena` directly.
 - A coverage matrix, set of parallel checks, or race with declared arms is `/swarm`.
 - An open question you could answer by running something, like a layout, a timing, or an approach, gets a prototype, not a debate.

@@ -6166,7 +6166,7 @@
    "class": "substituted",
    "file": "04-design.md",
    "ported_as": [
-    "c8ed125cb921"
+    "83a892e198bc"
    ],
    "sources": [
     "upstream"
@@ -7149,15 +7149,6 @@
     "port"
    ],
    "text": "A config written before the panels shrank to three entries still lists four panel entries, so delete those panel lines, including any under `## codex`, or delete the file, then run `/setup-pstack` again."
-  },
-  "464ca5ab6894": {
-   "class": "promise",
-   "file": "02-poteto-mode.md",
-   "promise": "lightweight-route-works-directly",
-   "sources": [
-    "port"
-   ],
-   "text": "Lightweight work is done directly, with no delegate and no design panel."
   },
   "466c0e59800d": {
    "class": "promise",
@@ -8576,6 +8567,15 @@
    ],
    "text": "```text\n/poteto-mode take over this branch. read the decision log, figure out what's done, and continue from there. don't redo finished work.\n```"
   },
+  "6d6ad9ef7af2": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "lightweight-route-works-directly",
+   "sources": [
+    "port"
+   ],
+   "text": "Lightweight work is done directly, with no design panel and no delegate for the work, though a review that a rule requires still runs."
+  },
   "6d7fdb4a0edf": {
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
@@ -8677,18 +8677,6 @@
     "port"
    ],
    "text": "Forcing a test through brittle mocks proves less than running the real command, and the playbook is allowed to say so."
-  },
-  "70baf625c96e": {
-   "also": [
-    "lightweight-route-works-directly"
-   ],
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "user-sets-route-either-direction",
-   "sources": [
-    "port"
-   ],
-   "text": "Say `keep this lightweight` for a small change you understand. `/poteto-mode` then works directly, with no delegate and no design panel."
   },
   "70dd8431c562": {
    "class": "promise",
@@ -9042,6 +9030,18 @@
     "port"
    ],
    "text": "One attempt at a hard design locks in the first shape the model thought of."
+  },
+  "7a60ba864430": {
+   "also": [
+    "lightweight-route-works-directly"
+   ],
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "user-sets-route-either-direction",
+   "sources": [
+    "port"
+   ],
+   "text": "Say `keep this lightweight` for a small change you understand. `/poteto-mode` then works directly, with no design panel and no delegate for the work. A review that a rule requires still runs."
   },
   "7a704c1352d8": {
    "also": [
@@ -9408,6 +9408,19 @@
     "port"
    ],
    "text": "[Minimize Reader Load](../../skills/principle-minimize-reader-load/SKILL.md) collapses layers and hidden state a reader must hold in their head."
+  },
+  "83a892e198bc": {
+   "also": [
+    "architect-runs-arena-for-sketches",
+    "design-ladder-spares-small-changes"
+   ],
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
+   "sources": [
+    "port"
+   ],
+   "text": "In Bug fix, Feature, Refactoring, and Perf issue, `/architect` runs on the intensive route only. A change that crosses two or more source files and admits several plausible shapes earns `/architect`, which brings `/arena` with it. On the standard route the lead compares the shapes itself. Every other playbook keeps `/architect` as written. Feature chooses its route from risk evidence, not module count. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary."
   },
   "8453603b45b4": {
    "class": "promise",
@@ -11944,6 +11957,15 @@
    ],
    "text": "Steering prompts are one line:"
   },
+  "c5e1ebbac3fd": {
+   "class": "promise",
+   "file": "08-principles.md",
+   "promise": "poteto-mode-reads-principles-and-names-applied",
+   "sources": [
+    "port"
+   ],
+   "text": "Each name points at a complete rule the agent reads before applying it, so one phrase redirects the work more precisely than a paragraph of instructions."
+  },
   "c66c9dbd5657": {
    "class": "substituted",
    "file": "05-build-and-clean.md",
@@ -12100,19 +12122,6 @@
     "port"
    ],
    "text": "In context, that's enough."
-  },
-  "c8ed125cb921": {
-   "also": [
-    "architect-runs-arena-for-sketches",
-    "design-ladder-spares-small-changes"
-   ],
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
-   "sources": [
-    "port"
-   ],
-   "text": "On the intensive route, a change that crosses two or more source files and admits several plausible shapes earns `/architect`, which brings `/arena` with it. On the standard route the lead compares the shapes itself. Feature chooses its route from risk evidence, not module count. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary."
   },
   "c90f8c31210e": {
    "class": "context",
@@ -13399,12 +13408,13 @@
    "text": "Before handing it over, the generator follows that skill once on a scratch change that breaks the property, and the check must catch it."
   },
   "eaa8e814e68e": {
-   "class": "promise",
+   "class": "substituted",
    "file": "08-principles.md",
-   "promise": "poteto-mode-reads-principles-and-names-applied",
+   "ported_as": [
+    "c5e1ebbac3fd"
+   ],
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "Each name points at a complete rule the agent has already read, so one phrase redirects the work more precisely than a paragraph of instructions."
   },
