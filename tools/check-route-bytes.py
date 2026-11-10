@@ -40,11 +40,14 @@ ALWAYS = [
     "skills/pstack-harness/SKILL.md",
     "skills/pstack-harness/references/worklist.md",
 ]
-LOW = "low:evidence"
+LOW = "low:fixed evidence text"
+# The plan's endpoint line depends on the checkout's remotes and the tools on PATH. A fixed
+# value keeps the measurement the same on every machine.
+FIXED_ENDPOINT = ("reviewable PR", "remote and a forge CLI found", True)
 FACTS = {
     "lightweight": {},
-    "standard": {"reach": "material:evidence"},
-    "intensive": {"consequence": "material:evidence", "uncertainty": "material:evidence"},
+    "standard": {"reach": "material:fixed evidence text"},
+    "intensive": {"consequence": "material:fixed evidence text", "uncertainty": "material:fixed evidence text"},
 }
 OPT_IN_GATES = {"recap"}
 LINK = re.compile(r"\[[^\]]*\]\(([^)#\s]+\.md)(?:#[^)]*)?\)")
@@ -105,8 +108,8 @@ def route_files(root, plan_module, manifest, playbook, route):
     if entry.get("tiered"):
         levels = {name: LOW for name in manifest["facts"]} | FACTS[route]
     plan = plan_module.build(plan_module.argparse.Namespace(
-        playbook=playbook, user_route=None, raise_to=None, reason=None, second_opinion=None, harness="other", project=root, **levels,
-    ), manifest)
+        playbook=playbook, user_route=None, raise_to=None, reason=None, harness="other", project=root, **levels,
+    ), manifest, endpoint=FIXED_ENDPOINT)
     playbook_file = f"skills/poteto-mode/playbooks/{playbook}.md"
     linked = linked_reads(root, playbook_file)
     if plan["route"] == "lightweight":
@@ -119,7 +122,7 @@ def route_files(root, plan_module, manifest, playbook, route):
         files.append("skills/poteto-mode/playbooks/opening-a-pr.md")
         if plan["route"] != "lightweight":
             files.append("skills/poteto-mode/references/delegation.md")
-    skills = [skill for step in plan["steps"] for skill in step["loads"] + step["uses"]]
+    skills = [skill for step in plan["steps"] for skill in step["loads"] + step["uses"]] + plan["reply_loads"]
     skills += [gate["skill"] for gate in plan["gates"] if gate["skill"] and gate["id"] not in OPT_IN_GATES]
     files += [f"skills/{skill}/SKILL.md" for skill in skills]
     return list(dict.fromkeys(files)), len(plan_module.render(plan, "other").encode("utf-8"))

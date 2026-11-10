@@ -2399,7 +2399,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/SKILL.md",
-     "quote": "Run the commit, push, and PR steps without being asked."
+     "quote": "Up to that endpoint, run the commit, push, and PR steps without being asked."
     },
     {
      "file": "skills/poteto-mode/SKILL.md",
@@ -2922,7 +2922,7 @@
   },
   "poteto-mode-reads-principles-and-names-applied": {
    "check": "live",
-   "claim": "poteto-mode reads the Principles index at the start of every multi-step task and names each applied principle in its reply with the decision it changed.",
+   "claim": "poteto-mode loads a principle leaf when a step or trigger calls for it, and names each applied principle in its reply with the decision it changed.",
    "harness_sensitive": true,
    "live_case": "mid feature-run; prompt `use subtract before you add. delete the obsolete adapters first.` and `apply prove it works. run the real import flow.`; pass when the next actions change accordingly and the reply names the principle with the decision it changed.",
    "owners": [
@@ -3076,11 +3076,11 @@
   },
   "pr-steps-run-unasked": {
    "check": "static",
-   "claim": "A playbook that ends in Opening a PR commits, pushes, and opens the PR without a separate request from the user.",
+   "claim": "A playbook that ends in Opening a PR commits, pushes, and opens the PR without a separate request from the user, up to the endpoint the user or host states.",
    "evidence": [
     {
      "file": "skills/poteto-mode/SKILL.md",
-     "quote": "Run the commit, push, and PR steps without being asked."
+     "quote": "Up to that endpoint, run the commit, push, and PR steps without being asked."
     }
    ],
    "harness_sensitive": false,
@@ -3415,7 +3415,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/references/routes.md",
-     "quote": "The plan script maps the facts to a route. It needs no model and gives the same answer on every CLI."
+     "quote": "The plan script maps the facts to a route. It needs no model, and the same facts give the same route on every CLI."
     },
     {
      "file": "skills/poteto-mode/references/routes.md",
@@ -4236,7 +4236,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/SKILL.md",
-     "quote": "Skip a step only where its own text allows it, the user says no, or the project lacks what it needs, such as a git remote"
+     "quote": "Skip a step only where its own text allows it, the user says no, it lies past the endpoint, or the project lacks what it needs, such as a git remote"
     }
    ],
    "harness_sensitive": false,
@@ -4250,7 +4250,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/references/routes.md",
-     "quote": "The user can set the route in either direction."
+     "quote": "The user can set the route in either direction"
     },
     {
      "file": "skills/poteto-mode/references/routes.md",
@@ -8049,15 +8049,13 @@
    "text": "In an existing repository, the commits go on a branch off your main branch, not on main."
   },
   "61b9825f7364": {
-   "also": [
-    "triggered-principle-loads-before-code"
-   ],
-   "class": "promise",
+   "class": "substituted",
    "file": "08-principles.md",
-   "promise": "poteto-mode-reads-principles-and-names-applied",
+   "ported_as": [
+    "9448cfe4f24d"
+   ],
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "`/poteto-mode` reads their index at the start of every multi-step task, applies the ones the task triggers, and names each applied principle in its reply along with the decision it changed."
   },
@@ -10009,6 +10007,18 @@
     "port"
    ],
    "text": "Either way, the comment comes out."
+  },
+  "9448cfe4f24d": {
+   "also": [
+    "triggered-principle-loads-before-code"
+   ],
+   "class": "promise",
+   "file": "08-principles.md",
+   "promise": "poteto-mode-reads-principles-and-names-applied",
+   "sources": [
+    "port"
+   ],
+   "text": "`/poteto-mode` loads a principle when a step or trigger calls for it, and names each applied principle in its reply along with the decision it changed."
   },
   "94abf5e9dc8f": {
    "class": "context",

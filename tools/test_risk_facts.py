@@ -94,7 +94,28 @@ class RiskFacts(unittest.TestCase):
         self.assertTrue(report["paths"][0]["reach"]["unavailable"])
         text = subprocess.run([sys.executable, str(SCRIPT), "--project", str(self.repo), "pricing.py"],
                               capture_output=True, text=True, env=env).stdout
-        self.assertIn("unavailable, the search failed. Record reach as unknown.", text)
+        self.assertIn("unavailable, the search failed. Pass --symbol, or record reach as unknown.", text)
+
+    def test_a_missing_path_is_an_error_not_a_zero(self):
+        done = subprocess.run([sys.executable, str(SCRIPT), "--project", str(self.repo), "pricng.py"], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("does not exist", done.stderr)
+
+    def test_a_generic_file_name_gives_no_reassuring_zero(self):
+        (self.repo / "index.py").write_text("x = 1\n")
+        reach = self.facts("index.py")["paths"][0]["reach"]
+        self.assertTrue(reach["unavailable"])
+        self.assertIsNone(reach["other_files"])
+
+    def test_a_silent_or_hanging_gitnexus_falls_back(self):
+        env = self.fake_gitnexus('if [ "$1" = impact ]; then exit 0; fi\n')
+        report = self.facts("pricing.py", "--symbol", "total", env=env)
+        self.assertEqual(report["symbols"][0]["source"], "git grep (symbol)")
+
+    def test_whole_word_matching_ignores_longer_names(self):
+        self.write("subtotal.py", "def subtotal_total_x():\n    return 1\n", "add subtotal")
+        reach = self.facts("pricing.py", "--symbol", "total")["symbols"][0]
+        self.assertNotIn("subtotal.py", reach["files"])
 
     def test_no_match_is_a_real_zero(self):
         reach = self.facts("pricing.py", "--symbol", "nothing_names_this")["symbols"][0]

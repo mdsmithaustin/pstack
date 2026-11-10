@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -81,7 +82,7 @@ class RouteBytes(unittest.TestCase):
     def test_a_lighter_route_never_loads_more_than_a_heavier_one(self):
         report = load(BYTES, "check_route_bytes").measure(ROOT)
         for playbook in ("bug-fix", "feature", "refactoring", "perf-issue"):
-            sizes = [report[f"{playbook}:{route}"]["bytes"] for route in ("lightweight", "standard", "intensive")]
+            sizes = [report[f"{playbook}:{route}"]["markdown"] for route in ("lightweight", "standard", "intensive")]
             self.assertEqual(sizes, sorted(sizes), playbook)
 
     def test_context_counts_plan_output_and_linked_reads_but_no_script_source(self):
@@ -107,6 +108,19 @@ class RouteBytes(unittest.TestCase):
         self.assertEqual(done.returncode, 0)
         self.assertIn("skill scripts", done.stdout)
         self.assertIn("None of it is placed in the lead's context", done.stdout)
+
+    def test_the_measure_does_not_depend_on_the_checkout_path_or_installed_tools(self):
+        module = load(BYTES, "check_route_bytes")
+        with tempfile.TemporaryDirectory() as directory:
+            copy = Path(directory) / "a-much-longer-checkout-directory-name" / "repo"
+            copy.parent.mkdir()
+            shutil.copytree(ROOT / "skills", copy / "skills", ignore=shutil.ignore_patterns("node_modules", "__pycache__"))
+            (copy / "tools").mkdir()
+            shutil.copy(BYTES, copy / "tools/check-route-bytes.py")
+            done = subprocess.run([sys.executable, str(copy / "tools/check-route-bytes.py"), "--budgets",
+                                   str(ROOT / "tools/route-byte-budgets.json")], capture_output=True, text=True,
+                                  env={"PATH": "/usr/bin:/bin"}, cwd=directory)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
     def test_a_budget_below_the_load_fails_and_update_will_not_raise_it(self):
         with tempfile.TemporaryDirectory() as directory:

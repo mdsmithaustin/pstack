@@ -18,11 +18,17 @@ python3 "${PSTACK_SKILLS_ROOT:?}/poteto-mode/scripts/risk-facts.py" [--symbol <n
 | Accumulated complexity | `--complexity` | Repeated changes, growing conditionals, duplication, exceptions, and recurring repairs. Apply the review lens's [Accumulated complexity](review-lens.md#accumulated-complexity) check when extending code. |
 | Reversibility and detection | `--reversibility` | Whether a failure is visible, whether a rollback exists, and whether recovery preserves data. |
 
-`unknown` is an honest answer. A `low` with no evidence counts as `unknown`. File or line counts do not establish low risk. Do not commission a model to classify the risk.
+Write each fact as the level, a colon, and what you checked:
+
+```sh
+--reach "low:one caller in cli.py, found by grep" --consequence "material:writes the billing table"
+```
+
+`unknown` is an honest answer. A `low` with no evidence counts as `unknown`. So does a `low` whose evidence does not say what was checked, such as `ok` or `n/a`. Record all five facts even when the user names the route. File or line counts do not establish low risk. Do not commission a model to classify the risk.
 
 ## The three routes
 
-The plan script maps the facts to a route. It needs no model and gives the same answer on every CLI.
+The plan script maps the facts to a route. It needs no model, and the same facts give the same route on every CLI.
 
 - **Lightweight.** Every fact is low with evidence. Work directly. Spawn no investigation or implementation delegate and no panel. Load only the skills the plan lists. Keep preservation, real-surface proof, and independent scrutiny.
 - **Standard.** At least one fact is not low. Follow every step of the playbook. Compare design options yourself and record them. The panels (`architect`, `arena`, `interrogate`, `swarm`) stay unloaded. This limit covers only the four playbooks this reference routes. Any other playbook keeps the panels its own steps require.
@@ -32,14 +38,13 @@ When new evidence changes a fact, rerun the plan script and expand the worklist 
 
 ## Who can change the route
 
-- The user can set the route in either direction. Pass `--user-route <route>`. The worklist records `route: <name> (user)`.
+- The user can set the route in either direction, in plain words such as "keep this lightweight" or "be thorough". Pass `--user-route <route>`. The worklist records `route: <name> (user)`. When the plan warns that the user's route is below the table's, tell the user which facts are not low before the first edit.
 - You can raise the route with `--raise-to <route> --reason <why>`. You cannot lower it below the table's result.
-- A second opinion can raise a fact. It is off unless the repository holds `.agents/pstack-second-opinion` naming `codex` or `claude`. When it is on and the `risk-facts.py` evidence disagrees with a fact you recorded as low, run `python3 "${PSTACK_SKILLS_ROOT:?}/poteto-mode/scripts/second-opinion.py"` with the same facts, `--task`, and `--out <file>`, then pass `--second-opinion <file>` to the plan script. An unavailable answer changes nothing.
 - No route change skips a gate the repository requires, or the [authorization](authorization.md) that an irreversible action needs.
 
 ## Endpoint
 
-The endpoint is how far the task goes. The user's stated endpoint governs, and so does a host instruction such as "do not open a pull request unless asked". An endpoint is one of evidence, local commits, a pushed branch, a reviewable PR, or merge. Merge always needs its own authorization.
+The endpoint is how far the task goes. The user's stated endpoint governs, and so does a host instruction such as "do not open a pull request unless asked". This holds for every playbook, including one whose last step says to run **Opening a PR**. An endpoint is one of evidence, local commits, a pushed branch, a reviewable PR, or merge. Merge always needs its own authorization.
 
 With no stated endpoint, use the furthest reviewable state the repository supports. The plan prints it.
 
@@ -56,11 +61,7 @@ Steps past the endpoint stay in the worklist as `skipped: <reason>`.
 
 Write the budget in the opening item as the event that makes you change approach, such as two failed attempts on one premise or a repair that grows past the planned files. When it trips, change the approach and say so. Ask the user when the next step changes agreed scope, cost limits, or authority.
 
-Stop reviewing when the acceptance criteria hold and no material uncertainty remains. Another pass needs a named unresolved concern. After a repair, recheck the affected behavior and newly exposed risks only. Reuse valid evidence for unchanged scope. For a gate the plan marks tree-bound, test whether its evidence still describes the current tree:
-
-```sh
-python3 "${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/gate.py" check <gate>
-```
+Stop reviewing when the acceptance criteria hold and no material uncertainty remains. Another pass needs a named unresolved concern. After a repair, recheck the affected behavior and newly exposed risks only. Reuse valid evidence for unchanged scope.
 
 ## Independent scrutiny
 

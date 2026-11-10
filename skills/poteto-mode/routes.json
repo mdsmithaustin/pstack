@@ -22,8 +22,7 @@
         "lightweight": "before each push or published head",
         "standard": "before each push or published head",
         "intensive": "before every commit or amend"
-      },
-      "reuse": "tree"
+      }
     },
     {
       "id": "comment-prose",
@@ -33,8 +32,7 @@
         "lightweight": "before each push or published head",
         "standard": "before each push or published head",
         "intensive": "before every commit or amend"
-      },
-      "reuse": "tree"
+      }
     },
     {
       "id": "comments",
@@ -42,8 +40,7 @@
       "applies": "code",
       "when": {
         "all": "before review, when the diff adds or changes comments, doc comments, docstrings, or lint or type suppressions"
-      },
-      "reuse": "tree"
+      }
     },
     {
       "id": "commit-and-pr-prose",
@@ -59,8 +56,7 @@
       "applies": "code",
       "when": {
         "all": "before reporting a substantive code or public workflow change complete"
-      },
-      "reuse": "tree"
+      }
     },
     {
       "id": "reply-prose",
