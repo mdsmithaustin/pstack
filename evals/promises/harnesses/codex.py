@@ -277,7 +277,14 @@ def relay_review_turns(data, thread, child, spawn, args, parent_messages, comple
               and row["payload"].get("type") == "task_started"]
     turn_ids = [rows[start]["payload"].get("turn_id") for start in starts]
     actions = [event for event in harvest_rollout(data)["events"] if event["kind"] in ("tool_call", "tool_result")]
-    kept_actions = [event for event in actions[:160] if len(json.dumps(event)) <= 8192]
+    kept_actions = []
+    remaining = 160 * 8192
+    for event in actions[:160]:
+        size = len(json.dumps(event).encode())
+        if size > remaining:
+            break
+        kept_actions.append(event)
+        remaining -= size
     omitted_actions = len(actions) - len(kept_actions)
     omitted_turns = max(0, len(starts) - 8)
     ranges = list(zip(starts, starts[1:] + [len(rows)])) if starts else [(-1, len(rows))]

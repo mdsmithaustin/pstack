@@ -42,6 +42,7 @@ RELAY_POLICY = ("poteto-mode/SKILL.md", "poteto-mode/playbooks/feature.md",
 RELAY_DIFF = ("diff --full-index --binary --no-ext-diff --no-textconv --no-renames --no-color "
               "--no-prefix --diff-algorithm=myers --no-indent-heuristic --unified=10000")
 RELAY_READ = re.compile(
+    r'(?:// @exec: \{[ \t]*"max_output_tokens":[ \t]*[1-9][0-9]{0,5}[ \t]*\}[ \t]*\r?\n)?'
     r'text\(await tools\.exec_command\(\{\s*cmd:\s*("(?:[^"\\]|\\.)*"),\s*'
     r'workdir:\s*("(?:[^"\\]|\\.)*"),\s*max_output_tokens:\s*20000\s*\}\)\);?'
 )
