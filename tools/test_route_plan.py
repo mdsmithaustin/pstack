@@ -88,6 +88,11 @@ class Worklist(unittest.TestCase):
         self.assertEqual(result["steps"][0]["outcome"],
                          "**Reproduced.** The defect fires on the matching surface, under your control, on demand.")
 
+    def test_skills_a_step_names_without_a_load_sentence_are_still_shown(self):
+        root_caused = plan("bug-fix", *facts(reach="material:x"))["steps"][1]
+        self.assertEqual(root_caused["uses"], ["how", "why"])
+        self.assertEqual(plan("bug-fix", *LOW)["steps"][1]["uses"], [])
+
     def test_panels_load_only_on_intensive(self):
         standard = plan("feature", *facts(reach="material:x"))
         designed = next(step for step in standard["steps"] if step["name"] == "Designed")

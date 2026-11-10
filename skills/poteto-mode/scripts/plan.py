@@ -22,6 +22,7 @@ LEVELS = ("low", "material", "unknown")
 STEP = re.compile(r"^(\d+)\. (.*)$")
 BOLD = re.compile(r"\*\*(.+?)\*\*")
 LOAD = re.compile(r"call the Skill tool with `([a-z0-9-]+)`", re.I)
+NAMED = re.compile(r"(?:`([a-z0-9-]+)`|\*\*([a-z0-9-]+)\*\*) skill")
 SENTENCE_END = re.compile(r"(?<=[.!?])\s")
 FULL_READ = "Read this playbook in full."
 
@@ -173,7 +174,10 @@ def build(args, manifest):
                 continue
             else:
                 loads.append(skill)
-        planned.append({"number": number, "name": name, "outcome": outcome(text), "loads": loads,
+        named = [a or b for a, b in NAMED.findall(text)]
+        uses = [] if route == "lightweight" else [s for s in dict.fromkeys(named)
+                                                 if s not in loads and s not in held and (MODE.parent / s / "SKILL.md").is_file()]
+        planned.append({"number": number, "name": name, "outcome": outcome(text), "loads": loads, "uses": uses,
                         "held_for_intensive": held, "skipped": skips.get(name)})
 
     endpoint, endpoint_why, has_remote = default_endpoint(args.project)
@@ -241,6 +245,8 @@ def render(plan, harness):
             out.append(f"{step['number']}. {step['outcome']}")
             if step["loads"]:
                 out.append("   load: " + "; ".join(load_phrase(skill, harness) for skill in step["loads"]))
+            if step["uses"]:
+                out.append("   also uses, as the step's text says: " + ", ".join(step["uses"]))
             if step["held_for_intensive"]:
                 out.append("   intensive only: " + ", ".join(step["held_for_intensive"])
                            + ". Compare the options yourself and record them. Raise the route when you cannot choose.")
