@@ -60,7 +60,7 @@ def route_files(root, plan_module, manifest, playbook, route):
         files.append("skills/poteto-mode/playbooks/opening-a-pr.md")
         if plan["route"] != "lightweight":
             files.append("skills/poteto-mode/references/delegation.md")
-    skills = [skill for step in plan["steps"] for skill in step["loads"]]
+    skills = [skill for step in plan["steps"] for skill in step["loads"] + step["uses"]]
     skills += [gate["skill"] for gate in plan["gates"] if gate["skill"] and gate["id"] not in OPT_IN_GATES]
     files += [f"skills/{skill}/SKILL.md" for skill in skills]
     return list(dict.fromkeys(files))

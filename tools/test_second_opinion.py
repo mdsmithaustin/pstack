@@ -86,6 +86,18 @@ class SecondOpinion(unittest.TestCase):
                 code, result = self.ask(self.fake("claude", body))
                 self.assertEqual((code, result["status"]), (1, "unavailable"))
 
+    def test_an_earlier_answer_is_removed_before_each_run(self):
+        self.out.write_text(json.dumps({"status": "answered", "cli": "codex", "levels": {**ALL_LOW, "reach": "material"}}))
+        code, _ = self.ask()
+        self.assertEqual(code, 3)
+        self.assertFalse(self.out.exists())
+        self.switch("claude")
+        self.out.write_text(json.dumps({"status": "answered", "cli": "codex", "levels": {**ALL_LOW, "reach": "material"}}))
+        code, _ = self.ask(self.fake("claude", "cat >/dev/null\nexit 4\n"))
+        self.assertEqual(code, 1)
+        self.assertFalse(self.out.exists())
+        self.assertEqual(self.plan("--second-opinion", str(self.out))["route"], "lightweight")
+
     def test_a_second_opinion_never_lowers_a_fact(self):
         self.out.write_text(json.dumps({"status": "answered", "cli": "codex", "levels": ALL_LOW}))
         done = subprocess.run([sys.executable, str(PLAN), "feature", "--consequence", "low:a", "--reach", "material:12 callers",

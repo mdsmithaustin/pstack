@@ -80,6 +80,26 @@ class RiskFacts(unittest.TestCase):
         self.assertEqual(report["symbols"][0]["source"], "git grep (symbol)")
         self.assertTrue(any("gitnexus impact total failed" in note for note in report["notes"]))
 
+    def test_a_failed_search_is_unavailable_not_zero(self):
+        bin_dir = Path(self.directory.name) / "gitbin"
+        bin_dir.mkdir()
+        real = subprocess.run(["sh", "-c", "command -v git"], capture_output=True, text=True).stdout.strip()
+        tool = bin_dir / "git"
+        tool.write_text(f'#!/bin/sh\nfor a in "$@"; do if [ "$a" = grep ]; then echo boom >&2; exit 128; fi; done\nexec {real} "$@"\n')
+        tool.chmod(tool.stat().st_mode | stat.S_IEXEC)
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+        report = self.facts("pricing.py", "--symbol", "total", env=env)
+        self.assertTrue(report["symbols"][0]["unavailable"])
+        self.assertIsNone(report["symbols"][0]["other_files"])
+        self.assertTrue(report["paths"][0]["reach"]["unavailable"])
+        text = subprocess.run([sys.executable, str(SCRIPT), "--project", str(self.repo), "pricing.py"],
+                              capture_output=True, text=True, env=env).stdout
+        self.assertIn("unavailable, the search failed. Record reach as unknown.", text)
+
+    def test_no_match_is_a_real_zero(self):
+        reach = self.facts("pricing.py", "--symbol", "nothing_names_this")["symbols"][0]
+        self.assertEqual((reach.get("unavailable"), reach["other_files"]), (None, 0))
+
     def test_outside_a_repository_is_a_usage_error(self):
         with tempfile.TemporaryDirectory() as directory:
             done = subprocess.run([sys.executable, str(SCRIPT), "--project", directory, "a.py"], capture_output=True, text=True)

@@ -4,7 +4,8 @@
 A gate is any named check, such as cleanup, documentation, or scrutiny. `record` stores the
 gate's result with the Git tree it examined. `check` compares that tree with the current one
 and lists the paths that changed since. Evidence for an unchanged tree stays valid, so the
-gate does not repeat. Records live under the repository's Git directory and are never committed.
+gate does not repeat. Use it only for a gate whose whole input is the tree. A gate that also
+reads a reply, a PR body, or a baseline commit has inputs this record does not hold. Records live under the repository's Git directory and are never committed.
 
 By default the tree is the working tree: tracked changes plus untracked files that Git does
 not ignore. Pass --tree <commit-or-tree> to bind to committed content, such as HEAD.
@@ -19,7 +20,12 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
+
+LOCK_WAIT_SECONDS = 20
+LOCK_STALE_SECONDS = 120
 
 
 class GateError(Exception):
@@ -53,24 +59,53 @@ def store_path(project):
     return Path(git(project, "rev-parse", "--path-format=absolute", "--git-common-dir")) / "pstack" / "gates.json"
 
 
+@contextmanager
+def locked(path):
+    """Hold the store for one read-modify-write. Linked worktrees share the store, so they share the lock."""
+    lock = path.with_suffix(".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + LOCK_WAIT_SECONDS
+    while True:
+        try:
+            lock.mkdir()
+            break
+        except FileExistsError:
+            try:
+                if time.time() - lock.stat().st_mtime > LOCK_STALE_SECONDS:
+                    lock.rmdir()
+                    continue
+            except OSError:
+                continue
+            if time.monotonic() > deadline:
+                raise GateError(f"another gate record holds {lock}. Retry, or remove it if no gate.py is running.")
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        try:
+            lock.rmdir()
+        except OSError:
+            pass
+
+
 def load(path):
     return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
 
 
 def record(args):
     path = store_path(args.project)
-    records = load(path)
     tree = resolve_tree(args.project, args.tree)
-    records[args.gate] = {
-        "tree": tree,
-        "result": args.result,
-        "note": args.note or "",
-        "recorded_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-    }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    scratch = path.with_suffix(".tmp")
-    scratch.write_text(json.dumps(records, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    scratch.replace(path)
+    with locked(path):
+        records = load(path)
+        records[args.gate] = {
+            "tree": tree,
+            "result": args.result,
+            "note": args.note or "",
+            "recorded_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+        }
+        scratch = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        scratch.write_text(json.dumps(records, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        scratch.replace(path)
     print(f"recorded {args.gate}: {args.result} at tree {tree}")
     return 0
 

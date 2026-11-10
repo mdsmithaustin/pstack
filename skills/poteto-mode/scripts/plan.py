@@ -75,8 +75,17 @@ def render_step(args, manifest):
     elif args.route == "standard":
         panels = ", ".join(f"`{name}`" for name in manifest["panels"])
         out += [f"Standard route: the panels ({panels}) stay unloaded. Where this step names one, compare the options yourself and record them.", ""]
-    out += [text, "", "The bold outcome binds. The other sentences are the default route. Mark the item completed only with its evidence."]
+    out += [text, "", regime(args.playbook, manifest), "Mark the item completed only with its evidence."]
     return "\n".join(out)
+
+
+def regime(playbook, manifest):
+    """Which sentences of a step bind. Only outcome-first playbooks allow another route to the outcome."""
+    always = "Every prohibition, authorization limit, and confidentiality rule in a step binds."
+    if playbook in manifest["outcome_first"]:
+        return ("Outcome-first playbook: each step's bold outcome and its defining sentence bind. The step's other sentences "
+                "are a default route, and another route that reaches the outcome with evidence is fine. " + always)
+    return "Follow each step of this playbook as written. A script or another agent may read its output. " + always
 
 
 def playbook_path(playbook):
@@ -167,7 +176,7 @@ def pending(args, path, prose):
     """No facts yet: the worklist opens first, and the facts are its first item."""
     endpoint, endpoint_why, _ = default_endpoint(args.project)
     return {
-        "playbook": args.playbook, "file": str(path), "full_read": False, "route": "pending",
+        "playbook": args.playbook, "file": str(path), "full_read": False, "route": "pending", "regime": None,
         "route_source": "table", "route_reason": "no risk facts recorded yet", "tiered": True, "facts": {}, "second_opinion": None,
         "opening": prose, "steps": [], "lightweight_worklist": None, "gates": [], "scrutiny": None,
         "default_endpoint": endpoint, "default_endpoint_reason": endpoint_why,
@@ -226,7 +235,8 @@ def build(args, manifest):
         if gate["applies"] == "code" and not changes_code:
             continue
         when = gate["when"].get(route) or gate["when"]["all"]
-        gates.append({"id": gate["id"], "skill": gate.get("skill"), "run": gate.get("run"), "when": when})
+        gates.append({"id": gate["id"], "skill": gate.get("skill"), "run": gate.get("run"), "when": when,
+                      "reuse": gate.get("reuse")})
     scrutiny = None
     if changes_code:
         scrutiny = ("Credit an existing independent review of the current revision, or leave human PR review pending at delivery. "
@@ -234,6 +244,7 @@ def build(args, manifest):
                     "No remote, so no PR review exists to credit. Brief one `trail reviewer`, or report the user's review of the local branch as pending.")
     return {
         "playbook": args.playbook, "file": str(path), "full_read": any(line.startswith(FULL_READ) for line in prose),
+        "regime": regime(args.playbook, manifest),
         "route": route, "route_source": source, "route_reason": why, "tiered": tiered,
         "facts": {name: {"level": level, "evidence": evidence} for name, (level, evidence) in facts.items()},
         "second_opinion": second, "opening": prose, "steps": planned,
@@ -262,7 +273,7 @@ def render(plan, harness):
         out.append("Then: Record the five risk facts with evidence, as references/routes.md defines them. Change no file before this item closes.")
         out.append("Then: Rerun this script with the facts, and replace this item with the items it prints.")
         return "\n".join(out)
-    if plan["full_read"]:
+    if plan["full_read"] and not plan["steps"]:
         out.append(f"Then: Read {plan['file']} in full. It has no numbered steps.")
     elif plan["lightweight_worklist"]:
         by_name = {step["name"]: step for step in plan["steps"]}
@@ -280,6 +291,8 @@ def render(plan, harness):
     else:
         if plan["opening"]:
             out.append("   opening prose, kept with the first item: " + " ".join(plan["opening"]))
+        if plan["full_read"]:
+            out.append(f"Then: Read {plan['file']} in full. Its steps index the sections after them.")
         out.append("Then one item per step:")
         for step in plan["steps"]:
             out.append(f"{step['number']}. {step['outcome']}")
@@ -297,11 +310,14 @@ def render(plan, harness):
     out.append("gates:")
     for gate in plan["gates"]:
         action = load_phrase(gate["skill"], harness) if gate["skill"] else f"run `{gate['run']}`"
-        out.append(f"- {gate['id']}: {action}, {gate['when']}.")
+        reuse = " Tree-bound: `gate.py check` can show it is still current." if gate["reuse"] == "tree" else ""
+        out.append(f"- {gate['id']}: {action}, {gate['when']}.{reuse}")
     if plan["scrutiny"]:
         out.append("")
         out.append("independent scrutiny: " + plan["scrutiny"])
     out.append("")
+    if plan["regime"]:
+        out.append(plan["regime"])
     if not plan["full_read"]:
         out.append(f"When a step starts, print its full text: rerun this script as `{plan['playbook']} --step <number> --route {plan['route']}`.")
     out.append("Another review pass needs a named unresolved concern.")

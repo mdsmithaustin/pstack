@@ -25,7 +25,7 @@ python3 "${PSTACK_SKILLS_ROOT:?}/poteto-mode/scripts/risk-facts.py" [--symbol <n
 The plan script maps the facts to a route. It needs no model and gives the same answer on every CLI.
 
 - **Lightweight.** Every fact is low with evidence. Work directly. Spawn no investigation or implementation delegate and no panel. Load only the skills the plan lists. Keep preservation, real-surface proof, and independent scrutiny.
-- **Standard.** At least one fact is not low. Follow every step of the playbook. Compare design options yourself and record them. The panels (`architect`, `arena`, `interrogate`, `swarm`) stay unloaded.
+- **Standard.** At least one fact is not low. Follow every step of the playbook. Compare design options yourself and record them. The panels (`architect`, `arena`, `interrogate`, `swarm`) stay unloaded. This limit covers only the four playbooks this reference routes. Any other playbook keeps the panels its own steps require.
 - **Intensive.** Consequence is not low, and uncertainty or reversibility is not low. Follow every step, with the panels where a step or trigger names them.
 
 When new evidence changes a fact, rerun the plan script and expand the worklist before further edits. Retain the opening item and valid completed evidence.
@@ -56,7 +56,7 @@ Steps past the endpoint stay in the worklist as `skipped: <reason>`.
 
 Write the budget in the opening item as the event that makes you change approach, such as two failed attempts on one premise or a repair that grows past the planned files. When it trips, change the approach and say so. Ask the user when the next step changes agreed scope, cost limits, or authority.
 
-Stop reviewing when the acceptance criteria hold and no material uncertainty remains. Another pass needs a named unresolved concern. After a repair, recheck the affected behavior and newly exposed risks only. Reuse valid evidence for unchanged scope. To test whether a gate's evidence still describes the current tree, run:
+Stop reviewing when the acceptance criteria hold and no material uncertainty remains. Another pass needs a named unresolved concern. After a repair, recheck the affected behavior and newly exposed risks only. Reuse valid evidence for unchanged scope. For a gate the plan marks tree-bound, test whether its evidence still describes the current tree:
 
 ```sh
 python3 "${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/gate.py" check <gate>

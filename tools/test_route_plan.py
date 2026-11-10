@@ -93,6 +93,21 @@ class Worklist(unittest.TestCase):
         self.assertEqual(root_caused["uses"], ["how", "why"])
         self.assertEqual(plan("bug-fix", *LOW)["steps"][1]["uses"], [])
 
+    def test_fixed_procedures_keep_the_panels_their_steps_require(self):
+        loads = lambda name: {skill for step in plan(name)["steps"] for skill in step["loads"]}
+        self.assertIn("swarm", loads("autopilot-full"))
+        self.assertIn("arena", loads("eval"))
+        self.assertFalse(any(step["held_for_intensive"] for step in plan("autopilot-full")["steps"]))
+
+    def test_a_full_read_playbook_with_steps_still_lists_them(self):
+        result = plan("orchestrate")
+        self.assertTrue(result["full_read"])
+        self.assertEqual([step["name"] for step in result["steps"]][:3], ["Frame", "Install the runtime", "Pilot"])
+        text = run("orchestrate").stdout
+        self.assertIn("in full. Its steps index the sections after them.", text)
+        self.assertIn("1. **Frame.**", text)
+        self.assertNotIn("It has no numbered steps", text)
+
     def test_panels_load_only_on_intensive(self):
         standard = plan("feature", *facts(reach="material:x"))
         designed = next(step for step in standard["steps"] if step["name"] == "Designed")
@@ -162,6 +177,28 @@ class OneStep(unittest.TestCase):
         self.assertNotIn("--step", run("opening-a-pr").stdout)
 
 
+class BindingRegime(unittest.TestCase):
+    def test_outcome_first_playbooks_allow_another_route_but_keep_limits(self):
+        for text in (run("code-review").stdout, run("code-review", "--step", "10").stdout):
+            self.assertIn("Outcome-first playbook: each step's bold outcome and its defining sentence bind.", text)
+            self.assertIn("Every prohibition, authorization limit, and confidentiality rule in a step binds.", text)
+
+    def test_other_playbooks_are_followed_as_written(self):
+        for name in ("babysit", "visual-parity", "autonomous-run", "shipping"):
+            for text in (run(name).stdout,):
+                self.assertIn("Follow each step of this playbook as written.", text, name)
+                self.assertNotIn("default route", text, name)
+                self.assertIn("Every prohibition, authorization limit, and confidentiality rule", text, name)
+        self.assertIn("Follow each step of this playbook as written.", run("babysit", "--step", "1").stdout)
+
+    def test_every_outcome_first_step_opens_with_a_bold_outcome_and_a_sentence(self):
+        self.assertEqual(len(MANIFEST["outcome_first"]), 11)
+        for name in MANIFEST["outcome_first"]:
+            for line in (MODE / "playbooks" / f"{name}.md").read_text(encoding="utf-8").split("\n"):
+                if re.match(r"\d+\. ", line):
+                    self.assertRegex(line, r"^\d+\. \*\*[A-Z][^*`(]*\.\*\* \S", f"{name}: {line[:60]}")
+
+
 class GatesAndEndpoint(unittest.TestCase):
     def test_cleanup_runs_per_published_head_except_on_intensive(self):
         light = {gate["id"]: gate["when"] for gate in plan("feature", *LOW)["gates"]}
@@ -174,8 +211,21 @@ class GatesAndEndpoint(unittest.TestCase):
         recap = next(gate for gate in plan("feature", *LOW)["gates"] if gate["id"] == "recap")
         self.assertIn("only when the user or the repository", recap["when"])
 
-    def test_answer_playbooks_get_only_the_reply_gate(self):
-        self.assertEqual([gate["id"] for gate in plan("investigation")["gates"]], ["reply-prose"])
+    def test_every_playbook_gets_the_preserve_gate(self):
+        for name in ("investigation", "babysit", "opening-a-pr", "feature"):
+            args = LOW if name == "feature" else []
+            self.assertIn("preserve", [gate["id"] for gate in plan(name, *args)["gates"]], name)
+        self.assertEqual([gate["id"] for gate in plan("investigation")["gates"]], ["preserve", "reply-prose"])
+
+    def test_only_tree_bound_gates_are_marked_reusable(self):
+        gates = {gate["id"]: gate["reuse"] for gate in plan("feature", *LOW)["gates"]}
+        self.assertEqual({name for name, reuse in gates.items() if reuse == "tree"},
+                         {"cleanup", "comment-prose", "comments", "documentation"})
+        text = run("feature", *LOW).stdout
+        preserve = next(line for line in text.split("\n") if line.startswith("- preserve"))
+        reply = next(line for line in text.split("\n") if line.startswith("- reply-prose"))
+        self.assertNotIn("Tree-bound", preserve + reply)
+        self.assertIn("Tree-bound", next(line for line in text.split("\n") if line.startswith("- cleanup")))
 
     def test_endpoint_follows_the_repository(self):
         with tempfile.TemporaryDirectory() as directory:
