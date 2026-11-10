@@ -106,7 +106,22 @@ appropriate to their purpose; code evolution also needs preservation evidence.
 
 Keep the suite as small as possible while protecting promises and demonstrated
 benefits. Size includes instruction volume, overlapping skills, runtime context,
-repeated reviews, and maintenance burden. Consolidation is useful only when
+repeated reviews, and maintenance burden.
+
+Measure size as two separate numbers, and judge "less is more" on the first.
+
+- **Context** is what a route places in the lead's context: the skill and
+  reference Markdown the lead reads, and the text a script prints for it. This
+  is the suite's size. A change that moves text between files without deleting
+  it has not made the suite smaller.
+- **Maintenance surface** is the scripts, data files, and tests that support
+  the suite. A script's source never enters the lead's context, so it is not
+  size in the first sense. It is still a cost to own, and a new script needs
+  the same evidence of an unmet need as a new skill.
+
+`tools/check-route-bytes.py` reports context per route, and its `--surface`
+option reports the maintenance surface. Its counts are source bytes, which
+approximate tokens and omit reads a route makes only on a condition. Consolidation is useful only when
 agents still discover and apply the shared rule. Prefer an existing mechanism
 that works. A new skill or review step requires evidence of an unmet need.
 
