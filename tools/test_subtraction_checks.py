@@ -92,6 +92,30 @@ class RouteBytes(unittest.TestCase):
             sizes = [report[f"{playbook}:{route}"]["bytes"] for route in ("lightweight", "standard", "intensive")]
             self.assertEqual(sizes, sorted(sizes), playbook)
 
+    def test_context_counts_plan_output_and_linked_reads_but_no_script_source(self):
+        report = load(BYTES, "check_route_bytes").measure(ROOT)
+        review = report["code-review"]
+        self.assertGreater(review["plan_output"], 0)
+        self.assertEqual(review["bytes"], review["markdown"] + review["plan_output"])
+        self.assertIn("skills/interrogate/references/code-quality-review.md", review["files"])
+        self.assertIn("skills/poteto-mode/references/review-lens.md", review["files"])
+        self.assertIn("skills/poteto-mode/playbooks/opening-a-pr.md", report["shipping"]["files"])
+        for value in report.values():
+            self.assertTrue(all(name.endswith(".md") for name in value["files"]), value["files"])
+
+    def test_conditional_and_non_read_mentions_are_not_counted(self):
+        report = load(BYTES, "check_route_bytes").measure(ROOT)
+        self.assertNotIn("skills/poteto-mode/playbooks/opening-a-pr.md", report["code-review"]["files"])
+        self.assertNotIn("skills/pstack-harness/references/loops.md", report["bug-fix:standard"]["files"])
+        self.assertNotIn("skills/poteto-mode/references/delegation.md", report["feature:lightweight"]["files"])
+        self.assertIn("skills/poteto-mode/references/delegation.md", report["feature:standard"]["files"])
+
+    def test_surface_reports_scripts_apart_from_context(self):
+        done = subprocess.run([sys.executable, str(BYTES), "--surface"], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0)
+        self.assertIn("skill scripts", done.stdout)
+        self.assertIn("None of it is placed in the lead's context", done.stdout)
+
     def test_a_budget_below_the_load_fails_and_update_will_not_raise_it(self):
         with tempfile.TemporaryDirectory() as directory:
             budgets = Path(directory) / "budgets.json"
