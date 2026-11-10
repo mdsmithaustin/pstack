@@ -50,7 +50,7 @@ OPT_IN_GATES = {"recap"}
 LINK = re.compile(r"\[[^\]]*\]\(([^)#\s]+\.md)(?:#[^)]*)?\)")
 READ_VERB = re.compile(r"\b(read|open|opens|follow|apply|continue in)\b", re.I)
 PLAYBOOK_PATH = re.compile(r"`(playbooks/[a-z-]+\.md)`")
-CONDITIONAL = re.compile(r"^\W*(If|When|Where|For an?|On the|Otherwise|Only)\b")
+CONDITIONAL = re.compile(r"^\W*(If|When|Where|For|On the|Otherwise|Only)\b")
 RUN_PR = re.compile(r"\bRun \*\*Opening a PR\*\*")
 SENTENCE = re.compile(r"(?<=[.!?])\s+")
 SURFACE_SUFFIXES = {".py", ".ts", ".mjs", ".sh"}
@@ -60,7 +60,8 @@ def linked_reads(root, playbook_file):
     """References one hop from the playbook that an unconditional sentence tells the lead to read or run.
 
     A sentence that opens with a condition, such as "If" or "For a", names a read the route may not make,
-    so it is left out and the figure stays a floor.
+    so it is left out and the figure stays a floor. Only files under skills/ count. Repository documents
+    such as PORTING.md are written for maintainers, not loaded by a route.
     """
     path = root / playbook_file
     found = []
@@ -75,7 +76,7 @@ def linked_reads(root, playbook_file):
             targets.append(root / "skills/poteto-mode/playbooks/opening-a-pr.md")
         for target in targets:
             target = target.resolve()
-            if target.is_file() and target != path.resolve() and root.resolve() in target.parents:
+            if target.is_file() and target != path.resolve() and (root / "skills").resolve() in target.parents:
                 found.append(target.relative_to(root.resolve()).as_posix())
     return list(dict.fromkeys(found))
 
