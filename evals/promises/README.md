@@ -122,6 +122,54 @@ Read `promises.feature-delivers-spec-edges.measures` in each run's `verdict.json
 
 The [2026-11-01 comparison](results/2026-11-01-feature-edge-pass.md) owns the skills pin, harness options, results, and limits for reproducing that comparison. Use its skills pin for both arms, since the committed overlays require the exact resulting files. The implied spec's case-folding interpretation is contested, as that record explains.
 
+## Keep live evidence aligned with changes
+
+A live verdict is evidence about the bytes it ran against. `freshness.py` records those bytes with each verdict and reports the promises a change left without current evidence. It runs no model and authorizes no paid call.
+
+`receipts.json` holds one receipt per promise, harness, and case. A receipt carries the verdict counts, the skills commit, and SHA-256 digests of the promise's owner files at that commit, of the case's `case.json`, fixture, and history, and of the grader (`oracles.py` and `grade_boundary.py`). It holds no model answer, trace, or run path. The file stays in the ledger's canonical form.
+
+After a live wave, fold its verdicts in and commit the result with the change that was tested:
+
+```sh
+python3 evals/promises/freshness.py record "$RUN_OUT"
+```
+
+`record` skips a run it already counted, a run a dead login ended, and an arm case with `skill_overlays`, since that case runs rewritten skill text. It also refuses to replace a receipt that tested the current tree with a run that did not.
+
+`check` gives each live promise one state per policy harness:
+
+| State | Meaning |
+| --- | --- |
+| `fresh` | A bound case has a receipt whose owner and case digests match the tree. |
+| `missing` | No receipt exists for this harness. |
+| `stale` | An owner file, or the case, fixture, or history, changed after the receipt. The reason names the owner. |
+| `unsettled` | The verdict differs from the one it replaced, or runs disagree, with fewer than three runs on the same bytes. |
+| `disputed` | A reader recorded disagreement with the verdict. |
+| `deferred` | Every bound case is deferred, so nothing can run. |
+
+```sh
+python3 evals/promises/freshness.py check --base origin/main
+python3 evals/promises/freshness.py plan --base origin/main --budget-s 3600
+```
+
+`--base` limits the report to promises the change reaches: one of their owners changed, or an input of one of their bound cases did. Without it the report covers every live promise. `plan` prints, for each harness, the runnable cases that settle the most open promises per second of time limit, and the `live.py run` command for them. The summed time limit is an upper bound on a run, not a cost estimate. Under `--budget-s`, promises the picks do not reach stay listed as `uncovered`. An unsettled promise is planned on the case its receipt came from, so its repeats run on the same bytes.
+
+A verdict that matches the one it replaces settles in one run. A changed verdict needs three runs, which spends repetitions only where a result moved. A receipt with mixed runs reports each count rather than a majority.
+
+`freshness.json` is the policy. `harnesses` lists the harnesses a change must carry evidence for; Hermes and Grok stay out of it until their adapters return graded evidence, and `--harness` reports them on request. `blocking` lists promises whose debt fails `check --strict`. CI runs `check --strict` and prints the debt for every change. `--quiet` prints only the counts and the blocking debt, which is what `tools/gate-check.sh lint` shows. The list starts empty because no receipt predates this file, so the first reports show every live promise as `missing`. Add a promise to `blocking` once it has a receipt and a reason to gate on it.
+
+A grader change does not stale a receipt. `check` counts the receipts an earlier grader produced so their saved traces can be regraded without new answers.
+
+Freshness is self-reported and does not test the oracle. A receipt shows that a verdict was recorded for these bytes, not that the verdict is right. To put a person's reading behind PASS verdicts, take a sample and record the result:
+
+```sh
+python3 evals/promises/freshness.py audit-sample --count 5
+python3 evals/promises/freshness.py audit "$PROMISE" "$HARNESS" "$CASE" --agrees
+python3 evals/promises/freshness.py audit "$PROMISE" "$HARNESS" "$CASE" --disputes --note "passed on a keyword"
+```
+
+The sample is ordered by a digest of each receipt's identity, so it cannot favor verdicts that look easy to confirm. A disputed receipt is debt until a new run or a grader fix replaces it. An audit lasts as long as its receipt: a new run on changed bytes starts unread.
+
 ## Known oracle gaps
 
 These heuristic edges are open. Two have moved recorded verdicts.
@@ -149,6 +197,14 @@ No other listed edge is recorded as moving a verdict. Fix one only after a recor
 - A fake clipboard bound to an unrecognized constructor counts as rendered, as on trunk.
 - Disjoint fragments of one tail fail the present ask.
 - The `clipboard_reads` fixed point is quadratic on thousands of chained links.
+
+### Passes a do-nothing run can earn
+
+The edges above are found from FAIL verdicts, because a person reads each FAIL trace before it counts. Nothing reads a PASS by default, so an oracle that is too lenient stays unseen. `test_null_trace.py` grades two do-nothing traces against every runnable case with no project on disk. One has no events. In the other, every turn replies "Done." and calls no tool.
+
+Six promises pass at least one of them: `design-ladder-spares-small-changes`, `how-narrow-question-no-explorers`, `interrogate-read-only-when-asked`, `poteto-mode-sticky`, `short-prompt-continues-in-context`, and `steering-prompt-redirects-run`. Each oracle reads the absence of a bad action as success and requires no sign that the agent did the work. `interrogate-read-only-when-asked` also reads a project it cannot inspect as a project with no edits. A PASS on these promises is weak evidence until its trace is read; take them first in `freshness.py audit-sample` reviews.
+
+The test pins that list. A new promise that passes a do-nothing trace fails the test, and so does a fixed oracle that is still listed. These traces are the cheapest false-pass probe, not a complete one. They do not cover oracles that pass on a keyword in the reply or on a command that names a file without reading it.
 
 ## Parent grading authority
 
