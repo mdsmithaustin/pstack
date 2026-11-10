@@ -208,9 +208,12 @@ adds a skill.
    `trail reviewer` from Feature step 7 into the review lens. Each code-changing
    playbook's Proven step links it.
 4. Add two fields to the opening worklist item for every playbook. `endpoint`
-   takes evidence, local commits, reviewable PR, or merge. A stated endpoint
-   governs, including a host instruction such as "do not open a pull request
-   unless asked". `budget` names what would make the lead change approach.
+   takes evidence, local commits, pushed branch, reviewable PR, or merge. A
+   stated endpoint governs, including a host instruction such as "do not open a
+   pull request unless asked". Without one, the default is the furthest
+   reviewable state the repository supports, as the
+   [default endpoints](#default-endpoints) table lists. `budget` names what
+   would make the lead change approach.
 5. State once, in the router, that another review pass needs a named
    unresolved concern.
 6. In Refactoring step 1, reuse an adequate existing pin before writing one.
@@ -225,12 +228,15 @@ adds a skill.
    line of evidence. The script prints the route, the worklist items with
    their outcome sentences, the loads for each step in the current harness's
    own wording, the gates, the scrutiny requirement, and the endpoint and
-   budget fields to fill. `unknown` never yields lightweight.
+   budget fields to fill. `unknown` never yields lightweight. The table runs
+   on every task. [Route selection](#route-selection) gives the order and the
+   overrides.
 3. Add `skills/poteto-mode/scripts/risk-facts.py`. It gathers the evidence a
    command can gather: commit count and churn on the touched paths, caller
    count, and whether tests cover them. The lead judges consequence and
    uncertainty. This follows the framework's order of Git history and static
-   checks before model judgment.
+   checks before model judgment. [Reach evidence](#reach-evidence) gives its
+   GitNexus and grep rules.
 4. Cut the mode entry to a contract, a playbook table, and the instruction to
    run `plan.py`. Remove the Principles list from the entry, since the plan
    names each step's leaves. Lower the entry budget in
@@ -290,23 +296,106 @@ adds a skill.
    review: `pr-recap` as a default step, the per-commit `deslop` reread, the
    Principles list in the entry, and the copied design-smell sentence.
 
-**Phase 6. Record the floor.** Add `lead_model` and `lead_effort` to live
-result records so later targeted runs can show which promises hold on a
-mid-tier lead. This phase adds a field. It authorizes no runs.
+**Phase 6. Record what is supported.** This phase adds records. It authorizes
+no runs.
 
-### Decisions the maintainers need to make
+1. Add `lead_model` and `lead_effort` to live result records so later targeted
+   runs can show which promises hold on a mid-tier lead.
+2. Generate a capability-by-workflow table from existing results, one column
+   per harness. Mark a cell verified only where a result for that harness
+   exists, and unverified otherwise. Link it from the README's support
+   statement. Several results files record Hermes and Grok Build lanes as
+   inconclusive or not run, so the four-harness claim currently has no single
+   place that shows its evidence.
 
-1. Phase 2 derives a route from recorded categorical facts through a fixed
-   table. Feature currently says not to assign scores or commission a risk
-   classifier, and the first assessment advised against risk scoring. A lookup
-   on recorded facts involves no model and no numeric score, but it does
-   replace the lead's judgment of the route. Confirm that this is wanted.
-2. The suite tracks upstream. Phases 1 to 4 edit upstream-derived playbooks and
-   the entry, which raises the cost of each sync. The manifest and scripts are
-   port-owned and add none. Decide how much divergence in the entry is
-   acceptable.
-3. Defaults when the user states no endpoint. This assessment keeps a
-   reviewable pull request as the default and lets any stated endpoint win.
+#### Route selection
+
+The lead that runs the task judges the facts. The table applies the policy. No
+separate model chooses the route.
+
+1. `risk-facts.py` gathers churn, callers, and coverage for the touched paths.
+2. The lead records the five facts as `low`, `material`, or `unknown`, each
+   with one line of evidence.
+3. `plan.py` maps the facts to a route through a fixed table. This step always
+   runs and needs no model.
+4. An optional decision call can check the lead's answers. It reuses the
+   locked-down, tool-less CLI call that the
+   [bot-triage comparison](bot-triage/README.md) uses. It receives the same
+   packet and rates the same five facts. It runs only when the script's
+   evidence and the lead's answers disagree, such as low reach recorded on a
+   path with many callers.
+
+The decision call can raise the route. It cannot lower it. An unavailable or
+malformed answer leaves the table's result in place, as that runner already
+treats `unavailable` as no answer. The call ships switched off. A repository
+turns it on after its own comparison results give confidence in the call. The
+runner has adapters for Codex and Claude Code only, so the table must be
+sufficient alone on every harness.
+
+Overrides follow three rules.
+
+- The user can set the route in either direction. The worklist records it as
+  `route: <name> (user)`.
+- The lead can raise the route with a stated reason. It cannot lower the route
+  below the table's result.
+- No override skips a repository-required gate or the authorization that an
+  irreversible action needs.
+
+#### Reach evidence
+
+`risk-facts.py` follows the convention the review lens and Refactoring already
+use for GitNexus.
+
+- When `.gitnexus/` exists and `gitnexus` is on `PATH`, refresh the index with
+  `gitnexus analyze --index-only`, then take reach from `gitnexus impact`.
+  Otherwise count callers with grep.
+- Name the source of each number in the output, so a grep count is never read
+  as a graph result.
+- The index reflects the last analyzed commit. Report symbols that exist only
+  in the working tree as absent from the index, and grep those.
+- A missing or failing GitNexus is not an error. Fall back to grep and say so.
+  When both lookups fail, report reach as `unknown`.
+- Churn and coverage come from Git and the test runner.
+
+The suite's text shows `gitnexus impact` and `gitnexus context` taking a
+symbol. The script receives paths. Check the installed CLI's help for a
+path query before choosing how to map paths to symbols.
+
+#### Default endpoints
+
+A stated endpoint always wins. These defaults apply when the user states none.
+
+| The repository has | Default endpoint | Independent scrutiny |
+| --- | --- | --- |
+| A remote and a way to open a pull request | Reviewable PR | Human PR review can be credited. |
+| A remote and no pull request tool | Pushed branch, named in the reply | `trail reviewer`, or the user's review of the branch. |
+| No remote | Commits on a local branch, with the branch and its diff command in the reply | `trail reviewer`, or the user's review of the branch. |
+| No Git repository | `git init`, then the row above | Same as the row above. |
+
+Report scrutiny as pending until one of the listed reviews happens.
+
+### Decisions made on 2026-11-10
+
+The maintainer settled three questions this assessment raised.
+
+1. **Route by table.** Accepted as [Route selection](#route-selection)
+   describes: the table first on every task, an optional decision call that can
+   only raise the route, and user override in either direction. This replaces
+   Feature's instruction not to assign scores for the route itself. The table
+   uses categories, not numeric scores, and no model call is required.
+2. **Divergence from upstream.** Accepted. Phases 1 to 4 edit upstream-derived
+   playbooks and the entry, which raises the cost of each sync. The manifest
+   and scripts are port-owned and add none.
+3. **Default endpoint.** Accepted as [Default endpoints](#default-endpoints)
+   lists, including repositories with no remote.
+
+### Scope left out on purpose
+
+The first review of the suite also found that no task in the repository has
+headroom to show that a skill earns its place. Both matched baselines were
+saturated. Closing that gap needs new tasks and model runs, which this work
+excludes. The retention rule in the framework still applies. Phase 5 only makes
+the candidates visible and cheap to remove.
 
 ### Basis for these choices
 
