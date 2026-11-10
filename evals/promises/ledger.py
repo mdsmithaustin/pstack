@@ -215,7 +215,7 @@ def by_owner(ledger, units):
     listed = sorted(p.parent.relative_to(ROOT).as_posix() for p in (ROOT / "skills").glob("*/SKILL.md"))
     for unit in listed:
         out.setdefault(unit, {})
-    wanted = [u if u in out or "/" in u else f"skills/{u}" for u in units]
+    wanted = [owner_unit(u.rstrip("/")) if "/" in u or u in out else f"skills/{u}" for u in units]
     return {u: out.get(u, {}) for u in wanted} if wanted else dict(sorted(out.items()))
 
 

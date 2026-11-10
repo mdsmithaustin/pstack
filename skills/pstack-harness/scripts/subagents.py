@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import sys
 import tempfile
 
@@ -290,7 +291,7 @@ def render_clauses(args: argparse.Namespace) -> str:
         else:
             lines.append("The project has no repository trunk yet, so commit on its first branch.")
         lines.append("Never commit credential files such as `.env`, or the user's own notes and data they did not ask to version.")
-        lines.append(f"Before every commit, run `{PRESERVE}{args.start_commit}` and return its last output for each commit. "
+        lines.append(f"Before every commit, run `{PRESERVE}{shlex.quote(args.start_commit)}` and return its last output for each commit. "
                      "Fix each failure in code. Use `--reasons <file>` only where the playbook allows a waiver, and return the file.")
         lines.append(f"Complete deslop's Before each commit check {CLEANUP[args.cleanup]}, and return one evidence reference for each checked scope.")
         lines.append("Commit the tests with the code that passes them.")

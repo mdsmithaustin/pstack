@@ -37,6 +37,10 @@ class BriefClauses(unittest.TestCase):
     def test_project_without_a_repository_names_no_branch(self):
         self.assertIn("no repository trunk yet", clauses("--source", "t.md")[1])
 
+    def test_a_start_commit_with_a_space_stays_one_argument(self):
+        text = clauses("--source", "t.md", "--start-commit", "no commits")[1]
+        self.assertIn("preserve.py\" --since 'no commits'`", text)
+
     def test_source_is_required(self):
         self.assertEqual(clauses()[0], 2)
 

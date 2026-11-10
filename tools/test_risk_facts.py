@@ -117,6 +117,16 @@ class RiskFacts(unittest.TestCase):
         reach = self.facts("pricing.py", "--symbol", "total")["symbols"][0]
         self.assertNotIn("subtotal.py", reach["files"])
 
+    def test_running_from_a_subdirectory_still_names_repository_paths(self):
+        (self.repo / "pkg").mkdir()
+        self.write("pkg/tax.py", "from pricing import total\n", "add tax")
+        done = subprocess.run([sys.executable, str(SCRIPT), "--project", str(self.repo / "pkg"), "--json", "tax.py", "--symbol", "total"],
+                              capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        reach = json.loads(done.stdout)["symbols"][0]
+        self.assertIn("cart.py", reach["files"])
+        self.assertIn("tests/test_pricing.py", reach["tests"])
+
     def test_no_match_is_a_real_zero(self):
         reach = self.facts("pricing.py", "--symbol", "nothing_names_this")["symbols"][0]
         self.assertEqual((reach.get("unavailable"), reach["other_files"]), (None, 0))

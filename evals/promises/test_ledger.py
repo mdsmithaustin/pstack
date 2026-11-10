@@ -210,6 +210,11 @@ class ByOwnerTest(unittest.TestCase):
         self.assertEqual(report["skills/pr-recap"], {})
         self.assertEqual(ledger.by_owner(self.LEDGER, ["pr-recap"]), {"skills/pr-recap": {}})
 
+    def test_a_file_path_or_trailing_slash_resolves_to_its_skill(self):
+        for unit in ("skills/how/SKILL.md", "skills/how/", "skills/how"):
+            with self.subTest(unit=unit):
+                self.assertEqual(ledger.by_owner(self.LEDGER, [unit]), {"skills/how": {"a": "live", "b": "static"}})
+
     def test_counts_print_one_line_per_unit(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):

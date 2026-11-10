@@ -342,6 +342,21 @@ class Manifest(unittest.TestCase):
             for step in named:
                 self.assertIn(step, steps, f"{name}: {step}")
 
+    def test_routed_playbooks_delegate_only_where_the_spawn_rule_calls_for_it(self):
+        for name in ("bug-fix", "refactoring", "perf-issue"):
+            text = (MODE / "playbooks" / f"{name}.md").read_text(encoding="utf-8")
+            self.assertIn("(../references/delegation.md)'s spawn rule calls for one", text, name)
+        self.assertIn("**Spawn up or out, never sideways.**", (MODE / "references/delegation.md").read_text(encoding="utf-8"))
+
+    def test_the_panel_limit_names_the_four_routed_playbooks(self):
+        triggers = (MODE / "references/task-triggers.md").read_text(encoding="utf-8")
+        line = next(line for line in triggers.split("\n") if line.startswith("- Code that crosses"))
+        self.assertIn("In Bug fix, Feature, Refactoring, and Perf issue this applies on the intensive route only.", line)
+
+    def test_a_sandbox_alone_is_not_a_gated_repository(self):
+        text = (MODE / "playbooks/opening-a-pr.md").read_text(encoding="utf-8")
+        self.assertIn("`SANDBOX_NAME` alone does not make it gated.", text)
+
     def test_tiered_playbooks_cite_routes_and_scrutiny(self):
         for name, entry in MANIFEST["playbooks"].items():
             if entry.get("tiered"):
