@@ -11978,6 +11978,15 @@
    ],
    "text": "Steering prompts are one line:"
   },
+  "c5e1ebbac3fd": {
+   "class": "promise",
+   "file": "08-principles.md",
+   "promise": "poteto-mode-reads-principles-and-names-applied",
+   "sources": [
+    "port"
+   ],
+   "text": "Each name points at a complete rule the agent reads before applying it, so one phrase redirects the work more precisely than a paragraph of instructions."
+  },
   "c66c9dbd5657": {
    "class": "substituted",
    "file": "05-build-and-clean.md",
@@ -13408,12 +13417,13 @@
    "text": "Before handing it over, the generator follows that skill once on a scratch change that breaks the property, and the check must catch it."
   },
   "eaa8e814e68e": {
-   "class": "promise",
+   "class": "substituted",
    "file": "08-principles.md",
-   "promise": "poteto-mode-reads-principles-and-names-applied",
+   "ported_as": [
+    "c5e1ebbac3fd"
+   ],
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "Each name points at a complete rule the agent has already read, so one phrase redirects the work more precisely than a paragraph of instructions."
   },

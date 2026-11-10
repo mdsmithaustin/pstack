@@ -2,7 +2,7 @@
 
 pstack ships 24 principles as individual skills. `/poteto-mode` loads a principle when a step or trigger calls for it, and names each applied principle in its reply along with the decision it changed.
 
-You don't invoke principles. You use their names to steer. Each name points at a complete rule the agent has already read, so one phrase redirects the work more precisely than a paragraph of instructions.
+You don't invoke principles. You use their names to steer. Each name points at a complete rule the agent reads before applying it, so one phrase redirects the work more precisely than a paragraph of instructions.
 
 ## Steering in practice
 
