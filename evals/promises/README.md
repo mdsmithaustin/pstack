@@ -171,7 +171,7 @@ Old raw run directories need explicit trusted retention import. Supplying a dire
 
 The grader admits worktree members only within the workspace allocations declared before turns, or specific sibling roots named by trusted fixture or retention setup. Each linked member must match the bound common Git directory and its reverse pointer. An unapproved discovered worktree refuses before content or Git access to that tree. Trusted setup creates the harness scratch roots and declares them before turns, so an arena or review worktree the agent registers under its `TMPDIR` or the Hermes profile cache is graded. An absent project, legacy baseline, incomplete trace, and timed-out turns retain their existing oracle behavior.
 
-Raw run storage must sit outside every candidate writable project, worktree, and workspace allocation, including for retained imports with separate diagnostic output. Missing registered worktree `.git`, `commondir`, or reverse-pointer files produce an `unapproved_git` refusal receipt. Invalid UTF-8 or NUL bytes in these path files also produce `unapproved_git`. Codex and Grok traces may retain either the full trusted turn list or the adapters' exact six-field projection. The projection preserves every turn's index, session ID, argv, exit code, timeout flag, and duration in order. Other subsets, added fields, changed values, and changed turn counts refuse. Sealing preserves the harvested trace.
+Raw run storage must sit outside every candidate writable project, worktree, and workspace allocation, including for retained imports with separate diagnostic output. Missing registered worktree `.git`, `commondir`, or reverse-pointer files produce an `unapproved_git` refusal receipt. Invalid UTF-8 or NUL bytes in these path files also produce `unapproved_git`. Codex and Grok traces may retain either the full trusted turn list or the adapters' exact six-field projection. The projection preserves every turn's index, session ID, argv, exit code, timeout flag, and duration in order. Other subsets, added fields, changed values, and changed turn counts refuse. Sealing preserves the harvested trace. The Relay recovery case refuses to seal an already sealed authorization.
 
 ## Retain Hermes evidence
 
@@ -261,7 +261,7 @@ For the Claude Code, Codex, and Grok adapters, `live.execute` creates each turn'
 Each adapter in `harnesses/` isolates its harness from the host's own skills and settings:
 
 - **Claude Code.** An outer Seatbelt profile denies filesystem reads and writes except the fixture, private runtime state, and reviewed read dependencies. Support requires the measured Darwin `25.6.0` arm64 host and Claude Code's native install below the current account's home. The adapter reads the installer's `.local/bin/claude` symlink. It must hold the absolute path of a file directly inside `.local/share/claude/versions` whose name is a release number such as `2.1.304`. Neither that file nor any directory above it may be a link. `/usr/bin/codesign --verify --strict` must accept the file against Anthropic's Developer ID Application requirement, with identifier `com.anthropic.claude-code` and team `Q6L2SF6YDW`. An unsigned file, a file from another signer, a directory or other non-regular file, or a launcher that points anywhere else raises `IsolationUnavailable`. Admission digests the file before and after `codesign` runs and refuses a change between the two. Every later check holds the run to that digest. No release is pinned, so a Claude Code update needs no adapter change. Admission runs once per `live.py` process, so every run in a batch uses the same release. If the installer deletes that release during a `live.py run`, the next check raises `FileNotFoundError` and stops that process. A new `live.py` process admits the current release. `launch.json` in the run root records the admitted `path`, `version`, and `sha256`. Its `fingerprints` field maps the path of each executable the run is held to (Claude Code, Python, Node, ripgrep, and Git) to the digest every later check holds the run to. Harvest copies that record to `x_binary`. Python and Node require the mise directories `.local/share/mise/installs/python/3.14.7` and `.local/share/mise/installs/node/24.20.0` below that same home. The adapter snapshots the operating system account database at import, so an exported `HOME` does not select these runtime paths. Within those directories, only the `bin/python3.14` and `bin/node` executable digests are pinned. Ripgrep requires `/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-path/rg`, and that file must not be a link. `/usr/bin/codesign --verify --strict` must accept it against OpenAI's Developer ID Application requirement, with identifier `com.openai.codex.rg` and team `2DC432GLL2`. An unsigned file or a file from another signer, an ad hoc re-signed copy included, raises `IsolationUnavailable`. No ripgrep build is pinned, so the ChatGPT app can re-sign or update ripgrep with no adapter change. Admission digests ripgrep before and after `codesign` runs, as it does for Claude Code. Git requires `/Library/Developer/CommandLineTools/usr/bin/git` with one of the two fingerprints listed above. Preparation records the measured executable digest. Later checks reject a different digest, even if it is another supported Git build or a ripgrep that OpenAI signed. The fixed child `PATH` selects that native Git. Read grants include its `usr/libexec/git-core` and `usr/share/git-core/templates` directories and literal `usr/share/git-core/gitattributes` file. The adapter also grants named system tools for reading. They include `dirname`, `basename`, `date`, and `mktemp`, which skill commands call. Read grants also cover `/System/Library`, `/usr/lib`, literal locale and resolver files, and the user's `Library/Keychains` tree. Literal read grants include `/`, `/private/etc/hosts`, `/dev/null`, `/dev/random`, and `/dev/urandom`. Writes also permit `/dev/null` and `/dev/fd`. It does not derive grants from the host `PATH`. Unsupported hosts, missing dependencies, changed executables, invalid policy, or substituted directories stop launch. `--setting-sources user,project` loads installed project skills and agents and a private user scope. Preparation writes that scope's `settings.json` in the run's `CLAUDE_CONFIG_DIR` with `syncClaudeAiSkills` and `syncClaudeAiPlugins` off, so the account's own skills and plugins stay out of the run. When the installed tree has `setup-pstack/scripts/skill-listing.py`, preparation runs its `install` against that file and the installed skills, as a user who ran setup-pstack would. It keeps the script's stdout in `skill-listing-install.json` and stops on a nonzero exit or a state other than `current`. A tree without the script installs nothing. `skill-listing.json` in the run root records the step (`installed` or `absent`) and the name-only skills, and harvest copies it to `x_skill_listing`. The Seatbelt policy grants no read of the host's `~/.claude`. Strict empty MCP configuration applies to initial and resumed turns. Under bash, the shell the adapter sets, only the granted tools resolve by bare name. The policy does not restrict process execution, so a command that names a regular, non-setuid system executable by its full path still starts it, and so does a program that searches `PATH` itself. The boundary restricts filesystem access. Network, signals, and IPC remain unconfined.
-- **Codex.** A moved `HOME` and a private `CODEX_HOME` with an `auth.json` link preserve login without loading host settings. `--disable apps` excludes account apps and their `codex_apps` MCP tools on initial and resumed turns. Harvest reads each rollout once through no-follow descriptors, then retains and parses those same bytes. A linked rollout, dangling or not, raises `GradeRefused` before any of its bytes are read. A linked directory in the rollout store and a linked copy destination raise it too. The error stops the entire `live.py run` batch before the affected run gets `trace.json` or `verdict.json`.
+- **Codex.** A moved `HOME` and a private `CODEX_HOME` with an `auth.json` link preserve login without loading host settings. `--disable apps` excludes account apps and their `codex_apps` MCP tools on initial and resumed turns. Both launch paths use the fixture as the command workspace and explicitly allow writes to its `.git` and the run's `tmp`. They disable implicit grants for `/tmp` and `TMPDIR`. Harvest reads each rollout once through no-follow descriptors, then retains and parses those same bytes. A linked rollout, dangling or not, raises `GradeRefused` before any of its bytes are read. A linked directory in the rollout store and a linked copy destination raise it too. The error stops the entire `live.py run` batch before the affected run gets `trace.json` or `verdict.json`.
 - **Hermes.** A throwaway `docker run` of the existing local gateway image, with a temp `HERMES_HOME` and `auth.json` mounted read-only. Preparation resolves the local image ID once. Every probe and turn uses that ID with `--pull=never`, including when `HERMES_IMAGE` names a mutable tag.
 - **Grok Build.** A temp `HOME` and `GROK_HOME`, with a read-only auth provider for the host login described in [Run live cases](#run-live-cases). Harvest copies session files through no-follow descriptors as Codex harvest does, with the same `GradeRefused` batch stop on a link. It parses session evidence only from the bytes each copy read and wrote, so it never reopens a native or captured session file after the copy. A swapped link or rewrite on either side is never read. A session file that vanishes before its copy raises `GradeRefused` with the same batch stop.
 
@@ -271,7 +271,7 @@ Claude session files stay in the private native store for resume. Harvest reject
 
 After harvest succeeds, a timeout, nonzero exit, missing successful native result or child evidence, or an explicit native `run_in_background` request leaves `x_evidence_complete` false. Retained events can still show bounded behavior. The completion field does not infer background execution from arbitrary shell command text and does not establish process quiescence. Process-group termination does not establish that detached writers stopped.
 
-The adapters avoid direct filesystem writes to the user's own harness configuration. Claude still shares the host login Keychain item through credential services. Grok preflight can run the host `grok models`, which rewrites the host `auth.json` when it renews the token and deletes it when the server rejects the refresh. Claude denies shared `/tmp` paths outside its run and does not take the host fixture lock. The other host adapters still permit literal `/tmp` paths named after the project. `live.py` runs one case of a fixture at a time for those adapters, unless the case sets `tmp_lock` to false. `live.py` opens the host fixture lock file, `pstack-live-<fixture>.lock` in the temp directory, without truncating it. A symbolic link at that path raises `OSError` with errno `ELOOP`.
+The adapters avoid direct filesystem writes to the user's own harness configuration. Claude still shares the host login Keychain item through credential services. Grok preflight can run the host `grok models`, which rewrites the host `auth.json` when it renews the token and deletes it when the server rejects the refresh. Grok still permits literal `/tmp` paths named after the project. `live.py` runs one Grok case of a fixture at a time unless the case sets `tmp_lock` to false. It opens the host fixture lock file, `pstack-live-<fixture>.lock` in the temp directory, without truncating it. A symbolic link at that path raises `OSError` with errno `ELOOP`.
 
 Claude Code and Codex cases exclude account MCP servers. The parallel half of `why-queries-evidence-categories-in-parallel` remains unmeasured without a common stub issue-tracker MCP on every harness.
 
@@ -280,3 +280,84 @@ Claude Code and Codex cases exclude account MCP servers. The parallel half of `w
 `ProbeTraces` grades the recorded Feature traces against `testdata/feature-before-408/`, which preserves the Feature playbook from commit `75efe21e4cf6f71b2983753d6f210551a090b6b8`. Their reduced step labels depend on that wording. This fixture is historical evaluator input, not evidence that agents follow the current Feature instructions. Synthetic worklist tests continue to use the current playbook.
 
 `cases/<id>/case.json` sets the cases. `deferred` marks a case this suite records but does not run yet, with the reason. Prompts follow the blinding rules in `skills/poteto-mode/playbooks/eval.md`, and `test_oracles.py` rejects meta words in prompts and fixtures.
+
+The source-count oracle remains for historical traces. Its controls use `testdata/feature-before-420/`, which retains only the opening, Specified, and Built steps from commit `03ae58579ea9c8e4883c6e82b929f09b4328d50b`. The current `feature-source-count-run` case instead checks compact direct implementation. The opening oracle recognizes a Feature record with its playbook path and start-commit field in the first item, after checking for a full playbook opening. It does not establish retained obligations, risk eligibility, or completed outcomes.
+
+The direct-execution oracle observes changes in the case's `expect.implementation_paths` in the supplied project checkout, including tracked dirty and untracked files. It does not collect changes from other branches. The registered-run grader supplies the fixture checkout, not an independently selected delivery reference. Multiple worktrees leave delivery selection inconclusive. The roster case observes Python files under `roster/`; a change there is only an implementation precondition, not proof of the requested behavior.
+
+The oracle reads role names only from the original spawn tool call's `agent_type` or `subagent_type` fields. It strips surrounding whitespace and lowercases the string before matching registered roles. When both fields have non-null values, they must agree before that normalization. Known implementation roles, architect and arena runner roles fail; known read-only roles (`trail reviewer`, `how explorer`, and the other registered reader roles, plus `explore`, `plan`, `explorer`, and `comment-sicko`) permit the check to continue. Missing, generic, conflicting or unrecognized values are inconclusive. Normalized persona fields, task names, brief text and child replies never establish assignments, even when they contain a role declaration. An encrypted brief can be graded only when its original structured role is available. Independently observed violations still fail when an assignment is unknown. These include an architect runner instruction read, another spawn's known implementation/design role, or a confirmed absence of changes in the case implementation paths. Recognized full-step worklists also fail. These are bounded observations: they do not establish semantic role equivalence, implementation correctness, acceptance coverage, preservation, independent review status or sound risk assessment. Equivalent expanded plans may escape the full-step recognizer. The boundary case grades design fan-out only. No efficiency improvement follows from these checks.
+
+`feature-boundary-run` uses the case-local `relay-delivery-journal` history.
+The base relay fixture eagerly loads and parses before writing, so its read
+retry helper can settle a simple retry request without a consequential design
+choice. The history instead appends synced deliveries consumed in order by
+external readers. A process exit can leave a durable prefix, including a write
+whose caller never received success. Restart recovery must avoid duplicate or
+missing deliveries while retaining that prefix. The case limits the task to one
+writer and an unchanged feed with unique IDs. It does not prescribe a recovery
+design or ask for a named role. The earlier retry-only case's native failure
+remains historical evidence; it is not a pass for this revision.
+
+`python3 -m unittest discover -s evals/promises -p test_recovery_fixture.py`
+executes the history through the real fixture builder and importer in child
+processes. A nonzero exit or zero tests run is a failed check. These controls
+show durable partial effects, source ordering, empty and singleton inputs, and
+reject a whole-import retry or naive restart as duplicate delivery. They check
+the fixture's premise, not a model's recovery implementation. The unchanged
+boundary oracle observes design fan-out; it does not prove recovery correctness,
+full-route selection, or scrutiny before implementation.
+
+### Grade the Relay recovery obligations
+
+Select `feature-recovery-obligations-run` explicitly on the supported Codex host.
+`feature-boundary-run` remains separately selectable for the historical fan-out
+check. Use the recovery case for current policy validation.
+
+```sh
+python3 evals/promises/live.py run --harness codex --case feature-recovery-obligations-run --out "$RUN_OUT"
+```
+
+Reuse the collection directory you supplied as `RUN_OUT` and the authorization
+ID reported by the run as `RUN_ID`. The case
+asks the agent to declare its committed delivery and the independent native
+reviewer to read the full Git diff in a single tool call. A staged tree can
+supply that diff if it matches the delivered commit. The controller binds the
+pre-turn policy and baseline, the reviewer’s read and report from the same
+native review turn, and the committed files. The probe runs those files in
+fresh Python processes. For both JSON and CSV feeds, it checks delivery order,
+durable journal writes, backoff between retries, lost acknowledgments,
+interrupted writes, and reruns that preserve the committed prefix.
+
+A verdict marked `needs_judge` has native evidence the authorized host
+adjudicator can assess. The private packet lists the available recovery and
+review observations. Missing evidence can leave an obligation open after
+adjudication.
+
+```sh
+python3 evals/promises/grade_boundary.py --relay-packet "$RUN_OUT" "$RUN_ID" > relay-packet.json
+```
+
+Use the `packet.findings` questions to assess the native work. Cite the
+observed worklist, paired results, or reviewer report in each reason. Use the
+reviewer’s actions and spawn context to assess independence. The
+`designed` finding can credit a supported preimplementation single-design
+skip. Use `unavailable` when the evidence leaves an obligation open. The
+adjudicator’s own review cannot supply native scrutiny.
+
+Write `relay-decision.json` with the wrapper’s top-level `packet_digest` and a `findings`
+object keyed by every question ID. Each finding has a `status` of `pass`,
+`breach`, or `unavailable`, and a nonempty `reason` of at most 800 characters.
+Submit the decision through the same controller, then grade the same run.
+Each authorization accepts one final decision. The controller refuses a second
+submission.
+
+```sh
+python3 evals/promises/grade_boundary.py --relay-judgment "$RUN_OUT" "$RUN_ID" < relay-decision.json
+python3 evals/promises/live.py grade --out "$RUN_OUT" "$RUN_ID"
+```
+
+A nonzero exit means the command failed or the controller refused it. Check the
+published promise verdict separately. An established obligation breach returns
+`FAIL` even when another obligation lacks review or recovery evidence. When
+only evidence is missing, the verdict stays `INCONCLUSIVE`. Keep the packet and
+decision with the run’s private evidence.

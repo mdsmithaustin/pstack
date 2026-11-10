@@ -256,6 +256,13 @@ def steps_in_order(items, shape, start=1):
     return matched, missing, verbatim
 
 
+def compact_feature_plan(items):
+    text = items[0].get("text", "").lower() if items else ""
+    return all(re.search(pattern, text) for pattern in (
+        r"playbooks/feature\.md", r"\b(?:start(?: commit\b|\s+(?:[0-9a-f]{7,40}|no commits)\b|ing[ \t]+at[ \t]+[0-9a-f]{7,40}\b)|baseline[ \t]+[0-9a-f]{7,40}\b)",
+    ))
+
+
 def identify_playbook(items, skills_root):
     best, best_score = None, 0
     for name in all_playbooks(skills_root):
@@ -269,6 +276,8 @@ def identify_playbook(items, skills_root):
             best, best_score = name, score
     if best_score >= 3:
         return best
+    if compact_feature_plan(items):
+        return "feature"
     if items and "principles" in norm(items[0]["text"]) and "poteto" in norm(items[0]["text"]):
         return "figure-it-out"
     return None
@@ -1253,6 +1262,9 @@ def worklist_opens(view):
     items = opening["items"]
     prose = item_matches_prose(items[0]["text"], shape)
     matched, missing, verbatim = steps_in_order(items, shape, 1 if prose else 0)
+    if want == "feature" and not (prose and not missing) and compact_feature_plan(items):
+        return passed("Feature opening identifies the playbook and start-commit field",
+                      "record recognition only; route eligibility, retained obligations and completion are not graded")
     evidence = [f"carrier {opening.get('carrier')} at seq {opening.get('seq')} with {len(items)} items",
                 f"first item: {items[0]['text'][:120]!r}", f"steps matched in order: {matched}, missing: {missing}",
                 f"verbatim copies: {sum(verbatim)}/{len(verbatim)}"]
@@ -1306,7 +1318,7 @@ def worklist_fallback(view):
         want = (view.case.get("expect") or {}).get("playbook")
         shape = playbook_shape(want, view.skills_root) if want else None
         failures = []
-        if shape:
+        if shape and not (want == "feature" and compact_feature_plan(text[0]["items"])):
             matched, missing, _ = steps_in_order(text[0]["items"], shape, 0)
             evidence.append(f"numbered list matches steps {matched}, missing {missing}")
             if len(matched) < max(1, len(shape["steps"]) // 2):
@@ -1623,6 +1635,49 @@ def closed_notes(view):
             notes += [match.group(2) for match in PLAN_EXPLANATION.finditer(str(given.get("code")))]
     step_four_left_open = numbered_four_closed and not any(numbered_four_closed)
     return [] if step_four_left_open else notes
+
+
+@oracle("feature-compact-implements-directly")
+def compact_implements_directly(view):
+    opening = opening_worklist(view)
+    if not opening or not compact_feature_plan(opening["items"]):
+        return failed("low-risk case did not open a compact Feature plan")
+    shape = playbook_shape("feature", view.skills_root)
+    if shape and any(not steps_in_order(snapshot["items"], shape, 0)[1] for snapshot in view.worklist):
+        return failed("low-risk case used the full Feature steps")
+    calls = {call.get("seq"): call.get("input") or {} for call in view.tool_calls
+             if call.get("name") in SPAWN_TOOLS}
+    roles = []
+    for spawn in view.spawns:
+        given = calls.get(spawn.get("seq"), {})
+        values = [given[key] for key in ("agent_type", "subagent_type") if given.get(key) is not None]
+        roles.append(values[0].strip().lower() if values and all(isinstance(value, str) and value == values[0] for value in values) else None)
+    evidence = f"roles from original spawn tool input agent_type/subagent_type: {roles}"
+    if any(role in {"architect runner", "arena runner"} for role in roles):
+        return failed("compact case dispatched design alternatives", evidence)
+    if any(role in WRITER_ROLES for role in roles):
+        return failed("compact case delegated implementation", evidence)
+    if "architect/references/runner-prompt.md" in view.all_reads():
+        return failed("compact case read the architect runner instructions", evidence)
+    base = view.base_shas()
+    paths = (view.case.get("expect") or {}).get("implementation_paths")
+    if not base or not paths:
+        return inconclusive("no baseline or case implementation paths to inspect")
+    worktrees = view.worktrees()
+    if len(worktrees) > 1:
+        return inconclusive("multiple worktrees exist; this check cannot identify the delivered checkout")
+    changed = view.git("diff", "--name-only", base[-1], "--", *paths)
+    untracked = view.git("ls-files", "--others", "--exclude-standard", "--", *paths)
+    if changed is None or untracked is None:
+        return inconclusive("no project repository to inspect")
+    if not changed.strip() and not untracked.strip():
+        return failed("supplied project has no change in the case implementation paths")
+    if any(role not in READER_ROLES and role not in NO_CODE_AGENTS for role in roles):
+        return inconclusive("a spawn assignment has no recognized original structured role", evidence)
+    return passed("Feature record and changed case implementation paths in the supplied checkout",
+                  evidence, "no observed implementation role, named design role or architect runner instruction read",
+                  "no full-step worklist observed; equivalent expanded plans may not be recognized",
+                  "correctness, acceptance, preservation, review status and risk grounds are not graded")
 
 
 @oracle("feature-counts-only-source-files")
@@ -2410,8 +2465,10 @@ def fresh_opening(snapshot, allowed, skills_root):
     first = norm(snapshot["items"][0]["text"])[:40] if snapshot["items"] else ""
     for name in all_playbooks(skills_root):
         shape = playbook_shape(name, skills_root)
-        if name not in allowed and shape and shape["prose"] and first and first == norm(shape["prose"][0])[:40]:
-            return name
+        if shape and shape["prose"] and first and first == norm(shape["prose"][0])[:40]:
+            return name if name not in allowed else None
+    if "feature" not in allowed and compact_feature_plan(snapshot["items"]):
+        return "feature"
     return None
 
 
@@ -4364,3 +4421,77 @@ def triggered_principle_loads(view):
     if turn_finished(view):
         return inconclusive("the run wrote no code, so the trigger never came due", *evidence)
     return inconclusive("run killed before any code write", *evidence)
+
+
+@oracle("feature-recovery-obligations")
+def feature_recovery_obligations(view):
+    if view.harness != "codex":
+        return inconclusive(f"applies to codex only; this run is {view.harness}", not_applicable=True)
+    relay = getattr(_IO, "relay", None)
+    if relay is None:
+        return inconclusive("no controller-pinned Relay run")
+
+    evidence, breaches, pending = [], [], []
+    report = {}
+    if "reason" in relay:
+        pending.append(relay["reason"])
+    else:
+        evidence.append(f"delivery {relay['ref']} at {relay['commit']}, image SHA-256 {relay['tree_digest']}")
+        script = case_dir(view.case) / view.case["expect"]["held_out"]
+        image = HERE / "relay-delivery"
+        scratch = _IO.scratch / "relay"
+        scratch.mkdir()
+        try:
+            run = _IO.check(Path(relay["checkout"]), shlex.join(
+                [sys.executable, "-I", "-S", "-B", str(script), str(image), str(scratch)]), 700)
+            report = json.loads(run.stdout) if run.returncode == 0 else None
+        except (subprocess.TimeoutExpired, ValueError):
+            report = None
+        if not isinstance(report, dict):
+            pending.append("the protected recovery probe produced no report")
+            report = {}
+        else:
+            checks = set(view.case["expect"]["recovery_checks"])
+            for name in sorted(checks):
+                item = report.get(name)
+                if not isinstance(item, dict) or item.get("status") not in ("pass", "breach", "unavailable"):
+                    pending.append(f"missing recovery observation for {name}")
+                    continue
+                if item["status"] != "pass":
+                    details = item.get("detail")
+                    if not isinstance(details, list) or not all(isinstance(detail, str) for detail in details):
+                        pending.append(f"unreadable recovery observation for {name}")
+                        continue
+                    target = breaches if item["status"] == "breach" else pending
+                    target.append(f"{name}: {', '.join(details)}")
+            if set(report) - checks:
+                pending.append("unexpected recovery observations")
+            evidence.append(f"held-out recovery observations: {', '.join(sorted(report))}")
+
+    if completion_gate(view):
+        pending.append("the native Feature run did not complete")
+    if not relay.get("review"):
+        pending.append("no completed native scrutiny of the committed Relay change")
+    opening = opening_worklist(view)
+    shape = playbook_shape("feature", view.skills_root)
+    if not opening or not compact_feature_plan(opening["items"]) or not shape or not any(
+            not steps_in_order(snap["items"], shape, 0)[1] for snap in view.worklist):
+        pending.append("the Feature opening or ordered full-route worklist is missing")
+
+    decision = _IO.relay_decision
+    for name, finding in (decision or {}).items():
+        detail = f"{name}: {finding['reason']}"
+        if finding["status"] == "breach":
+            breaches.append(detail)
+        elif finding["status"] == "unavailable":
+            pending.append(detail)
+        else:
+            evidence.append(detail)
+    if breaches:
+        return verdict(FAIL, breaches, evidence, recovery=report)
+    if decision is None and (opening or relay.get("review") or relay.get("lead_evidence") or view.final_reply):
+        return inconclusive([*pending, "the native Feature obligations need adjudication"], *evidence,
+                            needs_judge=True, recovery=report)
+    if pending:
+        return inconclusive(pending, *evidence, recovery=report)
+    return verdict(PASS, (), evidence, recovery=report)

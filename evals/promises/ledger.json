@@ -791,7 +791,7 @@
    "check": "live",
    "claim": "On Claude Code a written @effort applies to a subagent only once the pstack-effort-<level> agents are in the live catalog; before that subagents run at the session effort.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when the worklist opens with the Feature prose and steps in the harness task tool (or a numbered list when it is off), a skipped step shows `skipped: <reason>`, and the reply carries both verification runs.",
+   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; Grade the observed effort of applicable Claude delegates. A Feature record may be compact or full.",
    "owners": [
     "skills/pstack-harness/SKILL.md",
     "skills/pstack-harness/references/registration.md",
@@ -1036,7 +1036,7 @@
   },
   "design-ladder-spares-small-changes": {
    "check": "live",
-   "claim": "An additive change to one module, sent through /poteto-mode, runs no architect or arena design fan-out.",
+   "claim": "An understood low-risk Feature change with an established design runs no architect or arena design fan-out. Module count alone does not establish eligibility.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
@@ -1044,7 +1044,7 @@
     },
     {
      "file": "skills/poteto-mode/references/task-triggers.md",
-     "quote": "An additive change to one module goes straight to implementation."
+     "quote": "Feature chooses compact execution from risk evidence, not module count."
     }
    ],
    "harness_sensitive": true,
@@ -1416,20 +1416,56 @@
    "check": "live",
    "claim": "A new-behavior prompt opens the Feature playbook.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when the worklist opens with the Feature prose and steps in the harness task tool (or a numbered list when it is off), a skipped step shows `skipped: <reason>`, and the reply carries both verification runs.",
+   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; Grade routing to Feature. A Feature record may be compact or full.",
    "owners": [
     "skills/poteto-mode/SKILL.md",
     "skills/poteto-mode/playbooks/feature.md"
    ],
    "scenario": "feature-run"
   },
-  "feature-settles-acceptance-tests-and-edges": {
+  "feature-recovery-obligations": {
+   "check": "live",
+   "claim": "Feature uses the full route for consequential recovery work, preserves conditional design comparison, and delivers a restart-safe implementation with independent scrutiny of the committed change.",
+   "harness_sensitive": true,
+   "live_case": "Relay delivery journal on Codex. The grader checks the pinned CLI and uses authenticated native review and adjudication to close the Feature obligations.",
+   "owners": [
+    "skills/poteto-mode/playbooks/feature.md"
+   ],
+   "scenario": "feature-recovery-obligations-run"
+  },
+  "feature-risk-route-instructions": {
    "check": "static",
-   "claim": "Before Feature delegates code, the lead settles acceptance tests from the spec's worked examples and runs the spec-probes edge probe on each new requirement, and its reply lists each edge that neither the spec nor the current code settles. Any task that writes acceptance tests or criteria for a new requirement from a spec triggers the same edge probe.",
+   "claim": "Feature instructs an understood low-risk change to use a compact plan and direct implementation while retaining preservation, real-surface proof and independent scrutiny. Material uncertainty, consequential failures or contested design require the full route. These citations establish instructions only; route choice and retained obligations need separate runtime evidence.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "When the spec gives worked examples or stated formats, write tests from them, yourself or through a test delegate on the `feature` role whose brief names the source spec by path and adds none of your reading of it."
+     "quote": "For an ordinary Feature task, open a short worklist before investigation. Keep the playbook path, start commit, current outcome, and pending delivery gates."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "Use the compact route only when those facts support an understood, low-risk change. Material uncertainty, consequential failures, or contested design require the full route."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "Keep `spec-probes`, preservation, real-surface proof, and independent scrutiny."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "Implement directly without arena or implementation delegation."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/feature.md"
+   ]
+  },
+  "feature-settles-acceptance-tests-and-edges": {
+   "check": "static",
+   "claim": "Before implementation, Feature settles meaningful acceptance checks from the spec, reuses adequate existing coverage, and runs the spec-probes edge probe. Unsettled edges remain explicit gaps.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "When the spec gives worked examples or stated formats, cover them with tests, yourself or through a test delegate on the `feature` role whose brief names the source spec by path and adds none of your reading of it."
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
@@ -1442,6 +1478,10 @@
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
      "quote": "Record each edge that neither settles as an open gap in the reply, not as a test."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/feature.md",
+     "quote": "Reuse existing coverage when it exercises the required behavior and would detect its failure. Add tests for missing behavior coverage before implementation."
     }
    ],
    "harness_sensitive": false,
@@ -2764,7 +2804,7 @@
    "check": "live",
    "claim": "On Hermes the poteto-agent briefing reaches the delegate through delegation context and on Grok Build through each spawn prompt, and the child announces `persona: poteto-agent`.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when the worklist opens with the Feature prose and steps in the harness task tool (or a numbered list when it is off), a skipped step shows `skipped: <reason>`, and the reply carries both verification runs.",
+   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; Grade applicable persona delivery to Hermes and Grok delegates. A Feature record may be compact or full.",
    "owners": [
     "skills/pstack-harness/SKILL.md",
     "skills/pstack-harness/references/named-roles.md"
@@ -2847,7 +2887,7 @@
    "check": "live",
    "claim": "Given a goal, /poteto-mode matches one playbook, runs sibling skills as its steps call for them, and reports evidence.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when the worklist opens with the Feature prose and steps in the harness task tool (or a numbered list when it is off), a skipped step shows `skipped: <reason>`, and the reply carries both verification runs.",
+   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; Grade the selected Feature playbook, sibling skill execution, completion status and executed command evidence. A Feature record may be compact or full.",
    "owners": [
     "skills/poteto-mode/SKILL.md"
    ],
@@ -2892,7 +2932,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/references/task-triggers.md",
-     "quote": "Code that crosses two or more source files and admits several plausible shapes → call the Skill tool with `architect` for parallel design exploration before implementing. An additive change to one module goes straight to implementation. For a bug fix, skip architect when runtime evidence confirms the root cause and identifies one localized repair, even across a function boundary. Go straight to the failing reproducer, then repair it. Keep architect when design choices or repair scope remain unresolved."
+     "quote": "Code that crosses two or more source files and admits several plausible shapes → call the Skill tool with `architect` for parallel design exploration before implementing. Feature chooses compact execution from risk evidence, not module count. For a bug fix, skip architect when runtime evidence confirms the root cause and identifies one localized repair, even across a function boundary. Go straight to the failing reproducer, then repair it. Keep architect when design choices or repair scope remain unresolved."
     },
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
@@ -3095,7 +3135,7 @@
    "check": "live",
    "claim": "Before reporting success the agent verifies against the real artifact, not a build or proxy.",
    "harness_sensitive": false,
-   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when the worklist opens with the Feature prose and steps in the harness task tool (or a numbered list when it is off), a skipped step shows `skipped: <reason>`, and the reply carries both verification runs.",
+   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; Grade execution of the real artifact after the change. A Feature record may be compact or full.",
    "owners": [
     "skills/principle-prove-it-works/SKILL.md",
     "skills/poteto-mode/SKILL.md"
@@ -3190,7 +3230,7 @@
    "check": "live",
    "claim": "The reply to a verified task carries the exact commands run and their outputs.",
    "harness_sensitive": false,
-   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when the worklist opens with the Feature prose and steps in the harness task tool (or a numbered list when it is off), a skipped step shows `skipped: <reason>`, and the reply carries both verification runs.",
+   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; Grade the reply against executed commands and their outputs. A Feature record may be compact or full.",
    "owners": [
     "skills/poteto-mode/SKILL.md",
     "skills/poteto-mode/playbooks/feature.md"
@@ -3201,7 +3241,7 @@
    "check": "live",
    "claim": "When a check could not run the reply says inconclusive instead of claiming a pass.",
    "harness_sensitive": false,
-   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when the worklist opens with the Feature prose and steps in the harness task tool (or a numbered list when it is off), a skipped step shows `skipped: <reason>`, and the reply carries both verification runs.",
+   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; When a required check cannot run, grade whether the reply reports inconclusive evidence. A Feature record may be compact or full.",
    "owners": [
     "skills/poteto-mode/playbooks/bug-fix.md",
     "skills/poteto-mode/playbooks/feature.md",
@@ -3811,7 +3851,7 @@
    "check": "live",
    "claim": "A playbook step the agent chooses not to do stays in the worklist marked `skipped: <reason>`.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when the worklist opens with the Feature prose and steps in the harness task tool (or a numbered list when it is off), a skipped step shows `skipped: <reason>`, and the reply carries both verification runs.",
+   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; Grade observed skipped items and worklist retention. No observed skip is inconclusive for this promise. A Feature record may be compact or full.",
    "owners": [
     "skills/poteto-mode/SKILL.md",
     "skills/pstack-harness/SKILL.md"
@@ -4239,7 +4279,7 @@
    "check": "live",
    "claim": "When the structured task tool is off, poteto-mode requires the same worklist as a numbered list with states in chat. Retained runs show inconsistent compliance.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when the worklist opens with the Feature prose and steps in the harness task tool (or a numbered list when it is off), a skipped step shows `skipped: <reason>`, and the reply carries both verification runs.",
+   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; With task tools off, grade the numbered chat worklist and its timing after the playbook read. Accept a Feature record or full steps. This does not grade obligation retention or route eligibility.",
    "owners": [
     "skills/poteto-mode/SKILL.md",
     "skills/pstack-harness/SKILL.md"
@@ -4250,7 +4290,7 @@
    "check": "live",
    "claim": "poteto-mode keeps the worklist in the harness's structured task tool when that tool is on.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when the worklist opens with the Feature prose and steps in the harness task tool (or a numbered list when it is off), a skipped step shows `skipped: <reason>`, and the reply carries both verification runs.",
+   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; With task tools on, grade use of a native worklist carrier. A Feature record may be compact or full.",
    "owners": [
     "skills/pstack-harness/SKILL.md",
     "skills/poteto-mode/SKILL.md"
@@ -4259,12 +4299,13 @@
   },
   "worklist-opens-with-playbook-steps": {
    "check": "live",
-   "claim": "The worklist's first items are the matched playbook's opening prose and its numbered steps, copied verbatim.",
+   "claim": "The worklist opens with matched playbook prose and steps, or a Feature record that identifies its playbook and start-commit field.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when the worklist opens with the Feature prose and steps in the harness task tool (or a numbered list when it is off), a skipped step shows `skipped: <reason>`, and the reply carries both verification runs.",
+   "live_case": "Tally Feature case accepts a first-item record with the playbook path and start-commit field or the full Feature steps. Full playbook recognition takes precedence over compact markers. This oracle recognizes the record, not semantic obligation retention, risk eligibility, route choice after investigation, or completed outcomes. Those remain runtime coverage gaps without separate task-specific evidence. The boundary case grades design fan-out only. Compact delegation uses original structured spawn tool inputs only; inferred personas and prose never prove assignment. Unknown roles are inconclusive unless a separately observed violation establishes failure.",
    "owners": [
     "skills/poteto-mode/SKILL.md",
-    "skills/pstack-harness/SKILL.md"
+    "skills/pstack-harness/SKILL.md",
+    "skills/poteto-mode/playbooks/feature.md"
    ],
    "scenario": "feature-run"
   },
@@ -5153,6 +5194,18 @@
    ],
    "text": "```text\n/poteto-mode move parsing into one module, zero behavior change. record the current output first and prove it's unchanged after.\n```"
   },
+  "181b3f032f44": {
+   "also": [
+    "feature-recovery-obligations"
+   ],
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "feature-risk-route-instructions",
+   "sources": [
+    "port"
+   ],
+   "text": "For understood, low-risk work, [Feature](../../skills/poteto-mode/playbooks/feature.md) uses a compact plan and direct implementation while retaining preservation, verification, and independent scrutiny."
+  },
   "1841b9684cfc": {
    "class": "promise",
    "file": "01-setup.md",
@@ -5419,6 +5472,15 @@
     "port"
    ],
    "text": "The UI bullet above hides a real requirement."
+  },
+  "1cfa2c341588": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "persona-delivery-hermes-grok",
+   "sources": [
+    "port"
+   ],
+   "text": "Hermes uses persona briefings through delegation context, and Grok Build gets them in each spawn prompt."
   },
   "1d21f306c413": {
    "class": "promise",
@@ -5990,7 +6052,7 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "7864e82b3cac"
+    "7e40a2a913e2"
    ],
    "promise": "skipped-step-stays-in-worklist",
    "sources": [
@@ -6028,7 +6090,7 @@
    "class": "substituted",
    "file": "04-design.md",
    "ported_as": [
-    "8e3664055603"
+    "768154bdbbfd"
    ],
    "sources": [
     "upstream"
@@ -6395,15 +6457,6 @@
    ],
    "text": "**Leading with your theory of the cause.** The agent searches wherever you pointed. Ask it to restate the problem first, then share your hunch."
   },
-  "361d22eeeed2": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "persona-briefing-to-generic-delegate",
-   "sources": [
-    "port"
-   ],
-   "text": "A generic delegate can receive the complete persona while native loading remains unverified."
-  },
   "362397f6cc1f": {
    "also": [
     "slash-skills-invocable"
@@ -6513,15 +6566,6 @@
     "port"
    ],
    "text": "Run it with no argument and it finds the classes from history on its own."
-  },
-  "39fa20cbc7da": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "setup-detects-stale-personas",
-   "sources": [
-    "port"
-   ],
-   "text": "It finds the personas and, on Claude Code, the five `pstack-effort-<level>` agents that an older version generated, and offers to refresh them."
   },
   "39ff5646262e": {
    "class": "context",
@@ -8762,6 +8806,19 @@
    ],
    "text": "You can override the verdict."
   },
+  "768154bdbbfd": {
+   "also": [
+    "architect-runs-arena-for-sketches",
+    "design-ladder-spares-small-changes"
+   ],
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
+   "sources": [
+    "port"
+   ],
+   "text": "A change that crosses two or more source files and admits several plausible shapes earns `/architect`, which brings `/arena` with it. Feature chooses compact execution from risk evidence, not module count. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary."
+  },
   "768813397fb2": {
    "class": "context",
    "file": "02-poteto-mode.md",
@@ -8837,15 +8894,6 @@
     "port"
    ],
    "text": "[Exhaust the Design Space](../../skills/principle-exhaust-the-design-space/SKILL.md) builds two or three competing prototypes when there's no precedent."
-  },
-  "7864e82b3cac": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "skipped-step-stays-in-worklist",
-   "sources": [
-    "port"
-   ],
-   "text": "If `/poteto-mode` skips a step, the step stays in the list with `skipped: <reason>`, so you can see what it chose not to do."
   },
   "7870d441dcbf": {
    "class": "context",
@@ -9040,6 +9088,15 @@
    ],
    "text": "That's the price of the rigor."
   },
+  "7e40a2a913e2": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "skipped-step-stays-in-worklist",
+   "sources": [
+    "port"
+   ],
+   "text": "The [Feature playbook](../../skills/poteto-mode/playbooks/feature.md) defines the compact and full routes and how each records omitted work."
+  },
   "7e4232cd580b": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -9170,15 +9227,6 @@
     "port"
    ],
    "text": "When all you want is status, ask smaller and Babysit answers without starting the loop:"
-  },
-  "818bacaf1182": {
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "feature-settles-acceptance-tests-and-edges",
-   "sources": [
-    "port"
-   ],
-   "text": "[Feature step 4](../../skills/poteto-mode/playbooks/feature.md) defines the acceptance tests and specification edges."
   },
   "820ddf7e8cd8": {
    "class": "context",
@@ -9608,19 +9656,6 @@
     "port"
    ],
    "text": "A fresh chat picks the work up from that note through the Session pickup playbook."
-  },
-  "8e3664055603": {
-   "also": [
-    "architect-runs-arena-for-sketches",
-    "design-ladder-spares-small-changes"
-   ],
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
-   "sources": [
-    "port"
-   ],
-   "text": "A change that crosses two or more source files and admits several plausible shapes earns `/architect`, which brings `/arena` with it. An additive change to one module goes straight to implementation. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary."
   },
   "8e536d95e0c8": {
    "class": "promise",
@@ -10082,6 +10117,15 @@
    ],
    "text": "When a skill keeps missing and you know what it should do, change and test it in one task:"
   },
+  "9c9174a83823": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "setup-checks-personas-offers-registration",
+   "sources": [
+    "port"
+   ],
+   "text": "[`/setup-pstack`](../../skills/setup-pstack/SKILL.md) checks the bundled personas and offers optional native registration for Claude Code or Codex."
+  },
   "9d40f211b151": {
    "class": "promise",
    "file": "01-setup.md",
@@ -10151,6 +10195,15 @@
     "port"
    ],
    "text": "\"bugs included\" keeps the migration from quietly fixing things on the way, which would make the old and new output impossible to compare."
+  },
+  "9e89a90965ec": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "feature-settles-acceptance-tests-and-edges",
+   "sources": [
+    "port"
+   ],
+   "text": "[Feature step 4](../../skills/poteto-mode/playbooks/feature.md) defines acceptance checks and specification edges, including when existing coverage suffices."
   },
   "9ead3f17f124": {
    "class": "promise",
@@ -10362,6 +10415,15 @@
     "port"
    ],
    "text": "Each of these routes to its playbook ([Bug fix](../../skills/poteto-mode/playbooks/bug-fix.md), [Feature](../../skills/poteto-mode/playbooks/feature.md), [Refactoring](../../skills/poteto-mode/playbooks/refactoring.md), [Perf issue](../../skills/poteto-mode/playbooks/perf-issue.md)), and the playbook supplies the steps you didn't type: reproduce before fixing, name the data shape before implementing, pin behavior before restructuring, profile before optimizing."
+  },
+  "a544f132a172": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "feature-risk-route-instructions",
+   "sources": [
+    "port"
+   ],
+   "text": "Material uncertainty or consequential changes use the full route, even for a tiny diff."
   },
   "a57f2f03f455": {
    "also": [
@@ -10860,6 +10922,18 @@
     "port"
    ],
    "text": "Babysit watches the PR, with a bundled watcher on GitHub or the Origin CLI when it's available, and takes blockers in order: conflicts, then review threads and bot findings that live only in a review body, then CI."
+  },
+  "aecfd2e36efc": {
+   "also": [
+    "setup-detects-stale-personas"
+   ],
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "persona-briefing-to-generic-delegate",
+   "sources": [
+    "port"
+   ],
+   "text": "The [registration reference](../../skills/pstack-harness/references/registration.md) lists the agents installed for each harness and explains refresh and fallback behavior."
   },
   "aed4de06e351": {
    "class": "promise",
@@ -11362,15 +11436,6 @@
    ],
    "text": "[`/show-me-your-work`](../../skills/show-me-your-work/SKILL.md) makes the run reviewable and owns the log format, storage, and evidence-retention rules."
   },
-  "bac411240540": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "persona-delivery-hermes-grok",
-   "sources": [
-    "port"
-   ],
-   "text": "Hermes uses that briefing through delegation context, and Grok Build gets it in each spawn prompt."
-  },
   "badb30352c29": {
    "class": "substituted",
    "file": "09-make-it-yours.md",
@@ -11382,15 +11447,6 @@
     "upstream"
    ],
    "text": "Writing a skill matches the [Authoring or modifying a skill playbook](../../skills/poteto-mode/playbooks/authoring-a-skill.md), which routes through Cursor's built-in `create-skill`, validates the frontmatter and links, and ships the result through the Opening a PR playbook."
-  },
-  "bb3b01d8dee5": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "setup-checks-personas-offers-registration",
-   "sources": [
-    "port"
-   ],
-   "text": "[`/setup-pstack`](../../skills/setup-pstack/SKILL.md) first checks both bundled personas and offers optional native registration for Claude Code or Codex."
   },
   "bb913c1e188e": {
    "class": "context",

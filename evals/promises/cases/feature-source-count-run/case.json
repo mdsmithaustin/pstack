@@ -1,6 +1,6 @@
 {
  "promises": [
-  "feature-counts-only-source-files",
+  "feature-compact-implements-directly",
   "poteto-mode-routes-to-playbook"
  ],
  "fixture": "roster",
@@ -13,7 +13,10 @@
   "codex": 2400
  },
  "expect": {
-  "playbook": "feature"
+  "playbook": "feature",
+  "implementation_paths": [
+   "roster/*.py"
+  ]
  },
  "env": {
   "todo_tools": true

@@ -1,4 +1,4 @@
-# Register pstack personas and effort agents
+# Register pstack agents
 
 setup-pstack reads this file. A spawn never needs it. The spawn-time rules are in the [persona contract](named-roles.md) and in **Spawn a role** in [pstack-harness](../SKILL.md).
 
@@ -24,6 +24,8 @@ Failure signal: nonzero exit. Claude Code uses `--harness claude-code`. For a us
 
 A wrapper that runs Codex with its own `CODEX_HOME` never reads `~/.codex/agents/`, so a user install does not reach it. A project install does: on Codex 0.159.2 under a private `CODEX_HOME`, `.codex/agents/` in the project loaded into the live catalog whether the project had a `trusted` entry or none, since `codex exec` under a config that never prompts adds one. An explicit `untrusted` entry hid it. For such a wrapper, register with `--project` at the repository it runs in.
 
+A Codex install also writes `.codex/agents/trail-reviewer.toml` in the same preflight group as the personas. Its native name is `trail reviewer`, with a space. It carries instructions for independent read-only reviews and inherits the session's sandbox policy. The [Codex adapter](codex.md) describes when to select it.
+
 A Claude Code install also writes five effort agents, `.claude/agents/pstack-effort-<level>.md` for `low`, `medium`, `high`, `xhigh`, and `max`. Claude Code's spawn tool has no per-call effort, and a custom agent's `effort` frontmatter overrides the session effort while the per-call `model` still applies, measured on 2.1.284. Each effort agent sets `name`, `description`, and `effort` in its frontmatter and carries one generic delegate body from the `subagents/effort-delegate.md` template beside this file. It sets no model, tools, persona, or skills path, so its bytes are the same for every skills root and every destination. Codex takes the effort per spawn and gets no effort agents. Personas and effort agents preflight as separate groups. A conflict in one group writes nothing in that group and never blocks the other.
 
 To inspect the same registration without writing:
@@ -38,7 +40,7 @@ Hermes supports `check --harness hermes` with an explicit project or user root, 
 
 ## Command results
 
-`check` and `install` write JSON. `payload` is `ready` or `invalid`. `native_activation` is always `unverified`. Each row in `roles` has its canonical persona `id` and `native_file` state:
+`check` and `install` write JSON. `payload` is `ready` or `invalid`. `native_activation` is always `unverified`. Each row in `roles` has its wrapper `id` and `native_file` state. The Codex review wrapper has ID `trail-reviewer`.
 
 | State | Meaning |
 |---|---|
@@ -55,4 +57,4 @@ A Claude Code destination also reports `efforts`, one row per level with `id`, `
 
 The installer checks every destination in a group before writing any file in that group. It refuses unmarked files, symlink destinations, and local edits even when a generated marker remains. A full-content digest identifies unchanged generated wrappers. Identical installs preserve bytes and modification times. Updates use atomic writes in the destination directory. A rerun recovers a partial previous install; the files are not a transaction. There is no force, adoption, removal, or settings-write operation.
 
-Setup reports payload readiness, native-file installation, and live agent loading separately. Codex project registrations require a trusted project; setup must not edit trust settings automatically. Inspect the live agent catalog in a fresh session after registration changes or after any harness-required reload. If loading remains unverified, use the complete briefing with a generic delegate and report that mechanism. Filesystem success must never be presented as activation success.
+Setup reports payload readiness, native-file installation, and live agent loading separately. Codex project registrations require a trusted project; setup must not edit trust settings automatically. Inspect the live agent catalog in a fresh session after registration changes or after any harness-required reload. If loading remains unverified, use the spawn-time fallback for the persona or role and report that mechanism. Filesystem success must never be presented as activation success.
