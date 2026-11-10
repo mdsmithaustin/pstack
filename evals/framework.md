@@ -86,9 +86,9 @@ Design for the floor with one structure, not a branch per model tier.
 - **Less is more, and more so over time.** Models keep improving. An
   instruction that compensates for a model weakness is temporary. Record why it
   exists so it can be removed when the floor model no longer needs it.
-- **Subtraction is a supported operation.** Removing a skill, gate, playbook,
-  or rule must be one small change with a deterministic check that nothing
-  still depends on it. A structure that only makes addition cheap fails this
+- **Subtraction is a supported operation.** Subtraction means a route loads
+  less. Taking a skill, gate, or rule out of what a route loads must be one
+  small change. A structure that only makes addition cheap fails this
   principle.
 
 This floor is a design target. No evaluation in this repository establishes
@@ -108,22 +108,29 @@ Keep the suite as small as possible while protecting promises and demonstrated
 benefits. Size includes instruction volume, overlapping skills, runtime context,
 repeated reviews, and maintenance burden.
 
-Measure size as two separate numbers, and judge "less is more" on the first.
+Size is what a route places in the lead's context. We limit it for two reasons:
+to protect the context window, and to avoid instructing a model where it already
+works well. An instruction needs evidence that the floor model fails without it.
+Moving text so that it loads only when needed reduces size. A skill that nothing
+loads is waste, which is a separate cleanup concern.
 
-- **Context** is what a route places in the lead's context: the skill and
-  reference Markdown the lead reads, and the text a script prints for it. This
-  is the suite's size. A change that moves text between files without deleting
-  it has not made the suite smaller.
-- **Maintenance surface** is the scripts, data files, and tests that support
-  the suite. A script's source never enters the lead's context, so it is not
-  size in the first sense. It is still a cost to own, and a new script needs
-  the same evidence of an unmet need as a new skill.
+Three measures follow, and they are not interchangeable.
 
-`tools/check-route-bytes.py` reports context per route, and its `--surface`
-option reports the maintenance surface. Its counts are source bytes, which
-approximate tokens and omit reads a route makes only on a condition. Consolidation is useful only when
-agents still discover and apply the shared rule. Prefer an existing mechanism
-that works. A new skill or review step requires evidence of an unmet need.
+- **Context** is the skill and reference Markdown a route makes the lead read,
+  plus the text a script prints for it. `tools/check-route-bytes.py` reports it
+  per route. Its counts are source bytes, which approximate tokens and omit
+  reads a route makes only on a condition. What a session actually loaded is
+  the true figure, and saved traces record it.
+- **Need** is whether the floor model fails without an instruction. Bytes do
+  not answer it. A short instruction the model does not need fails this test,
+  and a long one it does need passes. Label each instruction as shown to help,
+  shown not needed, or untested, and treat untested text as provisional.
+- **Waste** is a skill that no step, trigger, or promise reaches.
+  `tools/unused-skills.py` lists candidates for review and gates nothing.
+
+Scripts, data files, and tests are maintenance surface. Their source never
+enters the lead's context, so they are not size. They are still a cost to own,
+and a new script needs the same evidence of an unmet need as a new skill.
 
 Less code means avoiding maintenance cost without meaningful outcome value,
 not optimizing line count. Tests must protect an identifiable behavior or

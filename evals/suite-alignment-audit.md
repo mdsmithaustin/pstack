@@ -400,14 +400,14 @@ Phases 1 to 5 and the first item of Phase 6 are implemented on the branch that c
 | Optional decision call that can only raise | Done, switched off | `scripts/second-opinion.py`. Tested against fake CLIs only. |
 | Gate evidence bound to a tree, cleanup once per published head, no forced reread, writing lint, opt-in recap, gated publish on demand | Done | `pstack-harness/scripts/gate.py`, `scripts/check-writing.py`, `references/gated-publish.md` |
 | One spawn rule, reviewer at or above the lead's tier, printed brief clauses, panels on the intensive route | Done | `references/delegation.md`, `subagents.py clauses`, `routes.json` |
-| Removal check, promises per owner, bytes per route, compensations register | Done | `tools/check-removal.py`, `ledger.py by-owner`, `tools/check-route-bytes.py`, PORTING.md |
+| Context per route, unused-skill report, promises per owner, compensations register | Done | `tools/check-route-bytes.py`, `tools/unused-skills.py`, `ledger.py by-owner`, PORTING.md |
 | Lead model and effort in live records | Done | `lead_model` and `lead_effort` in the sealed run metadata |
 | Capability-by-workflow support table | Not done | Left out with the harness certification work, at the maintainer's direction. |
 
 Five things differ from the recommendation as written.
 
 - The always-on triggers were not all folded into the manifest. The manifest owns each gate's cadence. Task triggers keep the procedure text that ledger promises quote, and one line that tells the lead to follow the plan's gates.
-- The removal check is a ratchet over files under `skills/` and `agents/`, not a rule that a skill is named only in the manifest. Counts can fall and cannot rise without a reviewed flag. `unslop` is still named in 19 shipped files.
+- The removal check shipped as a ratchet on how many files name a skill, then was removed. That number measures edit cost on disk, which is not suite size. `tools/unused-skills.py` now reports skills nothing loads, for review only.
 - Bytes per route live in a new `tools/check-route-bytes.py`. `loading-path.py` is unchanged, because its receipts pin its output.
 - The loaded bytes fell less than the entry did. A lightweight Feature now loads about 127 KB of source across its plan, against roughly 150 KB before by the same count. The larger change is frequency: cleanup runs once per push instead of once per commit, and unchanged evidence is reused.
 - The sealed metadata change cannot be exercised here. Seventy-five grade-boundary tests need the reviewed macOS runtime and were skipped. Run them there before relying on `lead_model`.
@@ -416,6 +416,37 @@ Two risks deserve a targeted look before this merges.
 
 - A generated checklist block for the worklist was tried in 2026-10 and not adopted, because leads stopped keeping a worklist. The plan script prints the items at run time and says it is not the worklist, which differs from that block, but no run has tested it.
 - Narrowing `architect` to the intensive route and cleanup to once per push changes two guide promises. The guide, ledger claims, and quotes are updated. The framework asks for independent maintainer review before weakening a promise.
+
+### What a lightweight Feature loads, by evidence
+
+Size is what a route places in the lead's context, and an instruction needs evidence that the floor model fails without it. This table applies that test to the 16 files a lightweight Feature loads at this branch's head, 128,497 bytes of Markdown plus 4,172 bytes of plan output. `python3 tools/check-route-bytes.py --report` reproduces the sizes. The labels come from results already recorded in this repository. No model ran for this table.
+
+| Loaded file | Bytes | Evidence the lead needs it | Label |
+| --- | ---: | --- | --- |
+| `playbooks/feature.md` | 15,951 | The edge pass in step 4 showed no gain in delivered code on Claude Code or Codex, a gain in the lead's own tests on one implied edge (3 of 3 against 0 of 3), and about 90 seconds more per run ([2026-11-01](promises/results/2026-11-01-feature-edge-pass.md)). The reuse list rests on one operator taste ballot. The compact route and the preservation steps have no run. | Mixed. Mostly untested. |
+| `references/review-lens.md` | 13,818 | In Code review the lens and playbook lifted Claude Sonnet 5 from 6 of 12 to 9 of 12 flaws found, and did not help Codex (1 of 12 against 0 of 12), per PORTING.md's review screen. A Feature reads only its Independent scrutiny section, which has no run. | Shown to help for review. Untested here. |
+| `playbooks/opening-a-pr.md` | 12,088 | Static quotes only. | Untested. |
+| `deslop` | 11,175 | Live promises check that it runs and cuts seeded slop. No comparison against a lead without it. | Untested for benefit. |
+| `references/task-triggers.md` | 10,662 | The "Call the Skill tool with" wording moved a required load from 1 of 3 to 3 of 3 on Claude Code ([phrasing study](../docs/skill-cross-reference-phrasing.md)). The architect trigger did not change behavior: leads skipped the design fan-out under the old and new text ([2026-11-05](promises/results/2026-11-05-architect-trigger.md)). Most other lines have no run. | Mixed. |
+| `documentation-impact` | 10,033 | Port addition with no comparison. | Untested. |
+| `technical-writing` | 9,069 | No comparison. | Untested. |
+| `pstack-harness` | 8,252 | It maps tool names per CLI, which a lead cannot infer. Its worklist fallback moved a posted list from 0 of 5 to 3 of 3 on Claude Code, per PORTING.md. | Functional, with one part shown to help. |
+| `poteto-mode/SKILL.md` | 7,996 | The worklist instruction raised structured worklists from 2 of 6 to 4 of 6 on Claude Sonnet 5, and full step lists from 0 of 6 to 3 of 6 on Codex, per PORTING.md's worklist screen. The plan, route, endpoint, and binding text added on this branch has no run. | Mixed. |
+| `spec-probes` | 7,028 | Same result as the edge pass above. | No gain in delivered code on the tested specs. |
+| `unslop` | 6,089 | A with-and-without corpus exists in `evals/unslop`. No result is committed. | Untested in the record. |
+| `references/routes.md` | 5,313 | Added on this branch. | Untested. |
+| `no-comments` | 3,193 | No comparison. | Untested. |
+| `references/worklist.md` | 2,738 | Covered by the fallback result above. | Shown to help. |
+| `references/writing.md` | 2,556 | No comparison. | Untested. |
+| `principle-prove-it-works` | 2,536 | In the worklist screen, leads followed 10 to 13 percent of the principle pointers the steps name. No result shows what the leaf changes when it loads. | Untested. |
+
+Three results bear on the whole route.
+
+- The [port value comparison](port-value/results/2026-10-19.md) found that the bare model passed every application task at both stages. For acceptance on those task types the suite's instructions are not shown to be needed. Its oracles did not grade code quality, and it did not activate the mode.
+- The [verify-commands pilot](results/2026-11-08-eval-efficiency.md) found no lift on two tasks.
+- About 40 KB of this route is five gate skills: `deslop`, `documentation-impact`, `technical-writing`, `unslop`, and `no-comments`. None has a recorded comparison.
+
+So a small part of this route's context has a recorded benefit. It sits in the worklist rule, the load wording, the harness mapping, and the review lens when it is used for review. Everything this branch added is in the untested group. Untested does not mean unneeded. It means the claim that a lead needs the text rests on judgment, so each item is provisional until a targeted comparison settles it.
 
 ### Scope left out on purpose
 

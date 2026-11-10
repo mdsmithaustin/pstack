@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-REMOVAL = ROOT / "tools/check-removal.py"
+UNUSED = ROOT / "tools/unused-skills.py"
 BYTES = ROOT / "tools/check-route-bytes.py"
 
 
@@ -18,67 +18,59 @@ def load(path, name):
     return module
 
 
-removal = load(REMOVAL, "check_removal")
+unused = load(UNUSED, "unused_skills")
 
 
 class Mentions(unittest.TestCase):
     def test_code_bold_slash_and_path_forms_count(self):
         for text in ("Call the Skill tool with `how`.", "the **how** skill", "run /how first", "see ../how/SKILL.md", '"how",'):
             with self.subTest(text=text):
-                self.assertTrue(removal.mentions("how", text))
+                self.assertTrue(unused.mentions("how", text))
 
     def test_plain_words_and_longer_names_do_not_count(self):
         for text in ("how does this work", "`how-to`", "/however", "showhow/"):
             with self.subTest(text=text):
-                self.assertFalse(removal.mentions("how", text))
+                self.assertFalse(unused.mentions("how", text))
 
 
-class RemovalRatchet(unittest.TestCase):
+class UnusedSkills(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
-        for name in ("alpha", "beta"):
+        for name in ("alpha", "beta", "gamma"):
             (self.root / "skills" / name).mkdir(parents=True)
             (self.root / "skills" / name / "SKILL.md").write_text(f"# {name}\n")
         (self.root / "agents").mkdir()
-        self.baseline = self.root / "baseline.json"
-
-    def run_check(self, *args):
-        return subprocess.run([sys.executable, str(REMOVAL), "--root", str(self.root), "--baseline", str(self.baseline), *args],
-                              capture_output=True, text=True)
-
-    def test_a_new_mention_fails_until_reviewed(self):
-        self.assertEqual(self.run_check("--update").returncode, 0)
-        self.assertEqual(self.run_check().returncode, 0)
+        (self.root / "evals/promises").mkdir(parents=True)
+        (self.root / "evals/promises/ledger.json").write_text(json.dumps(
+            {"promises": {"p": {"owners": ["skills/gamma/SKILL.md"]}}}))
         (self.root / "skills/beta/SKILL.md").write_text("Call the Skill tool with `alpha`.\n")
-        done = self.run_check()
-        self.assertEqual(done.returncode, 1)
-        self.assertIn("alpha is named in 1 shipped files, above its baseline of 0", done.stdout)
-        self.assertEqual(self.run_check("--update").returncode, 1)
-        self.assertEqual(self.run_check("--update", "--allow-raise").returncode, 0)
 
-    def test_a_removed_mention_passes_and_can_tighten(self):
-        (self.root / "skills/beta/SKILL.md").write_text("the **alpha** skill\n")
-        self.run_check("--update")
-        (self.root / "skills/beta/SKILL.md").write_text("# beta\n")
-        done = self.run_check()
+    def rows(self):
+        return unused.report(self.root)
+
+    def test_a_skill_another_skill_loads_is_in_use(self):
+        row = self.rows()["alpha"]
+        self.assertEqual((row["loaded_by"], row["candidate"], row["index_only"]), (1, False, False))
+
+    def test_a_skill_nothing_loads_or_promises_is_a_candidate(self):
+        self.assertTrue(self.rows()["beta"]["candidate"])
+
+    def test_a_promised_skill_nothing_loads_is_index_only(self):
+        row = self.rows()["gamma"]
+        self.assertEqual((row["candidate"], row["index_only"], row["promises"]), (False, True, 1))
+
+    def test_a_corpus_keeps_a_skill_off_the_candidate_list(self):
+        (self.root / "evals/beta").mkdir()
+        self.assertFalse(self.rows()["beta"]["candidate"])
+
+    def test_the_report_never_fails_the_build(self):
+        done = subprocess.run([sys.executable, str(UNUSED), "--root", str(self.root)], capture_output=True, text=True)
         self.assertEqual(done.returncode, 0)
-        self.assertIn("1 below it", done.stdout)
-        self.run_check("--update")
-        self.assertEqual(json.loads(self.baseline.read_text())["alpha"], 0)
-
-    def test_a_skill_without_a_baseline_entry_fails(self):
-        self.baseline.write_text("{}\n")
-        self.assertIn("has no baseline entry", self.run_check().stdout)
-
-    def test_report_lists_the_files(self):
-        (self.root / "agents/x.md").write_text("load `alpha`\n")
-        self.assertIn("  agents/x.md", self.run_check("--report", "alpha").stdout)
-
-    def test_the_committed_baseline_holds(self):
-        done = subprocess.run([sys.executable, str(REMOVAL)], capture_output=True, text=True)
-        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertIn("beta: candidate", done.stdout)
+        self.assertIn("gamma: index only", done.stdout)
+        self.assertIn("This report gates nothing.", done.stdout)
 
 
 class RouteBytes(unittest.TestCase):
