@@ -45,14 +45,14 @@ def load_plan(root):
 
 
 def route_files(root, plan_module, manifest, playbook, route):
-    entry = manifest["playbooks"][playbook]
+    entry = manifest["playbooks"].get(playbook, {})
     levels = {name: None for name in manifest["facts"]}
     if entry.get("tiered"):
         levels = {name: LOW for name in manifest["facts"]} | FACTS[route]
     plan = plan_module.build(plan_module.argparse.Namespace(
         playbook=playbook, user_route=None, raise_to=None, reason=None, second_opinion=None, harness="other", project=root, **levels,
     ), manifest)
-    files = list(ALWAYS) + [f"skills/poteto-mode/{entry['file']}"]
+    files = list(ALWAYS) + [f"skills/poteto-mode/playbooks/{playbook}.md"]
     if entry.get("tiered"):
         files.append("skills/poteto-mode/references/routes.md")
     if entry.get("changes_code"):
@@ -70,7 +70,8 @@ def measure(root):
     manifest = json.loads((root / "skills/poteto-mode/routes.json").read_text(encoding="utf-8"))
     plan_module = load_plan(root)
     report = {}
-    for playbook, entry in sorted(manifest["playbooks"].items()):
+    for playbook in sorted(path.stem for path in (root / "skills/poteto-mode/playbooks").glob("*.md")):
+        entry = manifest["playbooks"].get(playbook, {})
         for route in (manifest["routes"] if entry.get("tiered") else ["standard"]):
             files = route_files(root, plan_module, manifest, playbook, route)
             sizes = {name: len((root / name).read_bytes()) for name in files}

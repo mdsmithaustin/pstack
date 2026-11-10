@@ -2411,7 +2411,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
-     "quote": "Stage the commits so the failing repro lands before the fix in git history."
+     "quote": "Git history shows the failing repro in a commit before the fix."
     }
    ],
    "harness_sensitive": false,
@@ -3162,7 +3162,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/prototype.md",
-     "quote": "Build throwaway in an isolated scratch dir, separate from production source."
+     "quote": "The variants exist in an isolated scratch directory, separate from production source."
     },
     {
      "file": "skills/poteto-mode/playbooks/prototype.md",

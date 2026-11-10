@@ -151,11 +151,22 @@ class GatesAndEndpoint(unittest.TestCase):
 
 
 class Manifest(unittest.TestCase):
-    def test_every_playbook_file_is_registered_once(self):
-        on_disk = sorted(path.stem for path in (MODE / "playbooks").glob("*.md"))
-        self.assertEqual(sorted(MANIFEST["playbooks"]), on_disk)
+    def test_manifest_lists_only_playbooks_that_exist_and_need_a_flag(self):
+        on_disk = {path.stem for path in (MODE / "playbooks").glob("*.md")}
+        self.assertLessEqual(set(MANIFEST["playbooks"]), on_disk)
         for name, entry in MANIFEST["playbooks"].items():
-            self.assertEqual(entry["file"], f"playbooks/{name}.md")
+            self.assertTrue(entry, f"{name} has no flag, so it needs no manifest entry")
+            self.assertNotIn("file", entry)
+
+    def test_a_playbook_without_a_manifest_entry_still_plans(self):
+        self.assertNotIn("babysit", MANIFEST["playbooks"])
+        self.assertEqual(plan("babysit")["route"], "standard")
+
+    def test_the_manifest_holds_no_outcome_text(self):
+        outcomes = [step["outcome"] for name in ("feature", "bug-fix") for step in plan(name, *facts(reach="material:x"))["steps"]]
+        raw = (MODE / "routes.json").read_text(encoding="utf-8")
+        for sentence in outcomes:
+            self.assertNotIn(sentence.split("** ", 1)[1][:40], raw)
 
     def test_every_named_skill_exists(self):
         named = set(MANIFEST["panels"]) | set(MANIFEST["lightweight_keeps"]) | {gate["skill"] for gate in MANIFEST["gates"] if gate.get("skill")}
@@ -172,7 +183,7 @@ class Manifest(unittest.TestCase):
     def test_tiered_playbooks_cite_routes_and_scrutiny(self):
         for name, entry in MANIFEST["playbooks"].items():
             if entry.get("tiered"):
-                text = (MODE / entry["file"]).read_text(encoding="utf-8")
+                text = (MODE / "playbooks" / f"{name}.md").read_text(encoding="utf-8")
                 self.assertIn("../references/routes.md", text, name)
                 self.assertIn("../references/review-lens.md#independent-scrutiny", text, name)
 
@@ -180,11 +191,16 @@ class Manifest(unittest.TestCase):
         listed = set()
         for doc in (MODE / "SKILL.md", MODE / "references/playbooks.md"):
             listed |= set(re.findall(r"`playbooks/([a-z-]+)\.md`", doc.read_text(encoding="utf-8")))
-        self.assertEqual(listed, set(MANIFEST["playbooks"]))
-        daily = {name for name, entry in MANIFEST["playbooks"].items() if entry.get("daily")} | {"opening-a-pr"}
-        entry_listed = set(re.findall(r"`playbooks/([a-z-]+)\.md`", (MODE / "SKILL.md").read_text(encoding="utf-8")))
-        self.assertEqual(entry_listed, daily)
+        self.assertEqual(listed, {path.stem for path in (MODE / "playbooks").glob("*.md")})
+        self.assertLess(len(re.findall(r"`playbooks/([a-z-]+)\.md`", (MODE / "SKILL.md").read_text(encoding="utf-8"))), len(listed))
 
+    def test_step_titles_name_outcomes_not_skills(self):
+        for name in ("feature", "bug-fix", "refactoring", "perf-issue"):
+            for line in (MODE / "playbooks" / f"{name}.md").read_text(encoding="utf-8").split("\n"):
+                title = re.match(r"\d+\. \*\*([^*]+)\*\*", line)
+                if title:
+                    self.assertNotIn("`", title.group(1), f"{name}: {title.group(1)}")
+                    self.assertNotIn("(", title.group(1), f"{name}: {title.group(1)}")
 
 if __name__ == "__main__":
     unittest.main()

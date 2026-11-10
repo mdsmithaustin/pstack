@@ -417,6 +417,18 @@ Two risks deserve a targeted look before this merges.
 - A generated checklist block for the worklist was tried in 2026-10 and not adopted, because leads stopped keeping a worklist. The plan script prints the items at run time and says it is not the worklist, which differs from that block, but no run has tested it.
 - Narrowing `architect` to the intensive route and cleanup to once per push changes two guide promises. The guide, ledger claims, and quotes are updated. The framework asks for independent maintainer review before weakening a promise.
 
+### Outcome wording and the manifest
+
+Commit `7482fc4` gave eleven playbooks outcome-first steps. A review against upstream at `c742dd6` found the idea sound and the execution additive. Skill names sat in the outcome titles, some outcomes named no evidence, a few repeated the next sentence, and the entry did not say which sentences bind.
+
+The follow-up change makes each outcome a strict prefix, as [PORTING.md](../PORTING.md#port-additions-beyond-substitution) now describes. It also settles where outcomes live, by the [rule ownership](framework.md#scope-and-rule-ownership) table.
+
+- **Outcomes stay in the playbook.** A playbook owns the outcomes and their order for its task type. Moving them to `routes.json` would put playbook content in router data, and a lead whose script cannot run would lose them.
+- **The manifest holds run policy only.** It keeps the gates and their cadence, the panel list, the skills a lightweight route keeps, and the flags of the seven playbooks that change code or take a risk route. That is the part a script must apply the same way every time, and the part a single edit should be able to subtract.
+- **The manifest holds nothing derivable.** File paths and the daily list are gone from it. A playbook with no flag has no entry, so a new upstream playbook needs no manifest change.
+
+The strict prefix keeps nine upstream-derived playbooks comparable with upstream after one sentence per step. No run has measured the rewording.
+
 ### Scope left out on purpose
 
 The first review of the suite also found that no task in the repository has

@@ -3,18 +3,14 @@
   "routes": ["lightweight", "standard", "intensive"],
   "facts": ["consequence", "reach", "uncertainty", "complexity", "reversibility"],
   "panels": ["architect", "arena", "interrogate", "swarm"],
-  "lightweight_keeps": [
-    "spec-probes",
-    "principle-prove-it-works",
-    "principle-test-behavior-not-implementation",
-    "poteto-tdd",
-    "benchmark-checklist"
-  ],
+  "lightweight_keeps": ["spec-probes", "principle-prove-it-works", "principle-test-behavior-not-implementation", "poteto-tdd", "benchmark-checklist"],
   "gates": [
     {
       "id": "preserve",
       "applies": "code",
-      "when": {"all": "before every commit"},
+      "when": {
+        "all": "before every commit"
+      },
       "run": "python3 \"${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/preserve.py\" --since <start commit>"
     },
     {
@@ -41,72 +37,86 @@
       "id": "comments",
       "skill": "no-comments",
       "applies": "code",
-      "when": {"all": "before review, when the diff adds or changes comments, doc comments, docstrings, or lint or type suppressions"}
+      "when": {
+        "all": "before review, when the diff adds or changes comments, doc comments, docstrings, or lint or type suppressions"
+      }
     },
     {
       "id": "commit-and-pr-prose",
       "skill": "technical-writing",
       "applies": "code",
-      "when": {"all": "for docs, RFCs, readmes, PR titles, PR descriptions, and commit bodies"}
+      "when": {
+        "all": "for docs, RFCs, readmes, PR titles, PR descriptions, and commit bodies"
+      }
     },
     {
       "id": "documentation",
       "skill": "documentation-impact",
       "applies": "code",
-      "when": {"all": "before reporting a substantive code or public workflow change complete"}
+      "when": {
+        "all": "before reporting a substantive code or public workflow change complete"
+      }
     },
     {
       "id": "reply-prose",
       "skill": "unslop",
       "applies": "all",
-      "when": {"all": "on every prose surface, the reply included"}
+      "when": {
+        "all": "on every prose surface, the reply included"
+      }
     },
     {
       "id": "recap",
       "skill": "pr-recap",
       "applies": "code",
-      "when": {"all": "only when the user or the repository's contributor instructions ask for PR recaps"}
+      "when": {
+        "all": "only when the user or the repository's contributor instructions ask for PR recaps"
+      }
     }
   ],
   "playbooks": {
-    "investigation": {"file": "playbooks/investigation.md", "daily": true},
-    "code-review": {"file": "playbooks/code-review.md", "daily": true},
-    "bug-fix": {"file": "playbooks/bug-fix.md", "daily": true, "changes_code": true, "tiered": true},
+    "bug-fix": {
+      "changes_code": true,
+      "tiered": true
+    },
     "feature": {
-      "file": "playbooks/feature.md",
-      "daily": true,
       "changes_code": true,
       "tiered": true,
       "lightweight_worklist": [
-        {"item": "Risk and acceptance", "covers": ["Preserved", "Shaped", "Specified"]},
-        {"item": "Build and prove", "covers": ["Built", "Proven"]},
-        {"item": "Deliver with review status", "covers": ["Landed", "Published"]}
+        {
+          "item": "Risk and acceptance",
+          "covers": ["Preserved", "Shaped", "Specified"]
+        },
+        {
+          "item": "Build and prove",
+          "covers": ["Built", "Proven"]
+        },
+        {
+          "item": "Deliver with review status",
+          "covers": ["Landed", "Published"]
+        }
       ],
       "lightweight_skips": {
         "Designed": "one established shape",
         "Planned": "no concurrent writes or independent streams"
       }
     },
-    "refactoring": {"file": "playbooks/refactoring.md", "daily": true, "changes_code": true, "tiered": true},
-    "perf-issue": {"file": "playbooks/perf-issue.md", "daily": true, "changes_code": true, "tiered": true},
-    "prototype": {"file": "playbooks/prototype.md", "daily": true},
-    "babysit": {"file": "playbooks/babysit.md", "daily": true},
-    "shipping": {"file": "playbooks/shipping.md", "daily": true},
-    "research": {"file": "playbooks/research.md"},
-    "hillclimb": {"file": "playbooks/hillclimb.md", "changes_code": true},
-    "runtime-forensics": {"file": "playbooks/runtime-forensics.md"},
-    "trace-forensics": {"file": "playbooks/trace-forensics.md"},
-    "visual-parity": {"file": "playbooks/visual-parity.md", "changes_code": true},
-    "authoring-a-skill": {"file": "playbooks/authoring-a-skill.md", "changes_code": true},
-    "eval": {"file": "playbooks/eval.md"},
-    "autonomous-run": {"file": "playbooks/autonomous-run.md"},
-    "orchestrate": {"file": "playbooks/orchestrate.md"},
-    "autopilot-full": {"file": "playbooks/autopilot-full.md"},
-    "autopilot-stack": {"file": "playbooks/autopilot-stack.md"},
-    "session-pickup": {"file": "playbooks/session-pickup.md"},
-    "pause-safely": {"file": "playbooks/pause-safely.md"},
-    "multi-phase-plan": {"file": "playbooks/multi-phase-plan.md"},
-    "worktree-cleanup": {"file": "playbooks/worktree-cleanup.md"},
-    "opening-a-pr": {"file": "playbooks/opening-a-pr.md"}
+    "refactoring": {
+      "changes_code": true,
+      "tiered": true
+    },
+    "perf-issue": {
+      "changes_code": true,
+      "tiered": true
+    },
+    "hillclimb": {
+      "changes_code": true
+    },
+    "visual-parity": {
+      "changes_code": true
+    },
+    "authoring-a-skill": {
+      "changes_code": true
+    }
   }
 }

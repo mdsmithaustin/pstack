@@ -3,8 +3,8 @@
 
 The lead supplies the playbook and five risk facts. This script applies the
 routing policy, so the answer is the same on every model and harness. Steps and
-their outcome sentences come from the playbook file. Gates and playbook flags
-come from routes.json beside the mode entry.
+their outcome sentences come from the playbook file, which owns them. Gates, panels,
+and the flags of code-changing playbooks come from routes.json beside the mode entry.
 
 Exit 2 means a usage error, such as an unknown playbook or a lowered route.
 """
@@ -132,10 +132,11 @@ def pending(args, path, prose):
 
 
 def build(args, manifest):
-    entry = manifest["playbooks"].get(args.playbook)
-    if entry is None:
-        raise SystemExit(f"plan.py: unknown playbook {args.playbook!r}. Known: {', '.join(sorted(manifest['playbooks']))}.")
-    path = MODE / entry["file"]
+    path = MODE / "playbooks" / f"{args.playbook}.md"
+    if not re.fullmatch(r"[a-z0-9-]+", args.playbook) or not path.is_file():
+        known = sorted(found.stem for found in (MODE / "playbooks").glob("*.md"))
+        raise SystemExit(f"plan.py: unknown playbook {args.playbook!r}. Known: {', '.join(known)}.")
+    entry = manifest["playbooks"].get(args.playbook, {})
     prose, steps = read_playbook(path)
     tiered = entry.get("tiered", False)
     facts, second = {}, None
