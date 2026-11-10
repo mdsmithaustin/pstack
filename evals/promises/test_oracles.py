@@ -1119,6 +1119,36 @@ class BugFixOracles(unittest.TestCase):
         self.assertEqual(grade("steering-prompt-redirects-run", idle, case)["verdict"], INCONCLUSIVE)
 
 
+class ShellReadCredit(unittest.TestCase):
+    """Naming a playbook in a shell command is a read only when the command shows its text."""
+
+    PLAYBOOK = "/w/.claude/skills/poteto-mode/playbooks/feature.md"
+
+    def verdict(self, command, ok=True):
+        trace = minimal(events=bash(0, command.format(p=self.PLAYBOOK), ok=ok), final_reply="ok")
+        return grade("feature-prompt-routes-to-feature", trace, load_case("route-feature"))["verdict"]
+
+    def test_commands_that_show_the_file_are_reads(self):
+        for command in ("cat {p}", "sed -n 1,80p {p}", "cat {p} | head -50", "grep -n step {p}", "ls {p}; cat {p}",
+                        "cd /w/.claude/skills && cat poteto-mode/playbooks/feature.md"):
+            with self.subTest(command=command):
+                self.assertEqual(self.verdict(command), PASS)
+
+    def test_commands_that_only_name_the_file_are_not_reads(self):
+        for command in ("ls -la {p}", "test -f {p} && echo yes", "wc -l {p}", "stat {p}", "grep -c step {p}", "rg -l step {p}",
+                        "grep --quiet step {p}", "cd /w/.claude/skills && ls poteto-mode/playbooks/feature.md"):
+            with self.subTest(command=command):
+                self.assertEqual(self.verdict(command), FAIL)
+
+    def test_a_lone_failed_read_is_not_a_read(self):
+        self.assertEqual(self.verdict("cat {p}", ok=False), FAIL)
+        self.assertEqual(self.verdict("cd /w/.claude/skills && cat poteto-mode/playbooks/feature.md", ok=False), FAIL)
+
+    def test_a_read_in_a_chain_that_failed_later_keeps_its_credit(self):
+        # The trace records one result for the whole call, so the failure cannot be pinned on the read.
+        self.assertEqual(self.verdict("cat {p} && python3 -m unittest", ok=False), PASS)
+
+
 class HowWhyOracles(unittest.TestCase):
     def test_narrow_how_fails_on_explorers(self):
         case = load_case("how-run")

@@ -348,6 +348,26 @@ def resolved_shell_paths(command):
     return [path for _, path, _ in shell_path_verbs(command)]
 
 
+# Commands that name a file without showing any of its text. Naming a file this way is not a read of it.
+NO_CONTENT_VERBS = {"ls", "tree", "stat", "du", "rm", "mkdir", "rmdir", "touch", "test", "[", "wc", "file", "find", "cmp",
+                    "shasum", "sha256sum", "md5", "md5sum", "cksum"}
+COUNTING_SEARCH = re.compile(r"^(?:grep|egrep|fgrep|rg|ag)\s+(?:\S+\s+)*?-(?:-count\b|-files-with(?:out)?-match(?:es)?\b|-quiet\b|[a-zA-Z]*[clLq])")
+
+
+def shell_reads(command):
+    """(path, alone) for each file a shell command shows text from. alone means the command is that one segment, so a
+    failed result is the read's own failure and not a later command's."""
+    segments = [seg for pipeline in SHELL_PIPELINE.split(expand_assignments(command)) for seg in SHELL_SEGMENT.split(pipeline)
+                if seg.strip() and seg.strip().split()[:1] != ["cd"]]
+    out = []
+    for verb, path, pipeline in shell_path_verbs(command):
+        segment = next((seg.strip() for seg in SHELL_SEGMENT.split(pipeline) if path.rsplit("/", 1)[-1] in seg), "")
+        if verb in NO_CONTENT_VERBS or COUNTING_SEARCH.match(segment):
+            continue
+        out.append((path, len(segments) == 1))
+    return out
+
+
 def shell_paths(command):
     try:
         tokens = shlex.split(command.replace("\n", " "))
@@ -467,10 +487,12 @@ class View:
                             out.append((call.get("seq"), rel, self.read_returned(call)))
                         break
             elif name in SHELL_TOOLS:
-                for token in resolved_shell_paths(str(given.get(SHELL_TOOLS[name]) or "")):
+                failed = (self.results_for(call) or {}).get("ok") is False
+                for token, alone in shell_reads(str(given.get(SHELL_TOOLS[name]) or "")):
                     rel = skill_rel(token)
                     if rel:
-                        out.append((call.get("seq"), rel, True))
+                        # A failed chain may have read the file before a later command failed, so only a lone read is discredited.
+                        out.append((call.get("seq"), rel, not (failed and alone)))
         return out
 
     def read_returned(self, call):
