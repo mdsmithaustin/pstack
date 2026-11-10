@@ -14,39 +14,23 @@ from pathlib import Path
 
 import ledger
 import report
+from case_inputs import case_digest, case_paths, grader_digest
 from harnesses.login import ERROR, applicability
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 RECEIPTS = HERE / "receipts.json"
 POLICY = HERE / "freshness.json"
-GRADER = ("oracles.py", "grade_boundary.py")
 # A verdict that differs from the one it replaces is settled only by this many runs on the same bytes.
 SETTLING_RUNS = 3
 DEFAULT_TIMEOUT_S = 1800
-FRESH, UNSETTLED, DISPUTED, STALE, MISSING, DEFERRED = "fresh", "unsettled", "disputed", "stale", "missing", "deferred"
-DEBT = (UNSETTLED, DISPUTED, STALE, MISSING)
+FRESH, UNSETTLED, UNRESOLVED, DISPUTED, STALE, MISSING, DEFERRED = "fresh", "unsettled", "unresolved", "disputed", "stale", "missing", "deferred"
+DEBT = (UNSETTLED, UNRESOLVED, DISPUTED, STALE, MISSING)
+UNDECIDED = "INCONCLUSIVE"
 
 
 def sha(data):
     return hashlib.sha256(data).hexdigest()
-
-
-def tree_digest(paths, here=HERE):
-    """One digest over every file under `paths`, so a case's receipt goes stale when its prompt, fixture, or history moves."""
-    digest = hashlib.sha256()
-    for root in paths:
-        files = [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.is_file() and "__pycache__" not in p.parts)
-        for path in files:
-            digest.update(path.relative_to(here).as_posix().encode() + b"\0" + hashlib.sha256(path.read_bytes()).digest())
-    return digest.hexdigest()
-
-
-def case_paths(case_id, spec, here=HERE):
-    paths = [here / "cases" / case_id, here / "fixtures" / spec["fixture"]]
-    if spec.get("history"):
-        paths.append(here / "histories" / spec["history"])
-    return [p for p in paths if p.exists()]
 
 
 def load_cases(here=HERE):
@@ -60,9 +44,16 @@ def runnable(spec):
     return spec.get("kind", "live") == "live" and not spec.get("deferred")
 
 
-def timeout_for(spec, harness):
+def gives_evidence(spec):
+    """An arm case runs rewritten skill text, so its verdict says nothing about the committed skill."""
+    return runnable(spec) and not spec.get("skill_overlays")
+
+
+def time_limit(spec, harness):
+    """The longest a run of this case can take: the harness applies the case's limit to each turn."""
     limits = spec.get("timeout_s", DEFAULT_TIMEOUT_S)
-    return limits if isinstance(limits, int) else limits.get(harness, limits.get("default", DEFAULT_TIMEOUT_S))
+    per_turn = limits if isinstance(limits, int) else limits.get(harness, limits.get("default", DEFAULT_TIMEOUT_S))
+    return per_turn * max(1, len(spec.get("turns", [])))
 
 
 def tree_reader(root=ROOT):
@@ -83,10 +74,6 @@ def owner_digests(owners, read):
     return {owner: (lambda data: sha(data) if data is not None else None)(read(owner)) for owner in sorted(owners)}
 
 
-def grader_digest(here=HERE):
-    return sha(b"".join((here / name).read_bytes() for name in GRADER))
-
-
 def load_receipts(path=RECEIPTS):
     path = Path(path)
     return ledger.parse(path.read_text(encoding="utf-8")) if path.is_file() else {"version": 1, "receipts": {}}
@@ -104,14 +91,15 @@ def load_policy(path=POLICY):
     return policy
 
 
-def record(out, receipts, promises, cases, *, today, reader_at=commit_reader, read_now=None, grader=None, here=HERE):
+def record(out, receipts, promises, cases, *, today, reader_at=commit_reader, read_now=None, here=HERE):
     """Fold each graded run under `out` into `receipts`. Returns one line per cell written.
 
     A run already folded in is skipped, and so is a run on bytes other than the tree's when the receipt on record
-    already matches the tree: an old output directory cannot displace current evidence. An arm case rewrites skill text before it runs, so its verdict is not evidence about the committed skill and is
-    skipped. A run a dead login ended carries no verdict about the skill either.
+    already matches the tree: an old output directory cannot displace current evidence. The case and grader digests
+    come from the run's own record, written before its first turn, so a run is never credited with bytes it did not
+    use; a run without them is skipped. An arm case and a run a dead login ended carry no verdict about the committed
+    skill and are skipped too.
     """
-    grader = grader or grader_digest(here)
     read_now = read_now or tree_reader()
     lines = []
     for path in sorted(report.run_verdicts(out), key=lambda p: p.stat().st_mtime):
@@ -124,10 +112,16 @@ def record(out, receipts, promises, cases, *, today, reader_at=commit_reader, re
         if spec is None or not commit or spec.get("skill_overlays"):
             lines.append(f"skipped {path.parent.name}: {'arm case' if spec and commit else 'no bound case or skills commit'}")
             continue
+        started = path.parent / "run.json"
+        stored = json.loads(started.read_text(encoding="utf-8")).get("inputs") if started.is_file() else None
+        if not stored:
+            lines.append(f"skipped {path.parent.name}: its record carries no input digests, so its verdicts cannot be bound to bytes")
+            continue
+        case, grader = stored["case"], stored["grader"]
         trace = path.parent / "trace.json"
         model = json.loads(trace.read_text(encoding="utf-8")).get("model") if trace.is_file() else None
         read = reader_at(commit)
-        case = tree_digest(case_paths(case_id, spec, here), here)
+        case_now = case_digest(case_id, spec, here)
         for pid, result in sorted(run["promises"].items()):
             promise = promises.get(pid)
             verdict = result["verdict"]
@@ -136,7 +130,7 @@ def record(out, receipts, promises, cases, *, today, reader_at=commit_reader, re
             inputs = {"case": case, "owners": owner_digests(promise["owners"], read)}
             cell = receipts["receipts"].setdefault(pid, {}).setdefault(harness, {})
             prior = cell.get(case_id)
-            current = {"case": case, "owners": owner_digests(promise["owners"], read_now)}
+            current = {"case": case_now, "owners": owner_digests(promise["owners"], read_now)}
             if prior and prior["inputs"] == current != inputs:
                 lines.append(f"skipped {pid} {harness} {case_id}: the receipt on record tested the current tree and this run did not")
                 continue
@@ -178,6 +172,8 @@ def entry_state(entry, inputs):
         return DISPUTED, "a reader disagreed with the recorded verdict"
     runs = sum(entry["verdicts"].values())
     verdict = unanimous(entry["verdicts"])
+    if verdict == UNDECIDED and not audit:
+        return UNRESOLVED, f"graded {UNDECIDED} in {runs} run(s); a reader or a rerun must decide"
     flipped = entry.get("previous") not in (None, verdict)
     if runs < SETTLING_RUNS and (verdict == "MIXED" or flipped):
         why = f"changed from {entry['previous']} to {verdict}" if flipped else "runs disagree"
@@ -198,7 +194,7 @@ def cells(receipts, promises, cases, harnesses, *, read=None, applies=None, here
     for pid, promise in sorted(promises.items()):
         if promise["check"] != "live":
             continue
-        ready = [c for c in bound.get(pid, []) if runnable(cases[c])]
+        ready = [c for c in bound.get(pid, []) if gives_evidence(cases[c])]
         owners = owner_digests(promise["owners"], read)
         for harness in harnesses:
             if not applies(pid, harness):
@@ -214,12 +210,13 @@ def cells(receipts, promises, cases, harnesses, *, read=None, applies=None, here
                     states.append((MISSING, "no receipt", case_id))
                     continue
                 if case_id not in digests:
-                    digests[case_id] = tree_digest(case_paths(case_id, cases[case_id], here), here)
+                    digests[case_id] = case_digest(case_id, cases[case_id], here)
                 states.append((*entry_state(entry, {"case": digests[case_id], "owners": owners}), case_id))
             # One bound case with fresh evidence covers the cell. Otherwise report the state closest to fresh.
-            order = (FRESH, UNSETTLED, DISPUTED, STALE, MISSING)
+            order = (FRESH, UNSETTLED, UNRESOLVED, DISPUTED, STALE, MISSING)
             state, reason, case_id = min(states, key=lambda s: order.index(s[0]))
-            rows.append({**row, "state": state, "reason": reason, "receipt_case": case_id if state != MISSING else None})
+            rows.append({**row, "state": state, "reason": reason, "receipt_case": case_id if state != MISSING else None,
+                         "receipts": {c: s for s, _, c in states if s != MISSING}})
     return rows
 
 
@@ -266,7 +263,7 @@ def plan(rows, cases, budget_s=None):
     """Per harness, the cheapest runnable cases that settle the debt in `rows`.
 
     Greedy weighted cover: each pick is the case that settles the most open promises per second of its time limit.
-    The time limit is an upper bound on a run, not a cost estimate. With a budget, picks stop when no remaining case
+    The time limit is the per-turn limit times the case's turns: an upper bound on a run, not a cost estimate. With a budget, picks stop when no remaining case
     fits and the uncovered promises stay listed as debt.
     """
     out = {}
@@ -280,7 +277,7 @@ def plan(rows, cases, budget_s=None):
         while open_:
             best = None
             for case_id in sorted({c for options in open_.values() for c in options}):
-                cost = timeout_for(cases[case_id], harness)
+                cost = time_limit(cases[case_id], harness)
                 if budget_s is not None and spent + cost > budget_s:
                     continue
                 covers = sorted(pid for pid, options in open_.items() if case_id in options)
@@ -306,7 +303,8 @@ def command(harness, case_ids):
 
 def audit_sample(receipts, rows, count):
     """PASS receipts no person has read, in an order fixed by their content so the pick cannot favor easy ones."""
-    fresh = {(row["promise"], row["harness"], row["receipt_case"]) for row in rows if row["state"] == FRESH}
+    fresh = {(row["promise"], row["harness"], case_id) for row in rows
+             for case_id, state in row.get("receipts", {}).items() if state == FRESH}
     unread = []
     for pid, harness, case_id in fresh:
         entry = receipts["receipts"][pid][harness][case_id]

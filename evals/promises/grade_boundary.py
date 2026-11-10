@@ -788,6 +788,9 @@ def _before_turns(run, scratch=()):
     _runtime()
     record = {"harness": run.harness, "case": run.case["id"], "skills_at": run.skills_at,
               "project": str(run.project), "timeout_s": run.timeout_s, "turns": [], "baseline": run.baseline}
+    if getattr(run, "inputs", None):
+        # Digests of the case inputs and grader this run starts with, for evals/promises/freshness.py.
+        record["inputs"] = run.inputs
     controller = _Controller(run.root.parent, create=True)
     authorization = controller.issue(run.root, run.project, run.case, record, allocations=(run.project.parent, *scratch))
     if run.case["id"] == RELAY_CASE and run.harness == "codex":

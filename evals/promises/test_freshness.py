@@ -43,16 +43,21 @@ class Tree(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
 
-    def run_dir(self, case_id, harness, verdicts, commit="c1"):
+    def run_dir(self, case_id, harness, verdicts, commit="c1", grader="g1", inputs=True):
+        """A graded run as live.py leaves it: the verdict, and a record whose input digests date from the run's start."""
         self.runs += 1
-        self.write(self.out / f"run-{self.runs}" / "verdict.json", json.dumps({
+        run = self.out / f"run-{self.runs}"
+        self.write(run / "verdict.json", json.dumps({
             "case": case_id, "harness": harness, "skills_at": commit,
             "promises": {pid: {"verdict": v} for pid, v in verdicts.items()}}))
+        stored = {"inputs": {"case": freshness.case_digest(case_id, CASES[case_id], self.here), "grader": grader}} if inputs else {}
+        self.write(run / "run.json", json.dumps(stored))
 
-    def record(self, grader="g1", keep=False):
-        # The reader ignores the commit: these tests record the tree as it stands when the run is folded in.
-        lines = freshness.record(self.out, self.receipts, PROMISES, CASES, today="2026-11-10", grader=grader, here=self.here,
-                                 reader_at=lambda commit: freshness.tree_reader(self.root), read_now=freshness.tree_reader(self.root))
+    def record(self, keep=False, reader_at=None):
+        # By default the reader ignores the commit: the tree as it stands when the run is folded in is what it tested.
+        lines = freshness.record(self.out, self.receipts, PROMISES, CASES, today="2026-11-10", here=self.here,
+                                 reader_at=reader_at or (lambda commit: freshness.tree_reader(self.root)),
+                                 read_now=freshness.tree_reader(self.root))
         if not keep:
             shutil.rmtree(self.out)
         return lines
@@ -148,30 +153,47 @@ class Record(Tree):
         self.assertEqual(self.state("routes"), ("fresh", "FAIL 1, PASS 2"))
 
     def test_a_grader_change_restarts_the_count_and_is_reported_for_regrading(self):
-        self.run_dir("route-case", "claude-code", {"routes": "PASS"})
-        self.record(grader="g1")
+        self.run_dir("route-case", "claude-code", {"routes": "PASS"}, grader="g1")
+        self.record()
         self.assertEqual(freshness.stale_grader(self.receipts, "g2"), 1)
-        self.run_dir("route-case", "claude-code", {"routes": "PASS"})
-        self.record(grader="g2")
+        self.run_dir("route-case", "claude-code", {"routes": "PASS"}, grader="g2")
+        self.record()
         entry = self.receipts["receipts"]["routes"]["claude-code"]["route-case"]
         self.assertEqual((entry["verdicts"], freshness.stale_grader(self.receipts, "g2")), ({"PASS": 1}, 0))
 
     def test_owner_digests_come_from_the_tested_commit_not_the_working_tree(self):
         self.run_dir("route-case", "claude-code", {"routes": "PASS"}, commit="old")
-        at_commit = lambda commit: (lambda path: f"{commit}:{path}".encode())
-        freshness.record(self.out, self.receipts, PROMISES, CASES, today="2026-11-10", grader="g", here=self.here,
-                         reader_at=at_commit, read_now=freshness.tree_reader(self.root))
+        self.record(reader_at=lambda commit: (lambda path: f"{commit}:{path}".encode()))
         self.assertEqual(self.state("routes")[0], "stale")
 
     def test_an_old_run_cannot_displace_a_receipt_that_tested_the_current_tree(self):
         self.run_dir("route-case", "claude-code", {"routes": "PASS"})
         self.record()
         self.run_dir("route-case", "claude-code", {"routes": "FAIL"}, commit="old")
-        lines = freshness.record(self.out, self.receipts, PROMISES, CASES, today="2026-11-10", grader="g1", here=self.here,
-                                 reader_at=lambda commit: (lambda path: f"{commit}:{path}".encode()),
-                                 read_now=freshness.tree_reader(self.root))
+        lines = self.record(reader_at=lambda commit: (lambda path: f"{commit}:{path}".encode()))
         self.assertEqual(self.state("routes"), ("fresh", "PASS 1"))
         self.assertIn("this run did not", lines[0])
+
+    def test_a_run_keeps_the_case_digest_it_started_with(self):
+        # Folding an old output directory in after its fixture changed must not credit the old verdict with the new bytes.
+        self.run_dir("route-case", "claude-code", {"routes": "PASS"})
+        self.record(keep=True)
+        self.write(self.here / "fixtures" / "tally" / "tally.py", "print(2)\n")
+        self.record()
+        self.assertEqual(self.state("routes")[0], "stale")
+
+    def test_a_run_whose_record_has_no_input_digests_leaves_no_receipt(self):
+        self.run_dir("route-case", "claude-code", {"routes": "PASS"}, inputs=False)
+        lines = self.record()
+        self.assertEqual(self.receipts["receipts"], {})
+        self.assertIn("carries no input digests", lines[0])
+
+    def test_an_inconclusive_verdict_is_debt_until_a_reader_or_a_rerun_decides(self):
+        self.run_dir("route-case", "claude-code", {"routes": "INCONCLUSIVE"})
+        self.record()
+        self.assertEqual(self.state("routes"), ("unresolved", "graded INCONCLUSIVE in 1 run(s); a reader or a rerun must decide"))
+        freshness.record_audit(self.receipts, "routes", "claude-code", "route-case", True, "the run could not show it", "2026-11-10")
+        self.assertEqual(self.state("routes"), ("fresh", "INCONCLUSIVE 1"))
 
 
 class Plan(Tree):
@@ -188,6 +210,19 @@ class Plan(Tree):
     def test_the_time_limit_is_read_for_the_planned_harness(self):
         plan = freshness.plan(self.rows(("codex",)), CASES)["codex"]
         self.assertEqual(plan["timeout_s_upper_bound"], 2700)
+
+    def test_a_multi_turn_case_costs_its_limit_for_every_turn(self):
+        CASES["route-case"]["turns"] = ["a", "b", "c", "d"]
+        self.addCleanup(CASES["route-case"].pop, "turns")
+        plan = freshness.plan(self.rows(), CASES, budget_s=1000)["claude-code"]
+        self.assertEqual((plan["cases"], plan["uncovered"]), ([], ["builds", "routes"]))
+        self.assertEqual(freshness.plan(self.rows(), CASES)["claude-code"]["timeout_s_upper_bound"], 1800)
+
+    def test_an_arm_case_is_never_planned_because_its_verdict_is_never_recorded(self):
+        CASES["arm-case"] = {"promises": ["routes"], "fixture": "tally", "timeout_s": 1, "skill_overlays": [{"file": "a/SKILL.md"}]}
+        self.addCleanup(CASES.pop, "arm-case")
+        plan = freshness.plan(self.rows(), CASES)["claude-code"]
+        self.assertNotIn("arm-case", [pick["case"] for pick in plan["cases"]])
 
     def test_an_unsettled_cell_is_planned_on_the_case_its_receipt_came_from(self):
         for verdict in ("PASS", "FAIL"):
@@ -213,6 +248,15 @@ class Touched(Tree):
         self.assertEqual(reached("evals/promises/fixtures/tally/tally.py"), {"routes", "builds"})
         self.assertEqual(reached("README.md", "skills/a/references/x.md"), set())
 
+    def test_a_case_that_borrows_another_cases_checks_goes_stale_with_them(self):
+        CASES["build-case"]["references"] = "route-case"
+        self.addCleanup(CASES["build-case"].pop, "references")
+        self.run_dir("build-case", "claude-code", {"builds": "PASS"})
+        self.record()
+        self.assertEqual(self.state("builds")[0], "fresh")
+        self.write(self.here / "cases" / "route-case" / "held_out.py", "assert True\n")
+        self.assertEqual(self.state("builds"), ("stale", "case, fixture, or history changed"))
+
 
 class Audit(Tree):
     def setUp(self):
@@ -229,9 +273,16 @@ class Audit(Tree):
     def test_a_disputed_pass_is_debt_until_it_is_rerun(self):
         freshness.record_audit(self.receipts, "routes", "claude-code", "build-case", False, "keyword only", "2026-11-10")
         self.assertEqual(self.state("routes"), ("disputed", "a reader disagreed with the recorded verdict"))
-        self.run_dir("build-case", "claude-code", {"routes": "FAIL"})
-        self.record(grader="g2")
+        self.run_dir("build-case", "claude-code", {"routes": "FAIL"}, grader="g2")
+        self.record()
         self.assertEqual(self.state("routes")[0], "unsettled")
+
+    def test_the_sample_reaches_an_unread_pass_on_a_case_that_does_not_represent_its_cell(self):
+        freshness.record_audit(self.receipts, "routes", "claude-code", "build-case", True, None, "2026-11-10")
+        self.run_dir("route-case", "claude-code", {"routes": "PASS"})
+        self.record()
+        sample = freshness.audit_sample(self.receipts, self.rows(), 5)
+        self.assertEqual([(s["promise"], s["case"]) for s in sample], [("routes", "route-case")])
 
     def test_an_audit_of_a_receipt_that_does_not_exist_is_refused(self):
         with self.assertRaises(ValueError):
@@ -267,6 +318,15 @@ class Committed(unittest.TestCase):
         self.assertTrue(policy["harnesses"])
         for pid in policy["blocking"]:
             self.assertEqual(promises[pid]["check"], "live", pid)
+
+    def test_a_live_run_record_carries_the_digests_record_reads(self):
+        import case_inputs
+        import live
+        case = live.load_case("route-feature")
+        run = live.Run(Path("/nonexistent"), "codex", case, "c1", 300, inputs=case_inputs.run_inputs(case))
+        spec = freshness.load_cases()["route-feature"]
+        self.assertEqual(live.meta(run)["inputs"], {"case": freshness.case_digest("route-feature", spec),
+                                                    "grader": freshness.grader_digest()})
 
     def test_strict_check_passes_on_the_committed_tree(self):
         with contextlib.redirect_stdout(io.StringIO()) as out:

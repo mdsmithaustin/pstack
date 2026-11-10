@@ -18,6 +18,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from case_inputs import run_inputs
 from grade_boundary import create_file, grade, GradeRefused, read_file, write_file, _before_turns, _json, _lookup, _Root, _seal, _write_record
 from harnesses.login import LoginRequired, auth_death, death_record, error_verdict
 
@@ -67,6 +68,7 @@ class Run:
     model: str | None = None
     effort: str | None = None
     implicit_off: list = field(default_factory=list)
+    inputs: dict | None = None
 
     @property
     def project(self):
@@ -310,6 +312,7 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     run.project.parent.mkdir(parents=True)
     make_project(case, run.project)
     run.baseline = baseline(run.project)
+    run.inputs = run_inputs(case)
     install_tree(run.skills_at, run.project / module.SKILLS_DIR)
     apply_overlays(case, run.project / module.SKILLS_DIR)
     run.implicit_off = skill_listing.managed_skills(run.project / module.SKILLS_DIR)
@@ -371,7 +374,8 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
 
 def meta(run):
     return {"harness": run.harness, "case": run.case["id"], "skills_at": run.skills_at, "project": str(run.project),
-            "timeout_s": run.timeout_s, "turns": run.turns, "baseline": run.baseline}
+            "timeout_s": run.timeout_s, "turns": run.turns, "baseline": run.baseline,
+            **({"inputs": run.inputs} if run.inputs else {})}
 
 
 def main(argv=None):
