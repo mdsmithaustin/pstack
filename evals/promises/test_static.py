@@ -13,6 +13,8 @@ GUIDE = ROOT / "docs" / "guide"
 SKILLS = ROOT / "skills"
 POTETO = SKILLS / "poteto-mode" / "SKILL.md"
 PLAYBOOKS = SKILLS / "poteto-mode" / "playbooks"
+MORE_PLAYBOOKS = SKILLS / "poteto-mode" / "references" / "playbooks.md"
+PRINCIPLES = SKILLS / "poteto-mode" / "references" / "principles.md"
 
 _spec = importlib.util.spec_from_file_location("skill_listing", SKILLS / "setup-pstack" / "scripts" / "skill-listing.py")
 skill_listing = importlib.util.module_from_spec(_spec)
@@ -113,7 +115,7 @@ def section(text, heading, next_level="## "):
 
 
 def poteto_playbook_bullets():
-    body = section(read(POTETO), "\n## Playbooks\n")
+    body = section(read(POTETO), "\n## Playbooks\n") + "\n" + read(MORE_PLAYBOOKS)
     return re.findall(r"^- \*\*(.+?)\.\*\* .*?`playbooks/([a-z-]+)\.md`", body, flags=re.M)
 
 
@@ -162,7 +164,8 @@ class TestStaticPromises(unittest.TestCase):
         stated = {int(n) for n in re.findall(r"(?:ships|The) (\d+) (?:principles|names)", guide_text())}
         self.assertEqual(stated, {len(on_disk)})
         self.assertEqual(on_disk, sorted(PRINCIPLE_RULES))
-        index = section(read(POTETO), "\n## Principles\n")
+        self.assertIn("[principles](references/principles.md)", section(read(POTETO), "\n## Principles\n"))
+        index = read(PRINCIPLES)
         listed = sorted(set(re.findall(r"\(\*\*(principle-[a-z-]+)\*\*\)", index)))
         self.assertEqual(listed, on_disk)
 
@@ -303,7 +306,8 @@ class TestStaticPromises(unittest.TestCase):
     def test_research_playbook_bundled(self):
         self.assertFalse((SKILLS / "research").exists())
         self.assertTrue((PLAYBOOKS / "research.md").is_file())
-        self.assertIn("`playbooks/research.md`", read(POTETO))
+        self.assertIn("`playbooks/research.md`", read(MORE_PLAYBOOKS))
+        self.assertIn("[more playbooks](references/playbooks.md)", read(POTETO))
 
     def test_comment_sicko_keep_list(self):
         agent = read(ROOT / "agents" / "comment-sicko.md")

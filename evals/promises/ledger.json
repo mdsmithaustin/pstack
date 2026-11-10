@@ -2400,22 +2400,23 @@
    "claim": "When `no-mistakes doctor` fails or the gate cannot run, the agent stops and reports.",
    "evidence": [
     {
-     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "file": "skills/poteto-mode/references/gated-publish.md",
      "quote": "When `no-mistakes doctor` fails or the gate cannot run, stop and report."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/playbooks/opening-a-pr.md"
+    "skills/poteto-mode/playbooks/opening-a-pr.md",
+    "skills/poteto-mode/references/gated-publish.md"
    ]
   },
   "opening-a-pr-deslops-diff": {
    "check": "static",
-   "claim": "Opening a PR runs /deslop over the diff before each commit.",
+   "claim": "Opening a PR runs /deslop over the diff before each push, and before each commit on the intensive route.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
-     "quote": "Before every commit or amend, call the Skill tool with `deslop`."
+     "quote": "Before each push or published head, call the Skill tool with `deslop`. On the intensive route, in a machine-consumed playbook, and wherever a brief says so, do this before every commit or amend instead."
     }
    ],
    "harness_sensitive": false,
@@ -2429,13 +2430,14 @@
    "claim": "After each publication, finalize the selected author format without changing generated evidence.",
    "evidence": [
     {
-     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "file": "skills/poteto-mode/references/gated-publish.md",
      "quote": "Check the title against **Titles**, restore the selected **Body format**, and check every author claim against the PR's full diff at the current head. Correct the title and author text with the resolved forge. Preserve the generated evidence appendix, ownership markers, and attestation byte for byte; put author additions outside it."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/playbooks/opening-a-pr.md"
+    "skills/poteto-mode/playbooks/opening-a-pr.md",
+    "skills/poteto-mode/references/gated-publish.md"
    ]
   },
   "opening-a-pr-gated-ask-user-relayed-when-attended": {
@@ -2443,13 +2445,14 @@
    "claim": "When the gate raises an ask-user finding in an attended run, the agent relays it to the user and never passes `--yes`.",
    "evidence": [
     {
-     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "file": "skills/poteto-mode/references/gated-publish.md",
      "quote": "In an attended run, relay an `ask-user` finding verbatim to the user, or from a subagent to its parent. Never pass `--yes`."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/playbooks/opening-a-pr.md"
+    "skills/poteto-mode/playbooks/opening-a-pr.md",
+    "skills/poteto-mode/references/gated-publish.md"
    ]
   },
   "opening-a-pr-gated-bypass-needs-the-user-word": {
@@ -2457,13 +2460,14 @@
    "claim": "In a gated repository the agent publishes around the gate only when the user said \"bypass no-mistakes\" in the current session.",
    "evidence": [
     {
-     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "file": "skills/poteto-mode/references/gated-publish.md",
      "quote": "Publish around the gate only when the user said \"bypass no-mistakes\" in this session."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/playbooks/opening-a-pr.md"
+    "skills/poteto-mode/playbooks/opening-a-pr.md",
+    "skills/poteto-mode/references/gated-publish.md"
    ]
   },
   "opening-a-pr-gated-publish-init-uses-canonical-path": {
@@ -2471,17 +2475,18 @@
    "claim": "Initialize no-mistakes from the path Git prints because a case-insensitive disk can preserve a different path spelling.",
    "evidence": [
     {
-     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "file": "skills/poteto-mode/references/gated-publish.md",
      "quote": "On a case-insensitive disk, the likely cause is that `init` ran from a path spelled differently from the main checkout's path, the parent of the directory that `git rev-parse --path-format=absolute --git-common-dir` prints."
     },
     {
-     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "file": "skills/poteto-mode/references/gated-publish.md",
      "quote": "When the repository commits `.no-mistakes.yaml` but has no `no-mistakes` remote, stop and report that `no-mistakes init` must run from the main checkout's path, the parent of the directory that `git rev-parse --path-format=absolute --git-common-dir` prints."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/playbooks/opening-a-pr.md"
+    "skills/poteto-mode/playbooks/opening-a-pr.md",
+    "skills/poteto-mode/references/gated-publish.md"
    ]
   },
   "opening-a-pr-gated-publish-never-bypasses": {
@@ -2499,13 +2504,14 @@
    "claim": "In a gated repository the agent restacks or retargets a published branch with `no-mistakes rerun --base-branch <new-base>` and never rebases it by hand.",
    "evidence": [
     {
-     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "file": "skills/poteto-mode/references/gated-publish.md",
      "quote": "After a terminal outcome, or once the monitor has stopped, restack or retarget with `no-mistakes rerun --base-branch <new-base>`."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/playbooks/opening-a-pr.md"
+    "skills/poteto-mode/playbooks/opening-a-pr.md",
+    "skills/poteto-mode/references/gated-publish.md"
    ]
   },
   "opening-a-pr-gated-unattended-passes-yes": {
@@ -2513,25 +2519,26 @@
    "claim": "In an unattended run the agent omits `--yes` whenever Test or another operator-reserved decision is reachable, including reattachment and responses before Test. It leaves Test exceptions parked without approval of the specific gap, never skips Test to enable unattended driving, and lists fixed ask-user findings in its final report.",
    "evidence": [
     {
-     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "file": "skills/poteto-mode/references/gated-publish.md",
      "quote": "In an unattended run, as defined in [unattended runs](../references/unattended.md), check before each `axi run` or `axi respond` whether the user or the matched playbook reserves a decision for the operator that the run could reach."
     },
     {
-     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "file": "skills/poteto-mode/references/gated-publish.md",
      "quote": "List each `ask-user` finding that the run fixed, verbatim, in the final report."
     },
     {
-     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "file": "skills/poteto-mode/references/gated-publish.md",
      "quote": "Omit `--yes` whenever Test can be reached, including reattachment and responses before Test."
     },
     {
-     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "file": "skills/poteto-mode/references/gated-publish.md",
      "quote": "A Test exception needs the operator's approval of the specific gap, even after a fix round."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/playbooks/opening-a-pr.md"
+    "skills/poteto-mode/playbooks/opening-a-pr.md",
+    "skills/poteto-mode/references/gated-publish.md"
    ]
   },
   "opening-a-pr-sandbox-commits-and-leaves-push-to-host": {
@@ -2539,13 +2546,14 @@
    "claim": "An agent in a sandbox on a gated repository commits on a feature branch, never pushes, and reports the branch, head SHA, and that a gated publish is needed.",
    "evidence": [
     {
-     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "file": "skills/poteto-mode/references/gated-publish.md",
      "quote": "When your brief says the repository is gated, or the repository commits `.no-mistakes.yaml`, commit on a feature branch and never push. Report the branch, the head SHA, and that a gated publish is needed."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/playbooks/opening-a-pr.md"
+    "skills/poteto-mode/playbooks/opening-a-pr.md",
+    "skills/poteto-mode/references/gated-publish.md"
    ]
   },
   "opening-a-pr-selected-body-format": {
@@ -2679,7 +2687,7 @@
    "claim": "Orchestrate sends work one agent could finish in a session back to the single-task playbooks.",
    "evidence": [
     {
-     "file": "skills/poteto-mode/SKILL.md",
+     "file": "skills/poteto-mode/references/playbooks.md",
      "quote": "Work one agent could finish inside the session's budget routes there, not here, however program-shaped the phrasing sounds."
     },
     {
@@ -2690,7 +2698,8 @@
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/SKILL.md",
-    "skills/poteto-mode/playbooks/orchestrate.md"
+    "skills/poteto-mode/playbooks/orchestrate.md",
+    "skills/poteto-mode/references/playbooks.md"
    ]
   },
   "overnight-contract-routes-to-figure-it-out": {
@@ -2737,14 +2746,15 @@
      "quote": "Write the resume note off-context."
     },
     {
-     "file": "skills/poteto-mode/SKILL.md",
+     "file": "skills/poteto-mode/references/playbooks.md",
      "quote": "on an explicit pause, going offline, a CLI restart, or imminent context compaction. The complement to Session pickup."
     }
    ],
    "harness_sensitive": false,
    "owners": [
+    "skills/poteto-mode/SKILL.md",
     "skills/poteto-mode/playbooks/pause-safely.md",
-    "skills/poteto-mode/SKILL.md"
+    "skills/poteto-mode/references/playbooks.md"
    ]
   },
   "perf-issue-keeps-output-while-optimizing": {
@@ -2913,7 +2923,7 @@
     },
     {
      "file": "agents/poteto-agent.md",
-     "quote": "Read the `poteto-mode` skill's `SKILL.md` in full, including its inline Principles index, before you start."
+     "quote": "Read the `poteto-mode` skill's `SKILL.md` in full before you start."
     },
     {
      "file": "agents/poteto-agent.md",
@@ -2928,19 +2938,19 @@
   },
   "poteto-mode-triggers-architect-on-boundary-crossing": {
    "check": "static",
-   "claim": "poteto-mode sends code that crosses two or more source files and admits several plausible shapes to architect, except when runtime evidence confirms a bug's root cause and identifies one localized repair.",
+   "claim": "On the intensive route, poteto-mode sends code that crosses two or more source files and admits several plausible shapes to architect, except when runtime evidence confirms a bug's root cause and identifies one localized repair. On the standard route the lead compares the shapes itself.",
    "evidence": [
     {
      "file": "skills/poteto-mode/references/task-triggers.md",
-     "quote": "Code that crosses two or more source files and admits several plausible shapes → call the Skill tool with `architect` for parallel design exploration before implementing. Feature chooses compact execution from risk evidence, not module count. For a bug fix, skip architect when runtime evidence confirms the root cause and identifies one localized repair, even across a function boundary. Go straight to the failing reproducer, then repair it. Keep architect when design choices or repair scope remain unresolved."
+     "quote": "Code that crosses two or more source files and admits several plausible shapes → call the Skill tool with `architect` for parallel design exploration before implementing, on the intensive route. On the standard route, compare the shapes yourself in a table and raise the route when you cannot choose. Feature chooses compact execution from risk evidence, not module count. For a bug fix, skip architect when runtime evidence confirms the root cause and identifies one localized repair, even across a function boundary. Go straight to the failing reproducer, then repair it. Keep architect when design choices or repair scope remain unresolved."
     },
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
-     "quote": "Plan the fix. When runtime evidence confirms the root cause and identifies one localized repair, go straight to the failing reproducer, then repair it. This applies even across a function boundary. If design choices or repair scope remain unresolved, call the Skill tool with `architect` first."
+     "quote": "Plan the fix. When runtime evidence confirms the root cause and identifies one localized repair, go straight to the failing reproducer, then repair it. This applies even across a function boundary. If design choices or repair scope remain unresolved, raise the route to intensive and call the Skill tool with `architect` first."
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "when the change crosses two or more source files and admits several plausible shapes, the alternatives were compared before any code. Call the Skill tool with `architect` for that comparison."
+     "quote": "when the change crosses two or more source files and admits several plausible shapes, the alternatives were compared before any code. Call the Skill tool with `architect` for that comparison on the intensive route. On the standard route, compare the alternatives yourself in a table and raise the route when you cannot choose."
     }
    ],
    "harness_sensitive": false,
@@ -3194,7 +3204,7 @@
      "quote": "Call the Skill tool with `principle-redesign-from-first-principles`."
     },
     {
-     "file": "skills/poteto-mode/SKILL.md",
+     "file": "skills/poteto-mode/references/principles.md",
      "quote": "Redesign as if foundational. Keep behavior it does not explicitly change."
     }
    ],
@@ -3202,6 +3212,7 @@
    "owners": [
     "skills/poteto-mode/SKILL.md",
     "skills/poteto-mode/playbooks/feature.md",
+    "skills/poteto-mode/references/principles.md",
     "skills/principle-redesign-from-first-principles/SKILL.md"
    ]
   },
@@ -3287,7 +3298,7 @@
    "claim": "Research is a playbook inside poteto-mode (playbooks/research.md); no separate research skill is required or shipped.",
    "evidence": [
     {
-     "file": "skills/poteto-mode/SKILL.md",
+     "file": "skills/poteto-mode/references/playbooks.md",
      "quote": "- **Research.** External, domain, or dependency evidence for a decision: check current support, compare documented approaches, or investigate an unfamiliar domain. `playbooks/research.md`."
     },
     {
@@ -3297,8 +3308,9 @@
    ],
    "harness_sensitive": false,
    "owners": [
+    "skills/poteto-mode/SKILL.md",
     "skills/poteto-mode/playbooks/research.md",
-    "skills/poteto-mode/SKILL.md"
+    "skills/poteto-mode/references/playbooks.md"
    ]
   },
   "research-prompt-routes-to-research-playbook": {

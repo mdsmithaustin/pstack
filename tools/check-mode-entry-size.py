@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 
-ENTRY_BUDGETS = {"skills/poteto-mode/SKILL.md": 16_000}
+ENTRY_BUDGETS = {"skills/poteto-mode/SKILL.md": 8_000}
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])

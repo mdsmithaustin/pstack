@@ -1,0 +1,90 @@
+import json
+import os
+import stat
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+SCRIPT = Path(__file__).resolve().parents[1] / "skills/poteto-mode/scripts/risk-facts.py"
+
+
+class RiskFacts(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.repo = Path(self.directory.name) / "repo"
+        self.repo.mkdir()
+        self.git("init", "-q")
+        self.git("config", "user.email", "test@example.invalid")
+        self.git("config", "user.name", "Test")
+        (self.repo / "tests").mkdir()
+        self.write("pricing.py", "def total(items):\n    return sum(items)\n", "add pricing")
+        self.write("cart.py", "from pricing import total\n", "add cart")
+        self.write("tests/test_pricing.py", "from pricing import total\n", "test pricing")
+        self.write("pricing.py", "def total(items):\n    return sum(items or [])\n", "fix empty cart regression")
+
+    def git(self, *args):
+        subprocess.run(["git", "-C", str(self.repo), *args], check=True, capture_output=True)
+
+    def write(self, name, text, message):
+        (self.repo / name).write_text(text)
+        self.git("add", name)
+        self.git("commit", "-q", "-m", message)
+
+    def facts(self, *args, env=None):
+        done = subprocess.run([sys.executable, str(SCRIPT), "--project", str(self.repo), "--json", *args],
+                              capture_output=True, text=True, env=env)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout)
+
+    def test_history_counts_commits_and_repairs(self):
+        past = self.facts("pricing.py")["paths"][0]["history"]
+        self.assertEqual((past["commits"], past["repair_commits"], past["tracked"]), (2, 1, True))
+
+    def test_text_reach_separates_callers_from_tests_and_names_its_source(self):
+        reach = self.facts("pricing.py", "--symbol", "total")["symbols"][0]
+        self.assertEqual(reach["source"], "git grep (symbol)")
+        self.assertEqual(reach["files"], ["cart.py", "pricing.py"])
+        self.assertEqual(reach["tests"], ["tests/test_pricing.py"])
+
+    def test_untracked_path_is_flagged(self):
+        (self.repo / "new.py").write_text("x = 1\n")
+        entry = self.facts("new.py")["paths"][0]
+        self.assertFalse(entry["history"]["tracked"])
+        self.assertIn("absent from any GitNexus index", entry["note"])
+
+    def test_without_gitnexus_the_fallback_is_stated(self):
+        notes = self.facts("pricing.py")["notes"]
+        self.assertTrue(any("git grep" in note for note in notes))
+
+    def fake_gitnexus(self, body):
+        (self.repo / ".gitnexus").mkdir()
+        bin_dir = Path(self.directory.name) / "bin"
+        bin_dir.mkdir()
+        tool = bin_dir / "gitnexus"
+        tool.write_text("#!/bin/sh\n" + body)
+        tool.chmod(tool.stat().st_mode | stat.S_IEXEC)
+        return {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+
+    def test_gitnexus_supplies_symbol_reach_when_indexed(self):
+        env = self.fake_gitnexus('if [ "$1" = impact ]; then echo "cart.py:1 calls $2"; fi\n')
+        reach = self.facts("pricing.py", "--symbol", "total", env=env)["symbols"][0]
+        self.assertEqual(reach["source"], "gitnexus impact")
+        self.assertEqual(reach["output"], ["cart.py:1 calls total"])
+
+    def test_failing_gitnexus_falls_back_and_says_so(self):
+        env = self.fake_gitnexus('if [ "$1" = impact ]; then exit 3; fi\n')
+        report = self.facts("pricing.py", "--symbol", "total", env=env)
+        self.assertEqual(report["symbols"][0]["source"], "git grep (symbol)")
+        self.assertTrue(any("gitnexus impact total failed" in note for note in report["notes"]))
+
+    def test_outside_a_repository_is_a_usage_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            done = subprocess.run([sys.executable, str(SCRIPT), "--project", directory, "a.py"], capture_output=True, text=True)
+            self.assertEqual(done.returncode, 2)
+
+
+if __name__ == "__main__":
+    unittest.main()

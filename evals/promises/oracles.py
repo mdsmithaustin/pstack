@@ -1763,7 +1763,9 @@ def persona_delivery(view):
 
 
 def principle_index(skills_root):
-    text = _read_text(Path(skills_root) / "poteto-mode" / "SKILL.md")
+    mode = Path(skills_root) / "poteto-mode"
+    reference = mode / "references" / "principles.md"
+    text = _read_text(mode / "SKILL.md") + ("\n" + _read_text(reference) if reference.is_file() else "")
     return re.findall(r"\*\*([^*]+)\*\* \(\*\*(principle-[a-z-]+)\*\*\)", text)
 
 

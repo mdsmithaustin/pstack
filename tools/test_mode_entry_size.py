@@ -26,15 +26,15 @@ class ModeEntryBudget(unittest.TestCase):
             )
 
     def test_whole_file_at_policy_boundary_passes(self):
-        result = self.check_entry(b"---\n" + b"a" * 15_994 + "é".encode())
+        result = self.check_entry(b"---\n" + b"a" * 7_994 + "é".encode())
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("16000/16000 UTF-8 bytes", result.stdout)
+        self.assertIn("8000/8000 UTF-8 bytes", result.stdout)
 
     def test_one_byte_over_policy_boundary_fails(self):
-        result = self.check_entry(b"---\n" + b"a" * 15_995 + "é".encode())
+        result = self.check_entry(b"---\n" + b"a" * 7_995 + "é".encode())
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("FAIL mode entry", result.stdout)
-        self.assertIn("16001/16000 UTF-8 bytes", result.stdout)
+        self.assertIn("8001/8000 UTF-8 bytes", result.stdout)
 
     def test_missing_entry_fails(self):
         result = self.check_entry(None)
