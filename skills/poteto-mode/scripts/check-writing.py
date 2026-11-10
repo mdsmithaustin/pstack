@@ -27,15 +27,15 @@ CONNECTOR_COLON = re.compile(r"\w: [a-z]")
 LONG_DASH = "—"
 
 
-def prose_lines(text):
-    """Yield (line number, line with code and URLs blanked) outside code fences."""
+def prose_lines(text, blank_code=True):
+    """Yield (line number, line) outside code fences, with inline code and URLs blanked unless told otherwise."""
     fenced = False
     for number, line in enumerate(text.split("\n"), 1):
         if FENCE.match(line):
             fenced = not fenced
             continue
         if not fenced:
-            yield number, URL.sub("", INLINE.sub("", line))
+            yield number, URL.sub("", INLINE.sub("", line)) if blank_code else line
 
 
 def check_title(title):
@@ -65,7 +65,7 @@ def check_prose(text):
 def check_body(text, headings):
     problems = []
     if headings:
-        found = [match.group(1).strip() for match in re.finditer(r"^## (.+)$", text, re.M)]
+        found = [line[3:].strip() for _, line in prose_lines(text, blank_code=False) if line.startswith("## ")]
         known = [name for name in found if name in REQUIRED]
         for name in REQUIRED:
             if name not in found:

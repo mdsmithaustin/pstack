@@ -44,6 +44,14 @@ class Writing(unittest.TestCase):
         swapped = GOOD_BODY.replace("## Why", "## X").replace("## Verification", "## Why").replace("## X", "## Verification")
         self.assertIn("out of order", self.check("body", swapped).stdout)
 
+    def test_headings_inside_a_code_fence_do_not_count(self):
+        example = GOOD_BODY.replace("- Bind evidence to a tree.", "- Bind evidence to a tree.\n\n```md\n## Why\n```")
+        self.assertEqual(self.check("body", example).stdout.strip(), "PASS")
+        fenced_only = "```md\n" + GOOD_BODY + "```\n"
+        done = self.check("body", fenced_only)
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("missing `## Why`", done.stdout)
+
     def test_no_headings_skips_the_layout_for_a_repository_template(self):
         self.assertEqual(self.check("body", "## Summary\n\nDone.\n", "--no-headings").returncode, 0)
 

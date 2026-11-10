@@ -2975,11 +2975,11 @@
   },
   "poteto-mode-triggers-architect-on-boundary-crossing": {
    "check": "static",
-   "claim": "On the intensive route, poteto-mode sends code that crosses two or more source files and admits several plausible shapes to architect, except when runtime evidence confirms a bug's root cause and identifies one localized repair. On the standard route the lead compares the shapes itself.",
+   "claim": "poteto-mode sends code that crosses two or more source files and admits several plausible shapes to architect, except when runtime evidence confirms a bug's root cause and identifies one localized repair. In Bug fix, Feature, Refactoring, and Perf issue this applies on the intensive route, and on their standard route the lead compares the shapes itself.",
    "evidence": [
     {
      "file": "skills/poteto-mode/references/task-triggers.md",
-     "quote": "Code that crosses two or more source files and admits several plausible shapes → call the Skill tool with `architect` for parallel design exploration before implementing, on the intensive route. On the standard route, compare the shapes yourself in a table and raise the route when you cannot choose. Feature chooses compact execution from risk evidence, not module count. For a bug fix, skip architect when runtime evidence confirms the root cause and identifies one localized repair, even across a function boundary. Go straight to the failing reproducer, then repair it. Keep architect when design choices or repair scope remain unresolved."
+     "quote": "Code that crosses two or more source files and admits several plausible shapes → call the Skill tool with `architect` for parallel design exploration before implementing. In Bug fix, Feature, Refactoring, and Perf issue this applies on the intensive route only. On their standard route, compare the shapes yourself in a table and raise the route when you cannot choose. Feature chooses compact execution from risk evidence, not module count. For a bug fix, skip architect when runtime evidence confirms the root cause and identifies one localized repair, even across a function boundary. Go straight to the failing reproducer, then repair it. Keep architect when design choices or repair scope remain unresolved."
     },
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
