@@ -5473,6 +5473,15 @@
    ],
    "text": "The UI bullet above hides a real requirement."
   },
+  "1cfa2c341588": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "persona-delivery-hermes-grok",
+   "sources": [
+    "port"
+   ],
+   "text": "Hermes uses persona briefings through delegation context, and Grok Build gets them in each spawn prompt."
+  },
   "1d21f306c413": {
    "class": "promise",
    "file": "01-setup.md",
@@ -6043,7 +6052,7 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "7864e82b3cac"
+    "7e40a2a913e2"
    ],
    "promise": "skipped-step-stays-in-worklist",
    "sources": [
@@ -6448,15 +6457,6 @@
    ],
    "text": "**Leading with your theory of the cause.** The agent searches wherever you pointed. Ask it to restate the problem first, then share your hunch."
   },
-  "361d22eeeed2": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "persona-briefing-to-generic-delegate",
-   "sources": [
-    "port"
-   ],
-   "text": "A generic delegate can receive the complete persona while native loading remains unverified."
-  },
   "362397f6cc1f": {
    "also": [
     "slash-skills-invocable"
@@ -6566,15 +6566,6 @@
     "port"
    ],
    "text": "Run it with no argument and it finds the classes from history on its own."
-  },
-  "39fa20cbc7da": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "setup-detects-stale-personas",
-   "sources": [
-    "port"
-   ],
-   "text": "It finds the personas and, on Claude Code, the five `pstack-effort-<level>` agents that an older version generated, and offers to refresh them."
   },
   "39ff5646262e": {
    "class": "context",
@@ -8904,15 +8895,6 @@
    ],
    "text": "[Exhaust the Design Space](../../skills/principle-exhaust-the-design-space/SKILL.md) builds two or three competing prototypes when there's no precedent."
   },
-  "7864e82b3cac": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "skipped-step-stays-in-worklist",
-   "sources": [
-    "port"
-   ],
-   "text": "If `/poteto-mode` skips a step, the step stays in the list with `skipped: <reason>`, so you can see what it chose not to do."
-  },
   "7870d441dcbf": {
    "class": "context",
    "file": "04-design.md",
@@ -9105,6 +9087,15 @@
     "port"
    ],
    "text": "That's the price of the rigor."
+  },
+  "7e40a2a913e2": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "skipped-step-stays-in-worklist",
+   "sources": [
+    "port"
+   ],
+   "text": "The [Feature playbook](../../skills/poteto-mode/playbooks/feature.md) defines the compact and full routes and how each records omitted work."
   },
   "7e4232cd580b": {
    "class": "promise",
@@ -10126,6 +10117,15 @@
    ],
    "text": "When a skill keeps missing and you know what it should do, change and test it in one task:"
   },
+  "9c9174a83823": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "setup-checks-personas-offers-registration",
+   "sources": [
+    "port"
+   ],
+   "text": "[`/setup-pstack`](../../skills/setup-pstack/SKILL.md) checks the bundled personas and offers optional native registration for Claude Code or Codex."
+  },
   "9d40f211b151": {
    "class": "promise",
    "file": "01-setup.md",
@@ -10923,6 +10923,18 @@
    ],
    "text": "Babysit watches the PR, with a bundled watcher on GitHub or the Origin CLI when it's available, and takes blockers in order: conflicts, then review threads and bot findings that live only in a review body, then CI."
   },
+  "aecfd2e36efc": {
+   "also": [
+    "setup-detects-stale-personas"
+   ],
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "persona-briefing-to-generic-delegate",
+   "sources": [
+    "port"
+   ],
+   "text": "The [registration reference](../../skills/pstack-harness/references/registration.md) lists the agents installed for each harness and explains refresh and fallback behavior."
+  },
   "aed4de06e351": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -11424,15 +11436,6 @@
    ],
    "text": "[`/show-me-your-work`](../../skills/show-me-your-work/SKILL.md) makes the run reviewable and owns the log format, storage, and evidence-retention rules."
   },
-  "bac411240540": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "persona-delivery-hermes-grok",
-   "sources": [
-    "port"
-   ],
-   "text": "Hermes uses that briefing through delegation context, and Grok Build gets it in each spawn prompt."
-  },
   "badb30352c29": {
    "class": "substituted",
    "file": "09-make-it-yours.md",
@@ -11444,15 +11447,6 @@
     "upstream"
    ],
    "text": "Writing a skill matches the [Authoring or modifying a skill playbook](../../skills/poteto-mode/playbooks/authoring-a-skill.md), which routes through Cursor's built-in `create-skill`, validates the frontmatter and links, and ships the result through the Opening a PR playbook."
-  },
-  "bb3b01d8dee5": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "setup-checks-personas-offers-registration",
-   "sources": [
-    "port"
-   ],
-   "text": "[`/setup-pstack`](../../skills/setup-pstack/SKILL.md) first checks both bundled personas and offers optional native registration for Claude Code or Codex."
   },
   "bb913c1e188e": {
    "class": "context",
