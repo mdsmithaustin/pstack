@@ -18,7 +18,7 @@ A feature prompt states the behavior and what must not change:
 
 [Feature step 4](../../skills/poteto-mode/playbooks/feature.md) defines acceptance checks and specification edges, including when existing coverage suffices. [Step 6](../../skills/poteto-mode/playbooks/feature.md) defines when the lead implements or delegates, the worklist records, and the implementation checks for both paths.
 
-For understood, low-risk work, [Feature](../../skills/poteto-mode/playbooks/feature.md) uses a compact plan and direct implementation while retaining preservation, verification, and independent scrutiny. Material uncertainty or consequential changes use the full route, even for a tiny diff.
+For understood, low-risk work, [Feature](../../skills/poteto-mode/playbooks/feature.md) uses the lightweight route: a short plan and direct implementation that keep preservation, verification, and independent scrutiny. Material uncertainty or consequential changes use the standard or intensive route, even for a tiny diff.
 
 A refactoring prompt pins behavior before structure moves:
 
