@@ -70,6 +70,11 @@ class Writing(unittest.TestCase):
         self.assertEqual(self.check("prose", "It works — mostly.\n").returncode, 1)
         self.assertEqual(self.check("prose", "Run `a — b`.\n\n```\nx — y\n```\n").returncode, 0)
 
+    def test_a_long_dash_inside_a_multi_backtick_code_span_is_code(self):
+        body = GOOD_BODY.replace("- `unittest` passed.", "- ``a \u2014 `b` `` passed.")
+        done = self.check("body", body)
+        self.assertEqual(done.returncode, 0, done.stdout)
+
     def test_connector_colon_is_a_review_note_not_a_failure(self):
         done = self.check("prose", "The fix is simple: we retry.\n")
         self.assertEqual(done.returncode, 0)

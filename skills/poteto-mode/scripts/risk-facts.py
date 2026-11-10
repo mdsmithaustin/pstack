@@ -48,11 +48,11 @@ def history(project, path, days):
 
 def grep_files(project, word, exclude):
     """Files that name the word, or None when the search itself failed. Exit 1 is git grep's no-match status."""
-    done = git(project, "grep", "-l", "-w", "-F", "--full-name", "-e", word, "--", ":/")
+    done = git(project, "grep", "-lz", "-w", "-F", "--full-name", "-e", word, "--", ":/")
     if done.returncode not in (0, 1):
         return None
     top = Path(git(project, "rev-parse", "--show-toplevel").stdout.strip())
-    names = [(top / name).resolve() for name in done.stdout.splitlines()]
+    names = [(top / name).resolve() for name in done.stdout.split("\0") if name]
     skip = (Path(project) / exclude).resolve() if exclude else None
     return sorted(name.relative_to(top.resolve()).as_posix() for name in names if name != skip)
 
