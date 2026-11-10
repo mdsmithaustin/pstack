@@ -198,13 +198,23 @@ No other listed edge is recorded as moving a verdict. Fix one only after a recor
 - Disjoint fragments of one tail fail the present ask.
 - The `clipboard_reads` fixed point is quadratic on thousands of chained links.
 
-### Passes a do-nothing run can earn
+### Passes a do-nothing run must not earn
 
-The edges above are found from FAIL verdicts, because a person reads each FAIL trace before it counts. Nothing reads a PASS by default, so an oracle that is too lenient stays unseen. `test_null_trace.py` grades two do-nothing traces against every runnable case with no project on disk. One has no events. In the other, every turn replies "Done." and calls no tool.
+The edges above are found from FAIL verdicts, because a person reads each FAIL trace before it counts. Nothing reads a PASS by default, so an oracle that is too lenient stays unseen. `test_null_trace.py` grades two do-nothing traces against every runnable case with no project on disk. One has no events. In the other, every turn replies "Done." and calls no tool. No promise may pass either.
 
-Six promises pass at least one of them: `design-ladder-spares-small-changes`, `how-narrow-question-no-explorers`, `interrogate-read-only-when-asked`, `poteto-mode-sticky`, `short-prompt-continues-in-context`, and `steering-prompt-redirects-run`. Each oracle reads the absence of a bad action as success and requires no sign that the agent did the work. `interrogate-read-only-when-asked` also reads a project it cannot inspect as a project with no edits. A PASS on these promises is weak evidence until its trace is read; take them first in `freshness.py audit-sample` reviews.
+Six oracles used to pass them, because each read the absence of a bad action as success. Each now also requires a sign that the agent did the work, and returns `INCONCLUSIVE` without one:
 
-The test pins that list. A new promise that passes a do-nothing trace fails the test, and so does a fixed oracle that is still listed. These traces are the cheapest false-pass probe, not a complete one. They do not cover oracles that pass on a keyword in the reply or on a command that names a file without reading it.
+| Promise | Evidence now required for PASS |
+| --- | --- |
+| `design-ladder-spares-small-changes` | A source edit in the trace, or a changed file in the project. |
+| `how-narrow-question-no-explorers` | A final reply and at least one tool call. |
+| `interrogate-read-only-when-asked` | A readable project git state and at least one tool call. An unreadable project no longer counts as an unedited one. |
+| `poteto-mode-sticky`, `short-prompt-continues-in-context` | A tool call or worklist update in at least one follow-up turn. |
+| `steering-prompt-redirects-run` | A tool call somewhere in the run, so there was work to redirect. |
+
+A correct run can now grade `INCONCLUSIVE` where it graded PASS, for example a follow-up turn answered in text alone. Those go to a reader. Verdicts recorded before this change were graded by the lenient oracles; regrade their saved traces before citing a PASS on these six promises.
+
+These traces are the cheapest false-pass probe, not a complete one. They do not cover oracles that pass on a keyword in the reply or on a command that names a file without reading it.
 
 ## Parent grading authority
 

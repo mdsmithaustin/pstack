@@ -1539,6 +1539,8 @@ def design_ladder(view):
         return failed("an additive one-module change ran the architect/arena design fan-out", *evidence)
     if len(view.tool_calls) < 3 and view.killed:
         return inconclusive("run ended before a design decision", *evidence)
+    if not view.source_edits() and not view.changed_since_base():
+        return inconclusive("no source change, so the run never reached a design decision to spare", *evidence)
     return passed(*evidence)
 
 
@@ -1842,6 +1844,8 @@ def steering_redirects(view):
         return failed("the run kept editing source after being told the goal is to reproduce", *evidence)
     if not reply:
         return inconclusive("no reply in the correction turn", *evidence)
+    if not view.tool_calls:
+        return inconclusive("the run called no tool in any turn, so there was no work to redirect", *evidence)
     return passed(*evidence)
 
 
@@ -1917,6 +1921,8 @@ def how_narrow(view):
         return failed(f"{len(explorers)} explorer(s) spawned for a narrow question", *evidence)
     if not view.final_reply and view.killed:
         return inconclusive("run killed before the answer", *evidence)
+    if not view.final_reply or not view.tool_calls:
+        return inconclusive("no answer grounded in a tool call, so the question was never worked", *evidence)
     return passed(*evidence)
 
 
@@ -2114,7 +2120,13 @@ def reviewer_evidence(view):
 @oracle("interrogate-read-only-when-asked")
 def interrogate_readonly(view):
     failures, evidence = no_edits_verdict(view)
-    return failed(failures, *evidence) if failures else passed(*evidence)
+    if failures:
+        return failed(failures, *evidence)
+    if view.git_dirty() is None:
+        return inconclusive("the project's git state could not be read, so an edit outside the trace cannot be ruled out", *evidence)
+    if not view.tool_calls:
+        return inconclusive("the run called no tool, so no review happened to stay read-only", *evidence)
+    return passed(*evidence)
 
 
 @oracle("interrogate-multi-reviewer-adversarial")
@@ -2481,7 +2493,7 @@ def sticky(view):
         return gate
     turns = view.case.get("turns", [])
     follow = [i for i, t in enumerate(turns) if i > 0 and not re.search(r"new task", str(t), re.I)]
-    failures, evidence = [], []
+    failures, evidence, worked = [], [], False
     allowed = continuation_playbooks((view.case.get("expect") or {}).get("playbook"), view.skills_root)
     lost = sorted(set(follow) & set(view.trace.get("x_turns_without_events") or []))
     if lost and lost == follow:
@@ -2501,7 +2513,12 @@ def sticky(view):
             failures.append(f"turn {turn}: opened a fresh {fresh} worklist")
         if view.question_texts(turn) and not worklist:
             failures.append(f"turn {turn}: asked the user instead of continuing")
-    return failed(failures, *evidence) if failures else passed(*evidence)
+        worked = worked or bool(worklist) or any(e.get("kind") == "tool_call" for e in events)
+    if failures:
+        return failed(failures, *evidence)
+    if not worked:
+        return inconclusive("no follow-up turn called a tool or updated the worklist, so continuing in context was not shown", *evidence)
+    return passed(*evidence)
 
 
 @oracle("new-task-rematches")
