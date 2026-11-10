@@ -1423,6 +1423,16 @@
    ],
    "scenario": "feature-run"
   },
+  "feature-recovery-obligations": {
+   "check": "live",
+   "claim": "Feature uses the full route for consequential recovery work, preserves conditional design comparison, and delivers a restart-safe implementation with independent scrutiny of the committed change.",
+   "harness_sensitive": true,
+   "live_case": "Relay delivery journal on Codex. The grader checks the pinned CLI and uses authenticated native review and adjudication to close the Feature obligations.",
+   "owners": [
+    "skills/poteto-mode/playbooks/feature.md"
+   ],
+   "scenario": "feature-recovery-obligations-run"
+  },
   "feature-risk-route-instructions": {
    "check": "static",
    "claim": "Feature instructs an understood low-risk change to use a compact plan and direct implementation while retaining preservation, real-surface proof and independent scrutiny. Material uncertainty, consequential failures or contested design require the full route. These citations establish instructions only; route choice and retained obligations need separate runtime evidence.",
@@ -5185,6 +5195,9 @@
    "text": "```text\n/poteto-mode move parsing into one module, zero behavior change. record the current output first and prove it's unchanged after.\n```"
   },
   "181b3f032f44": {
+   "also": [
+    "feature-recovery-obligations"
+   ],
    "class": "promise",
    "file": "05-build-and-clean.md",
    "promise": "feature-risk-route-instructions",

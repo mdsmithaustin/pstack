@@ -4421,3 +4421,77 @@ def triggered_principle_loads(view):
     if turn_finished(view):
         return inconclusive("the run wrote no code, so the trigger never came due", *evidence)
     return inconclusive("run killed before any code write", *evidence)
+
+
+@oracle("feature-recovery-obligations")
+def feature_recovery_obligations(view):
+    if view.harness != "codex":
+        return inconclusive(f"applies to codex only; this run is {view.harness}", not_applicable=True)
+    relay = getattr(_IO, "relay", None)
+    if relay is None:
+        return inconclusive("no controller-pinned Relay run")
+
+    evidence, breaches, pending = [], [], []
+    report = {}
+    if "reason" in relay:
+        pending.append(relay["reason"])
+    else:
+        evidence.append(f"delivery {relay['ref']} at {relay['commit']}, image SHA-256 {relay['tree_digest']}")
+        script = case_dir(view.case) / view.case["expect"]["held_out"]
+        image = HERE / "relay-delivery"
+        scratch = _IO.scratch / "relay"
+        scratch.mkdir()
+        try:
+            run = _IO.check(Path(relay["checkout"]), shlex.join(
+                [sys.executable, "-I", "-S", "-B", str(script), str(image), str(scratch)]), 700)
+            report = json.loads(run.stdout) if run.returncode == 0 else None
+        except (subprocess.TimeoutExpired, ValueError):
+            report = None
+        if not isinstance(report, dict):
+            pending.append("the protected recovery probe produced no report")
+            report = {}
+        else:
+            checks = set(view.case["expect"]["recovery_checks"])
+            for name in sorted(checks):
+                item = report.get(name)
+                if not isinstance(item, dict) or item.get("status") not in ("pass", "breach", "unavailable"):
+                    pending.append(f"missing recovery observation for {name}")
+                    continue
+                if item["status"] != "pass":
+                    details = item.get("detail")
+                    if not isinstance(details, list) or not all(isinstance(detail, str) for detail in details):
+                        pending.append(f"unreadable recovery observation for {name}")
+                        continue
+                    target = breaches if item["status"] == "breach" else pending
+                    target.append(f"{name}: {', '.join(details)}")
+            if set(report) - checks:
+                pending.append("unexpected recovery observations")
+            evidence.append(f"held-out recovery observations: {', '.join(sorted(report))}")
+
+    if completion_gate(view):
+        pending.append("the native Feature run did not complete")
+    if not relay.get("review"):
+        pending.append("no completed native scrutiny of the committed Relay change")
+    opening = opening_worklist(view)
+    shape = playbook_shape("feature", view.skills_root)
+    if not opening or not compact_feature_plan(opening["items"]) or not shape or not any(
+            not steps_in_order(snap["items"], shape, 0)[1] for snap in view.worklist):
+        pending.append("the Feature opening or ordered full-route worklist is missing")
+
+    decision = _IO.relay_decision
+    for name, finding in (decision or {}).items():
+        detail = f"{name}: {finding['reason']}"
+        if finding["status"] == "breach":
+            breaches.append(detail)
+        elif finding["status"] == "unavailable":
+            pending.append(detail)
+        else:
+            evidence.append(detail)
+    if breaches:
+        return verdict(FAIL, breaches, evidence, recovery=report)
+    if decision is None and (opening or relay.get("review") or relay.get("lead_evidence") or view.final_reply):
+        return inconclusive([*pending, "the native Feature obligations need adjudication"], *evidence,
+                            needs_judge=True, recovery=report)
+    if pending:
+        return inconclusive(pending, *evidence, recovery=report)
+    return verdict(PASS, (), evidence, recovery=report)

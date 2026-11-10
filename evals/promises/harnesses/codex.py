@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import re
@@ -172,6 +173,215 @@ def find_rollouts(store, threads):
             return {p: contents[p] for p in leads}, {p: contents[p] for p in chosen[len(leads):]}
         chosen += children
         seen |= {metas[p].get("id") for p in children}
+
+
+def relay_exec_results(items):
+    calls, answers = {}, {}
+    for index, item in enumerate(items):
+        call = item.get("call_id")
+        if not call:
+            continue
+        if item.get("type") == "custom_tool_call" and item.get("name") == "exec":
+            calls.setdefault(call, []).append((index, item.get("input")))
+        elif item.get("type") == "custom_tool_call_output":
+            answers.setdefault(call, []).append((index, item))
+    for call, matches in calls.items():
+        paired = answers.get(call, [])
+        if len(matches) != 1 or len(paired) != 1:
+            continue
+        start, command = matches[0]
+        finish, result = paired[0]
+        if (start >= finish or not isinstance(command, str) or len(command) > 8192
+                or not result.get("id") or not isinstance(result.get("output"), list)):
+            continue
+        for block in result["output"]:
+            if not isinstance(block, dict) or block.get("type") != "input_text":
+                continue
+            text = block.get("text")
+            if not isinstance(text, str) or len(text) > 262144:
+                continue
+            response = parse_arguments(text)
+            value = response.get("value", response)
+            if (isinstance(value, dict) and isinstance(value.get("output"), str)
+                    and type(value.get("exit_code")) is int):
+                yield {"call": call, "result": result["id"], "input": command,
+                       "exit_code": value["exit_code"], "output": value["output"]}
+
+
+def relay_lead_items(leads, thread, project):
+    if not thread:
+        return []
+    matched = [data for data in leads.values() if session_meta(data).get("id") == thread]
+    if len(matched) != 1:
+        return []
+    meta = session_meta(matched[0])
+    if meta.get("cwd") != str(project) or meta.get("parent_thread_id"):
+        return []
+    return [row["payload"] for row in records(matched[0])
+            if row.get("type") in ("response_item", "event_msg") and isinstance(row.get("payload"), dict)]
+
+
+def relay_lead_evidence(leads, thread, project):
+    relevant = re.compile(r"preserve\.py|\bunittest\b|\brelay[ \t]+import\b")
+    reads = [result for result in relay_exec_results(relay_lead_items(leads, thread, project))
+             if relevant.search(result["input"])]
+    kept = [{**result, "output": result["output"][:8000],
+             "truncated": len(result["output"]) > 8000} for result in reads[-20:]]
+    return ([{"omitted": len(reads) - 20}, *kept] if len(reads) > 20 else kept)
+
+
+def relay_message(content, sealed=False):
+    if not isinstance(content, str) or not content:
+        return {"availability": "unavailable"}
+    value = {"sha256": hashlib.sha256(content.encode()).hexdigest(), "length": len(content)}
+    if sealed or content.startswith("gAAAA"):
+        return {**value, "availability": "sealed"}
+    return {**value, "availability": "available" if len(content) <= 8192 else "truncated",
+            "text": content[:8192]}
+
+
+def relay_incoming(rows, turn_id, recipient, parent_messages):
+    incoming = []
+    by_digest = {}
+    for message in parent_messages:
+        if message.get("sha256"):
+            by_digest.setdefault(message["sha256"], []).append(message["call"])
+    for index, row in enumerate(rows):
+        msg = row.get("payload") or {}
+        if msg.get("type") != "agent_message":
+            continue
+        previous = rows[index - 1] if index else {}
+        meta = previous.get("payload") if previous.get("type") == "inter_agent_communication_metadata" else None
+        blocks = msg.get("content") or []
+        frame, _, body = text_of(blocks).partition("Payload:\n")
+        encrypted = [block.get("encrypted_content") for block in blocks if isinstance(block, dict)
+                     and block.get("type") == "encrypted_content"]
+        message = relay_message(encrypted[0], sealed=True) if len(encrypted) == 1 else relay_message(body)
+        candidates = (by_digest.get(message.get("sha256"), [])
+                      if msg.get("author") == "/root" and msg.get("recipient") == recipient else [])
+        task = re.search(r"^Task name: (.+)$", frame, re.M)
+        observed_turn = (msg.get("internal_chat_message_metadata_passthrough") or {}).get("turn_id")
+        if observed_turn != turn_id or meta is None or len(encrypted) > 1:
+            message = {**message, "availability": "unavailable"}
+        incoming.append({**message, "id": msg.get("id"), "sender": msg.get("author"),
+                         "recipient": msg.get("recipient"), "task": task[1] if task else None,
+                         "framing": frame[:512], "turn": observed_turn,
+                         "trigger_turn": (meta or {}).get("trigger_turn"),
+                         "parent_call": candidates[0] if len(candidates) == 1 else None})
+    return incoming[:16], max(0, len(incoming) - 16)
+
+
+def relay_review_turns(data, thread, child, spawn, args, parent_messages, completed):
+    rows = [row for row in records(data) if isinstance(row.get("payload"), dict)]
+    starts = [i for i, row in enumerate(rows) if row.get("type") == "event_msg"
+              and row["payload"].get("type") == "task_started"]
+    turn_ids = [rows[start]["payload"].get("turn_id") for start in starts]
+    actions = [event for event in harvest_rollout(data)["events"] if event["kind"] in ("tool_call", "tool_result")]
+    kept_actions = [event for event in actions[:160] if len(json.dumps(event)) <= 8192]
+    omitted_actions = len(actions) - len(kept_actions)
+    omitted_turns = max(0, len(starts) - 8)
+    ranges = list(zip(starts, starts[1:] + [len(rows)])) if starts else [(-1, len(rows))]
+    ranges = ranges[:4] + ranges[-4:] if omitted_turns else ranges
+    for start, end in ranges:
+        turn_id = rows[start]["payload"].get("turn_id") if start >= 0 else None
+        turn = rows[start + 1:end]
+        finishes = [i for i, row in enumerate(turn) if row.get("type") == "event_msg"
+                    and row["payload"].get("type") == "task_complete"]
+        limit = finishes[0] if len(finishes) == 1 else len(turn)
+        reports = [(i, row["payload"]) for i, row in enumerate(turn[:limit]) if row.get("type") == "response_item"
+                   and row["payload"].get("type") == "message" and row["payload"].get("role") == "assistant"
+                   and row["payload"].get("phase") == "final_answer" and row["payload"].get("id")]
+        if not reports:
+            continue
+        index, report = reports[-1]
+        report_text = text_of(report.get("content")).strip()
+        if not report_text:
+            continue
+        items = [row["payload"] for row in turn[:index] if row.get("type") == "response_item"
+                 and (row["payload"].get("internal_chat_message_metadata_passthrough") or {}).get("turn_id", turn_id) == turn_id]
+        calls = [{"call": p["call_id"], "input": p["input"]} for p in items
+                 if p.get("type") == "custom_tool_call" and p.get("name") == "exec"
+                 and p.get("call_id") and isinstance(p.get("input"), str) and len(p["input"]) <= 8192]
+        incoming, omitted_messages = relay_incoming(turn[:index], turn_id, spawn["agent_path"], parent_messages)
+        native_report_turn = (report.get("internal_chat_message_metadata_passthrough") or {}).get("turn_id", turn_id)
+        parent_completion = completed.get(turn_id, [])
+        linked = (turn_id and turn_ids.count(turn_id) == 1 and native_report_turn == turn_id
+                  and len(parent_completion) == 1 and len(finishes) == 1
+                  and turn[finishes[0]]["payload"].get("turn_id") == turn_id and len(reports) == 1)
+        yield {
+            "lead": thread, "spawn": spawn["id"], "child": child["id"], "cwd": child.get("cwd"),
+            "turn": turn_id, "parent_completion": parent_completion[0] if len(parent_completion) == 1 else None,
+            "report_id": report["id"], "report": report_text[:8192],
+            "spawn_input": {k: args.get(k) for k in ("agent_type", "fork_turns", "task_name", "model", "reasoning_effort")},
+            "brief": relay_message(args.get("message")), "actions": kept_actions,
+            "parent_messages": parent_messages[1:17], "incoming": incoming,
+            "omitted": {"actions": omitted_actions, "turns": omitted_turns, "incoming": omitted_messages,
+                        "parent_messages": max(0, len(parent_messages) - 17)},
+            "incomplete": (not linked or omitted_actions > 0 or omitted_turns > 0 or omitted_messages > 0
+                           or len(parent_messages) > 17 or len(report_text) > 8192
+                           or args.get("fork_turns") not in ("all", "none")),
+            "read_calls": calls, "reads": list(relay_exec_results(items)),
+        }
+
+
+def relay_review_inputs(leads, children, thread, project):
+    parent = relay_lead_items(leads, thread, project)
+    reviews = []
+    for data in children.values():
+        child = session_meta(data)
+        child_id = child.get("id")
+        role = child.get("agent_role")
+        if (not child_id or child_id == thread or child.get("parent_thread_id") != thread
+                or not isinstance(role, str) or role.strip().lower() != "trail reviewer"):
+            continue
+        activity = [(i, p["item"]) for i, p in enumerate(parent) if p.get("thread_id") == thread
+                    and p.get("item", {}).get("type") == "SubAgentActivity"
+                    and p["item"].get("agent_thread_id") == child_id]
+        starts = [(i, a) for i, a in activity if a.get("kind") == "started"]
+        if len(starts) != 1:
+            continue
+        started, spawn = starts[0]
+        calls = [(i, p) for i, p in enumerate(parent) if p.get("call_id") == spawn.get("id")
+                 and p.get("type") == "function_call" and p.get("name") == "spawn_agent"]
+        replies = [(i, p) for i, p in enumerate(parent) if p.get("call_id") == spawn.get("id")
+                   and p.get("type") == "function_call_output"]
+        if len(calls) != 1 or len(replies) != 1:
+            continue
+        called, call = calls[0]
+        replied, reply = replies[0]
+        if not called < started < replied or not any(
+                i > replied and a.get("kind") == "completed" and a.get("agent_path") == spawn.get("agent_path")
+                for i, a in activity):
+            continue
+        args = parse_arguments(call.get("arguments"))
+        role = args.get("agent_type")
+        if (not isinstance(role, str) or role.strip().lower() != "trail reviewer"
+                or not spawn.get("agent_path") or parse_arguments(reply.get("output")).get("task_name") != spawn["agent_path"]):
+            continue
+
+        completed = {}
+        interactions = {}
+        for position, event in activity:
+            event_id = event.get("id") or ""
+            if event.get("agent_path") != spawn["agent_path"] or position <= replied:
+                continue
+            if event.get("kind") == "completed" and event_id.startswith("subagent-completed-"):
+                completed.setdefault(event_id.removeprefix("subagent-completed-"), []).append(event_id)
+            elif event.get("kind") == "interacted":
+                interactions[event_id] = position
+        messages = [{"call": spawn["id"], **relay_message(args.get("message"))}]
+        for position, message in enumerate(parent):
+            call_id = message.get("call_id")
+            if (message.get("type") != "function_call" or message.get("name") not in ("send_message", "followup_task")
+                    or call_id not in interactions or not replied < position < interactions[call_id]):
+                continue
+            sent = parse_arguments(message.get("arguments"))
+            messages.append({"call": call_id, "tool": message["name"], "sender": "/root",
+                             "recipient": spawn["agent_path"], "target": sent.get("target"),
+                             "parent_turn": (message.get("internal_chat_message_metadata_passthrough") or {}).get("turn_id"),
+                             **relay_message(sent.get("message"))})
+        reviews.extend(relay_review_turns(data, thread, child, spawn, args, messages, completed))
+    return reviews
 
 
 def text_of(content):
@@ -408,6 +618,13 @@ def harvest(run):
     streams = live.read_streams(run.turns)
     threads = {t["session_id"] for t in run.turns if t.get("session_id")}
     leads, children = find_rollouts(store, threads)
+    authorization = getattr(run, "_relay_authorization", None)
+    if authorization is not None:
+        thread = run.turns[-1].get("session_id") if run.turns else None
+        authorization._relay_capture = (
+            thread, relay_review_inputs(leads, children, thread, run.project),
+            relay_lead_evidence(leads, thread, run.project),
+        )
     prompts = [t["argv"][-1] for t in run.turns if t.get("argv")]
     lead = harvest_rollout(next(iter(leads.values())), prompts) if leads else {
         "meta": {}, "context": {}, "events": [], "files_read": [], "worklist": [], "plan_calls": [], "spawns": [],

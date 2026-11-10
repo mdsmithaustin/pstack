@@ -171,7 +171,7 @@ Old raw run directories need explicit trusted retention import. Supplying a dire
 
 The grader admits worktree members only within the workspace allocations declared before turns, or specific sibling roots named by trusted fixture or retention setup. Each linked member must match the bound common Git directory and its reverse pointer. An unapproved discovered worktree refuses before content or Git access to that tree. Trusted setup creates the harness scratch roots and declares them before turns, so an arena or review worktree the agent registers under its `TMPDIR` or the Hermes profile cache is graded. An absent project, legacy baseline, incomplete trace, and timed-out turns retain their existing oracle behavior.
 
-Raw run storage must sit outside every candidate writable project, worktree, and workspace allocation, including for retained imports with separate diagnostic output. Missing registered worktree `.git`, `commondir`, or reverse-pointer files produce an `unapproved_git` refusal receipt. Invalid UTF-8 or NUL bytes in these path files also produce `unapproved_git`. Codex and Grok traces may retain either the full trusted turn list or the adapters' exact six-field projection. The projection preserves every turn's index, session ID, argv, exit code, timeout flag, and duration in order. Other subsets, added fields, changed values, and changed turn counts refuse. Sealing preserves the harvested trace.
+Raw run storage must sit outside every candidate writable project, worktree, and workspace allocation, including for retained imports with separate diagnostic output. Missing registered worktree `.git`, `commondir`, or reverse-pointer files produce an `unapproved_git` refusal receipt. Invalid UTF-8 or NUL bytes in these path files also produce `unapproved_git`. Codex and Grok traces may retain either the full trusted turn list or the adapters' exact six-field projection. The projection preserves every turn's index, session ID, argv, exit code, timeout flag, and duration in order. Other subsets, added fields, changed values, and changed turn counts refuse. Sealing preserves the harvested trace. The Relay recovery case refuses to seal an already sealed authorization.
 
 ## Retain Hermes evidence
 
@@ -306,3 +306,58 @@ reject a whole-import retry or naive restart as duplicate delivery. They check
 the fixture's premise, not a model's recovery implementation. The unchanged
 boundary oracle observes design fan-out; it does not prove recovery correctness,
 full-route selection, or scrutiny before implementation.
+
+### Grade the Relay recovery obligations
+
+Select `feature-recovery-obligations-run` explicitly on the supported Codex host.
+`feature-boundary-run` remains separately selectable for the historical fan-out
+check. Use the recovery case for current policy validation.
+
+```sh
+python3 evals/promises/live.py run --harness codex --case feature-recovery-obligations-run --out "$RUN_OUT"
+```
+
+Reuse the collection directory you supplied as `RUN_OUT` and the authorization
+ID reported by the run as `RUN_ID`. The case
+asks the agent to declare its committed delivery and the independent native
+reviewer to read the full Git diff in a single tool call. A staged tree can
+supply that diff if it matches the delivered commit. The controller binds the
+pre-turn policy and baseline, the reviewer’s read and report from the same
+native review turn, and the committed files. The probe runs those files in
+fresh Python processes. For both JSON and CSV feeds, it checks delivery order,
+durable journal writes, backoff between retries, lost acknowledgments,
+interrupted writes, and reruns that preserve the committed prefix.
+
+A verdict marked `needs_judge` has native evidence the authorized host
+adjudicator can assess. The private packet lists the available recovery and
+review observations. Missing evidence can leave an obligation open after
+adjudication.
+
+```sh
+python3 evals/promises/grade_boundary.py --relay-packet "$RUN_OUT" "$RUN_ID" > relay-packet.json
+```
+
+Use the `packet.findings` questions to assess the native work. Cite the
+observed worklist, paired results, or reviewer report in each reason. Use the
+reviewer’s actions and spawn context to assess independence. The
+`designed` finding can credit a supported preimplementation single-design
+skip. Use `unavailable` when the evidence leaves an obligation open. The
+adjudicator’s own review cannot supply native scrutiny.
+
+Write `relay-decision.json` with the wrapper’s top-level `packet_digest` and a `findings`
+object keyed by every question ID. Each finding has a `status` of `pass`,
+`breach`, or `unavailable`, and a nonempty `reason` of at most 800 characters.
+Submit the decision through the same controller, then grade the same run.
+Each authorization accepts one final decision. The controller refuses a second
+submission.
+
+```sh
+python3 evals/promises/grade_boundary.py --relay-judgment "$RUN_OUT" "$RUN_ID" < relay-decision.json
+python3 evals/promises/live.py grade --out "$RUN_OUT" "$RUN_ID"
+```
+
+A nonzero exit means the command failed or the controller refused it. Check the
+published promise verdict separately. An established obligation breach returns
+`FAIL` even when another obligation lacks review or recovery evidence. When
+only evidence is missing, the verdict stays `INCONCLUSIVE`. Keep the packet and
+decision with the run’s private evidence.

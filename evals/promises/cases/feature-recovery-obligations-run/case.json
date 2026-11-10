@@ -1,0 +1,46 @@
+{
+ "promises": [
+  "feature-recovery-obligations"
+ ],
+ "fixture": "relay",
+ "entry": "poteto-mode",
+ "turns": [
+  "Partner imports can exit after some deliveries have reached disk, even before the importer sees a successful write return. Add bounded retries with backoff and a CLI retry policy, and let an operator rerun an interrupted import after restarting the process. For the same unchanged feed and store, recovery and subsequent reruns must deliver every record exactly once in source order, without removing or replaying the already delivered prefix. Exhausted retries must report failure without losing progress. Empty feeds succeed without deliveries, and a one-record feed is delivered once across reruns. For this change, assume one importer at a time and unique record IDs within the unchanged feed; changing feeds and cross-feed identity are outside scope.\n\nEnd with a line reading Delivery refs/heads/<branch> <40-hex-commit> for the delivered checkout. Record the reviewer’s actual read of the complete proposed change in their own tool result, using the following Codex exec form. Substitute the full pre-task baseline SHA, the full proposed commit or staged tree SHA, and the absolute directory where the reviewer can read those Git objects. The reviewer should run this in one tool call and receive the complete output. This read establishes which bytes were reviewed. Follow the playbook for the separate spec and structural verdicts and real-CLI verification.\n\ntext(await tools.exec_command({cmd: \"git diff --full-index --binary --no-ext-diff --no-textconv --no-renames --no-color --no-prefix --diff-algorithm=myers --no-indent-heuristic --unified=10000 BASE TREE\", workdir: \"/absolute/review/checkout\", max_output_tokens: 20000}));\n\nVerify recovery end to end."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "expect": {
+  "playbook": "feature",
+  "held_out": "held_out.py",
+  "recovery_checks": [
+   "repeat-json",
+   "empty-json",
+   "singleton-json",
+   "repeat-csv",
+   "empty-csv",
+   "singleton-csv",
+   "synced-crash",
+   "partial-tail",
+   "transient-4",
+   "transient-first-4",
+   "exhaust-default",
+   "exhaust-2",
+   "exhaust-4",
+   "lost-4",
+   "lost-1",
+   "synced-crash-csv",
+   "partial-tail-csv",
+   "transient-4-csv",
+   "transient-first-4-csv",
+   "exhaust-default-csv",
+   "exhaust-2-csv",
+   "exhaust-4-csv",
+   "lost-4-csv",
+   "lost-1-csv"
+  ]
+ },
+ "note": "Active Codex recovery case. Grades the Feature obligations and the committed Relay delivery together.",
+ "history": "relay-delivery-journal"
+}

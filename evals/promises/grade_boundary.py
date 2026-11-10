@@ -12,9 +12,11 @@ import shutil
 import signal
 import stat
 import subprocess
+import tempfile
 import sys
 import threading
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,6 +35,26 @@ SYSTEM_FILES = tuple(Path(p) for p in ("/", "/dev/null", "/dev/random", "/dev/ur
 SYSTEM_TREES = (Path("/System/Library"), Path("/usr/lib"), PYTHON_ROOT,
                 GIT_ROOT / "usr/libexec/git-core", GIT_ROOT / "usr/share/git-core/templates")
 SKILL_DIRS = (".claude/skills", ".agents/skills", ".hermes/skills", ".grok/skills", "skills")
+
+RELAY_CASE = "feature-recovery-obligations-run"
+RELAY_POLICY = ("poteto-mode/SKILL.md", "poteto-mode/playbooks/feature.md",
+                "poteto-mode/references/task-triggers.md", "poteto-mode/references/review-lens.md")
+RELAY_DIFF = ("diff --full-index --binary --no-ext-diff --no-textconv --no-renames --no-color "
+              "--no-prefix --diff-algorithm=myers --no-indent-heuristic --unified=10000")
+RELAY_READ = re.compile(
+    r'text\(await tools\.exec_command\(\{\s*cmd:\s*("(?:[^"\\]|\\.)*"),\s*'
+    r'workdir:\s*("(?:[^"\\]|\\.)*"),\s*max_output_tokens:\s*20000\s*\}\)\);?'
+)
+RELAY_FINDINGS = {
+    "preserved_shaped": "Did the native work open against the actual baseline and use history and preserved behavior to shape the data before edits?",
+    "full_route_planned": "Did the native work choose the full route before implementation, record the throughput checkpoint and follow the appropriate delegation decision?",
+    "designed": "Before implementation, did the native work compare suitable alternatives or record a supported single-design skip?",
+    "specified_built": "Did the native work settle acceptance before implementation and show paired passing integrated and strict baseline test results on the delivery?",
+    "native_cli_proof": "Did the native work verify the real CLI and observe recovery effects on the delivery?",
+    "spec_scrutiny": "Which read-only native report covered the matching bytes, and did it verify the original spec and resolve any competing or open findings?",
+    "structural_scrutiny": "Which read-only native report covered the matching bytes, and did it resolve structure against the review lens and recorded history decision?",
+    "landed_published": "Did the native work identify the committed delivery and account for publication and any departures?",
+}
 
 
 class GradeRefused(RuntimeError):
@@ -448,8 +470,309 @@ class _Controller:
                  "output": _snapshot(output or run_root), "allocations": [_snapshot(p) for p in allocations],
                  "worktrees": [_snapshot(p) for p in worktrees], "git": git_directory,
                  "private": _snapshot(private), "case": case, "record": record, "sealed": False}
+        if case["id"] == RELAY_CASE and record["harness"] == "codex":
+            try:
+                state["relay_start"] = _relay_start(state, private)
+            except (ValueError, FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+                raise GradeRefused("input_changed", f"Relay inputs could not be pinned at admission: {error}", run_id) from error
         self.save(state)
         return self.load(run_id)[0]
+
+
+def _sha(value):
+    return hashlib.sha256(value).hexdigest()
+
+
+def _relay_digest(value):
+    return _sha(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
+
+
+def _relay_policy(state, private):
+    installed = _Root.open(Path(state["project"]["path"]) / ".agents/skills")
+    protected = private / "references/relay-policy"
+    try:
+        for name in RELAY_POLICY:
+            target = protected / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(installed.read(name))
+    finally:
+        installed.close()
+    return {name: _sha(read_file(protected / name)) for name in RELAY_POLICY}
+
+
+@contextmanager
+def _relay_objects(state, private):
+    common = _Root.open(state["git"]["path"], state["git"]["identity"])
+    try:
+        with tempfile.TemporaryDirectory(dir=private) as directory:
+            db = Path(directory)
+            env = {"HOME": str(db), "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
+                   "PATH": "/usr/bin:/bin", "LANG": "C"}
+            argv = [str(GIT), "--no-replace-objects", "--git-dir", str(db)]
+            subprocess.run([*argv, "init", "--quiet", "--bare", "--template="], check=True,
+                           cwd=db, env=env, capture_output=True, timeout=10)
+            total = 0
+            for source in common.files():
+                rel = source.relative_to(common.path).as_posix()
+                if not rel.startswith("objects/"):
+                    continue
+                if rel in ("objects/info/alternates", "objects/info/http-alternates") or rel.endswith(".promisor"):
+                    raise GradeRefused("unapproved_git", "the Relay delivery uses indirect Git objects")
+                if not re.fullmatch(r"objects/(?:[0-9a-f]{2}/[0-9a-f]{38}|pack/pack-[0-9a-f]{40}\.(?:idx|pack))", rel):
+                    continue
+                total += common.info(rel).st_size
+                if total > 16 * 1024 * 1024:
+                    raise ValueError("the Relay object input exceeds the case limit")
+                target = db / rel
+                target.parent.mkdir(exist_ok=True)
+                target.write_bytes(common.read(rel))
+            profile = _policy([], [db])
+
+            def git(*args):
+                return subprocess.run(["/usr/bin/sandbox-exec", "-p", profile, *argv, *args], check=True,
+                                      cwd=db, env=env, capture_output=True, timeout=10).stdout
+
+            yield git
+    finally:
+        common.close()
+
+
+def _relay_manifest(git, revision, destination=None):
+    manifest = {}
+    for row in git("ls-tree", "-rz", "--full-tree", revision).split(b"\0")[:-1]:
+        info, path = row.split(b"\t", 1)
+        mode, kind, oid = info.decode("ascii").split()
+        name = path.decode("utf-8")
+        rel = Path(name)
+        if (kind != "blob" or mode not in ("100644", "100755") or rel.is_absolute()
+                or rel.as_posix() != name or any(part in (".", "..", ".git") for part in rel.parts)):
+            raise ValueError(f"unsupported Relay delivery entry {name!r}")
+        data = git("cat-file", "blob", oid)
+        if destination:
+            target = destination / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("xb") as stream:
+                stream.write(data)
+            target.chmod(0o755 if mode == "100755" else 0o644)
+        manifest[name] = [mode, _sha(data)]
+    return manifest
+
+
+def _delivery_claim(reply):
+    if not isinstance(reply, str):
+        raise ValueError("the final reply is not text")
+    claims = set()
+    for line in reply.splitlines():
+        line = line.strip()
+        if not re.match(r"Delivery(?:\s|$)", line):
+            continue
+        claim = re.fullmatch(r"Delivery (refs/heads/\S+) ([0-9a-fA-F]{40})", line)
+        if claim is None:
+            raise ValueError("malformed Delivery line in the final reply")
+        ref, sha = claim.groups()
+        claims.add((ref, sha.lower()))
+    if not claims:
+        raise ValueError("no delivery branch and commit in the final reply")
+    if len(claims) > 1:
+        raise ValueError("conflicting delivery declarations in the final reply")
+    return claims.pop()
+
+
+def _relay_checkout(state, trees, ref, sha):
+    common = _Root.open(state["git"]["path"], state["git"]["identity"])
+    try:
+        selected = []
+        for tree in trees:
+            path = Path(tree["path"])
+            root = _Root.open(path, tree["identity"])
+            try:
+                if tree == state["project"]:
+                    head = common.read("HEAD")
+                else:
+                    pointer = root.read(".git").decode()
+                    gitdir = _git_path(pointer[8:], path).relative_to(common.path)
+                    head = common.read(gitdir / "HEAD")
+                if head == f"ref: {ref}\n".encode():
+                    selected.append(str(path))
+            finally:
+                root.close()
+        if len(selected) != 1:
+            raise ValueError("the delivery branch does not name one admitted checkout")
+        try:
+            resolved = common.read(ref).strip()
+        except FileNotFoundError:
+            try:
+                packed = common.read("packed-refs").splitlines()
+            except FileNotFoundError:
+                packed = []
+            resolved = next((line.split(b" ", 1)[0] for line in packed if line.endswith(b" " + ref.encode())), b"")
+        if resolved != sha.encode("ascii"):
+            raise ValueError("the delivery commit does not match the checkout HEAD")
+        return selected[0]
+    finally:
+        common.close()
+
+
+def _relay_start(state, private):
+    baseline = (state["record"].get("baseline") or [None])[-1]
+    if not isinstance(baseline, str) or not re.fullmatch(r"[0-9a-f]{40}", baseline) or not state["git"]:
+        raise ValueError("the Relay baseline commit was not available at admission")
+    with _relay_objects(state, private) as git:
+        if git("cat-file", "-t", baseline) != b"commit\n":
+            raise ValueError("the admitted Relay baseline is not a commit")
+        git("fsck", "--strict", "--no-reflogs", baseline)
+        tree = _relay_manifest(git, baseline)
+    return {"baseline": baseline, "baseline_digest": _relay_digest(tree), "policy": _relay_policy(state, private),
+            "probe": _sha(read_file(private / "references/cases" / RELAY_CASE / "held_out.py"))}
+
+
+def _relay_reviewer_edits(review, project, checkout, cwd, manifest):
+    from oracles import EDIT_TOOLS, View
+
+    actions = []
+    for event in review["actions"]:
+        if event.get("name") in EDIT_TOOLS and event["kind"] == "tool_call":
+            args = event.get("input") or {}
+            patch = args.get("code") or args.get("raw")
+            if isinstance(patch, str):
+                event = {**event, "input": {**args, "patch": patch}}
+        actions.append(event)
+    view = View({"events": actions}, {}, None)
+    calls = {call["seq"]: call for call in view.tool_calls}
+    edits = []
+    roots = (project, Path(checkout), cwd)
+    for seq, path, _ in view.edits():
+        call = calls[seq]
+        native_change = (call.get("name") == "FileChange"
+                         and (call.get("input") or {}).get("status") == "completed")
+        if not native_change and not (view.results_for(call) or {}).get("ok"):
+            continue
+        if path == "?":
+            edits.append(path)
+            continue
+        directory = Path((call.get("input") or {}).get("cwd") or review["cwd"] or cwd)
+        full = Path(os.path.normpath(directory / path))
+        if any(full.is_relative_to(root) and full.relative_to(root).as_posix() in manifest for root in roots):
+            edits.append(str(full))
+    return edits
+
+
+def _relay_review(state, base, sha, tree, diff, checkout, manifest, capture):
+    turns = state["record"].get("turns") or []
+    if not capture or not turns or not turns[-1].get("session_id") or turns[-1]["session_id"] != capture[0]:
+        return [], [], [], {"matched": 0, "competing": 0}
+    argv = turns[-1].get("argv") or []
+    root = Path(state["run"]["path"])
+    project = Path(state["project"]["path"])
+    required = ('approval_policy="never"', 'sandbox_mode="workspace-write"',
+                "sandbox_workspace_write.exclude_slash_tmp=true",
+                "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+                "sandbox_workspace_write.writable_roots=" + json.dumps([str(project / ".git"), str(root / "tmp")], ensure_ascii=False))
+    settings = argv[:argv.index("--")] if "--" in argv else []
+    if any([v for v in settings if v.startswith(entry.split("=")[0] + "=")] != [entry] for entry in required):
+        return [], [], [], {"matched": 0, "competing": 0}
+    if any(v in settings for v in ("--dangerously-bypass-approvals-and-sandbox", "--sandbox", "-s", "--full-auto")):
+        return [], [], [], {"matched": 0, "competing": 0}
+
+    matches, competing = [], []
+    command_prefix = f"git {RELAY_DIFF} {base} "
+    for review in capture[1]:
+        record = {k: v for k, v in review.items() if k not in ("reads", "read_calls")}
+        attempts, exact = [], []
+        for action in review["read_calls"]:
+            call = RELAY_READ.fullmatch(action["input"].strip())
+            if not call:
+                continue
+            command, cwd = map(json.loads, call.groups())
+            if not command.startswith(command_prefix):
+                continue
+            attempt = {"command": command, "cwd": cwd, "call": action["call"], "matches_delivery": False}
+            attempts.append(attempt)
+            reads = [read for read in review["reads"] if read["call"] == action["call"]]
+            if len(reads) != 1:
+                attempt["availability"] = "unpaired"
+                continue
+            read = reads[0]
+            output = read["output"].encode()
+            attempt.update(result=read["result"], exit_code=read["exit_code"], diff_sha256=_sha(output))
+            path = Path(cwd)
+            admitted = ".." not in path.parts and any(path.is_relative_to(allowed) for allowed in (project.parent, root / "tmp"))
+            if (admitted and read["exit_code"] == 0 and output == diff
+                    and command[len(command_prefix):] in (sha, tree)):
+                attempt["matches_delivery"] = True
+                exact.append(attempt)
+        record["read_attempts"] = attempts if len(attempts) <= 8 else attempts[:4] + attempts[-4:]
+        record["omitted_read_attempts"] = max(0, len(attempts) - 8)
+        if not exact or review["incomplete"]:
+            competing.append(record)
+            continue
+        selected = exact[-1]
+        edits = _relay_reviewer_edits(review, project, checkout, Path(selected["cwd"]), manifest)
+        if edits:
+            record["reviewer_edits"] = edits
+            competing.append(record)
+            continue
+        record.update({key: selected[key] for key in ("call", "result", "command", "diff_sha256")})
+        matches.append(record)
+    return matches[:4], competing[:4], capture[2], {
+        "matched": max(0, len(matches) - 4), "competing": max(0, len(competing) - 4)}
+
+
+def _seal_relay(state, capture):
+    private = Path(state["private"]["path"])
+    start = state["relay_start"]
+    try:
+        ref, sha = _delivery_claim(state["trace"].get("final_reply"))
+        checkout = _relay_checkout(state, _approved_trees(state), ref, sha)
+        base = start["baseline"]
+        image = private / "references/relay-delivery"
+        with _relay_objects(state, private) as git:
+            git("fsck", "--strict", "--no-reflogs", base, sha)
+            baseline = _relay_manifest(git, base)
+            if _relay_digest(baseline) != start["baseline_digest"]:
+                raise GradeRefused("input_changed", "Relay baseline bytes changed")
+            git("merge-base", "--is-ancestor", base, sha)
+            tree = git("rev-parse", sha + "^{tree}").decode("ascii").strip()
+            diff = git(*shlex.split(RELAY_DIFF), base, sha)
+            if not diff:
+                return {"reason": "the declared Relay commit does not change the fixture"}
+            image.mkdir()
+            manifest = _relay_manifest(git, sha, image)
+        review, competing, lead_evidence, omissions = _relay_review(
+            state, base, sha, tree, diff, checkout, baseline.keys() | manifest.keys(), capture)
+        return {"checkout": checkout, "ref": ref, "commit": sha,
+                "tree_digest": _relay_digest(manifest), "review": review, "competing_reviews": competing,
+                "review_omissions": omissions, "lead_evidence": lead_evidence}
+    except (ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        return {"reason": f"the Relay delivery could not be pinned: {error}"}
+
+
+def _verify_relay(state, trees):
+    relay = state.get("relay")
+    if relay is None:
+        return
+    private = Path(state["private"]["path"]) / "references"
+    for name, expected in state["relay_start"]["policy"].items():
+        if _sha(read_file(private / "relay-policy" / name)) != expected:
+            raise GradeRefused("input_changed", f"Relay policy changed: {name}")
+    if _sha(read_file(private / "cases" / RELAY_CASE / "held_out.py")) != state["relay_start"]["probe"]:
+        raise GradeRefused("input_changed", "the protected Relay probe changed")
+    if "reason" in relay:
+        return
+    try:
+        if _relay_checkout(state, trees, relay["ref"], relay["commit"]) != relay["checkout"]:
+            raise ValueError("the admitted Relay checkout changed")
+    except ValueError as error:
+        raise GradeRefused("input_changed", error) from error
+    root = _Root.open(private / "relay-delivery")
+    try:
+        found = {str(path.relative_to(root.path)): [
+            "100755" if root.info(path.relative_to(root.path)).st_mode & stat.S_IXUSR else "100644",
+            _sha(root.read(path.relative_to(root.path)))] for path in root.files()}
+        if _relay_digest(found) != relay["tree_digest"]:
+            raise GradeRefused("input_changed", "the pinned Relay delivery image changed")
+    finally:
+        root.close()
 
 
 def re_id(value):
@@ -465,7 +788,10 @@ def _before_turns(run, scratch=()):
     record = {"harness": run.harness, "case": run.case["id"], "skills_at": run.skills_at,
               "project": str(run.project), "timeout_s": run.timeout_s, "turns": [], "baseline": run.baseline}
     controller = _Controller(run.root.parent, create=True)
-    return controller.issue(run.root, run.project, run.case, record, allocations=(run.project.parent, *scratch))
+    authorization = controller.issue(run.root, run.project, run.case, record, allocations=(run.project.parent, *scratch))
+    if run.case["id"] == RELAY_CASE and run.harness == "codex":
+        run._relay_authorization = authorization
+    return authorization
 
 
 def _write_record(handle, record):
@@ -482,6 +808,8 @@ def _write_record(handle, record):
 
 def _seal(handle, record, trace, *, error=None, write=True):
     _, state = handle._controller.load(handle._id)
+    if state["case"]["id"] == RELAY_CASE and state["sealed"]:
+        raise GradeRefused("input_changed", "the Relay run is already sealed")
     if {k: v for k, v in record.items() if k != "turns"} != {k: v for k, v in state["record"].items() if k != "turns"}:
         raise GradeRefused("input_changed", "record conflicts with pre-turn controller metadata", handle._id)
     if write:
@@ -509,6 +837,8 @@ def _seal(handle, record, trace, *, error=None, write=True):
     finally:
         root.close()
     state["error"] = None if error is None else dict(error)
+    if "relay_start" in state and error is None:
+        state["relay"] = _seal_relay(state, getattr(handle, "_relay_capture", None))
     state["sealed"] = True
     handle._controller.save(state)
 
@@ -712,23 +1042,7 @@ class _Environment:
         return paths
 
     def delivery(self, reply):
-        if not isinstance(reply, str):
-            raise ValueError("the final reply is not text")
-        claims = set()
-        for line in reply.splitlines():
-            line = line.strip()
-            if not re.match(r"Delivery(?:\s|$)", line):
-                continue
-            claim = re.fullmatch(r"Delivery (refs/heads/\S+) ([0-9a-fA-F]{40})", line)
-            if claim is None:
-                raise ValueError("malformed Delivery line in the final reply")
-            ref, sha = claim.groups()
-            claims.add((ref, sha.lower()))
-        if not claims:
-            raise ValueError("no delivery branch and commit in the final reply")
-        if len(claims) > 1:
-            raise ValueError("conflicting delivery declarations in the final reply")
-        ref, sha = claims.pop()
+        ref, sha = _delivery_claim(reply)
         branch_ref = ref.encode("utf-8") + b"\n"
         matches = []
         for path in sorted(self.trees):
@@ -747,7 +1061,9 @@ class _Environment:
     def check(self, path, command, timeout):
         if str(path) not in self.trees:
             raise GradeRefused("unapproved_worktree", path)
-        proc = subprocess.Popen(shlex.split(command), cwd=path, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        relay = getattr(self, "relay", None)
+        cwd = self.scratch if relay and relay.get("checkout") == str(path) else path
+        proc = subprocess.Popen(shlex.split(command), cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 text=True, start_new_session=True)
         try:
             stdout, stderr = proc.communicate(timeout=timeout)
@@ -799,6 +1115,7 @@ def grade(authorization):
             except FileNotFoundError:
                 pass
         trees = _approved_trees(state)
+        _verify_relay(state, trees)
         private = _Root.open(state["private"]["path"], state["private"]["identity"])
         try:
             for name in ("code", "references", "fallback"):
@@ -810,8 +1127,13 @@ def grade(authorization):
             private.verify()
         finally:
             private.close()
+        references = Path(state["private"]["path"]) / "references"
         skills = Path(state["private"]["path"]) / "fallback" / "skills"
-        if state["project"]["identity"] is not None:
+        relay = state.get("relay")
+        relay_grade = relay is not None
+        if relay_grade:
+            skills = references / "relay-policy"
+        elif state["project"]["identity"] is not None:
             project = _Root.open(state["project"]["path"], state["project"]["identity"])
             try:
                 for sub in SKILL_DIRS:
@@ -827,13 +1149,15 @@ def grade(authorization):
                 project.close()
         scratch = attempt / "scratch"
         scratch.mkdir(mode=0o700)
-        roots = [*trees, _snapshot(Path(state["private"]["path"]) / "references"), _snapshot(skills)]
+        roots = [_snapshot(references)] if relay_grade else [*trees, _snapshot(references), _snapshot(skills)]
+        decision = state.get("relay_decision") or {}
+        findings = decision.get("findings") if state.get("relay_packet_digest") == decision.get("packet_digest") else None
         config = {"invocation": uuid.uuid4().hex, "case": state["case"], "record": state["record"],
                   "trace": state["trace"], "project": state["project"]["path"], "roots": roots, "trees": trees,
-                  "skills": str(skills), "references": str(Path(state["private"]["path"]) / "references"),
-                  "scratch": str(scratch)}
-        profile = _policy([Path(state["private"]["path"]) / "code", Path(config["references"]), skills],
-                          [*(Path(r["path"]) for r in trees), scratch])
+                  "skills": str(skills), "references": str(references),
+                  "scratch": str(scratch), "relay": relay, "relay_decision": findings}
+        writes = [scratch] if relay_grade else [*(Path(r["path"]) for r in trees), scratch]
+        profile = _policy([Path(state["private"]["path"]) / "code", references, skills], writes)
         (attempt / "profile.sb").write_text(profile)
         env = {"PATH": f"{PYTHON_ROOT}/bin:{GIT_ROOT}/usr/bin:/usr/bin:/bin", "HOME": str(scratch),
                "TMPDIR": str(scratch), "LANG": "en_US.UTF-8", "GIT_CONFIG_GLOBAL": "/dev/null",
@@ -880,7 +1204,10 @@ def grade(authorization):
             from harnesses.login import error_verdict
             verdict = error_verdict(state["case"], state["record"]["harness"], state["record"]["skills_at"],
                                     error, verdict["promises"])
-        output.write("verdict.json", _json(verdict))
+        if state["case"]["id"] == RELAY_CASE:
+            _publish_relay_verdict(controller, state, output, verdict)
+        else:
+            output.write("verdict.json", _json(verdict))
         return verdict
     except GradeRefused as refusal:
         refusal.receipt["run_id"] = run_id
@@ -892,6 +1219,88 @@ def grade(authorization):
             output.close()
 
 
+def _relay_packet(state, recovery):
+    trace = state["trace"]
+    start = state["relay_start"]
+    private = Path(state["private"]["path"]) / "references/relay-policy"
+    events = []
+    for event in trace.get("events", []):
+        fields = ("seq", "kind", "name", "input", "id", "ok", "output_head", "text")
+        record = {name: event[name] for name in fields if name in event}
+        if len(_json(record)) > 4096:
+            record = {"seq": event.get("seq"), "kind": event.get("kind"),
+                      "excerpt": _json(record).decode()[:3900]}
+        events.append(record)
+    if len(events) > 1200:
+        events = [*events[:800], {"omitted": len(events) - 1200}, *events[-400:]]
+    worklist = trace.get("worklist") or []
+    return {"run": state["id"], "case": RELAY_CASE, "skills_at": state["record"]["skills_at"],
+            "sealed_inputs": state["raw_digests"], "start": start, "delivery": state["relay"],
+            "prompt": state["case"]["turns"], "policy": {name: read_file(private / name).decode() for name in RELAY_POLICY},
+            "worklist": [{"seq": plan.get("seq"), "omitted_items": max(0, len(plan["items"]) - 24), "items": [
+                {"text": item["text"][:1500], "state": item.get("state"), "truncated": len(item["text"]) > 1500}
+                for item in plan["items"][:24]
+            ]} for plan in worklist[:30]], "omitted_worklists": max(0, len(worklist) - 30), "lead_events": events,
+            "final_reply": (trace.get("final_reply") or "")[:8000],
+            "recovery": recovery, "findings": RELAY_FINDINGS}
+
+
+@contextmanager
+def _relay_lock(controller):
+    fcntl.flock(controller.root.fd, fcntl.LOCK_EX)
+    try:
+        yield
+    finally:
+        fcntl.flock(controller.root.fd, fcntl.LOCK_UN)
+
+
+def _publish_relay_verdict(controller, state, output, verdict):
+    finding = next(iter(verdict["promises"].values()))
+    with _relay_lock(controller):
+        _, current = controller.load(state["id"])
+        if current.get("relay_decision") != state.get("relay_decision"):
+            raise GradeRefused("input_changed", "Relay adjudication changed while grading")
+        if finding.get("needs_judge") and "relay_packet_digest" not in current:
+            packet = _relay_packet(current, finding["recovery"])
+            write_file(Path(current["private"]["path"]) / "relay-packet.json", _json(packet))
+            current["relay_packet_digest"] = _relay_digest(packet)
+            controller.save(current)
+        output.write("verdict.json", _json(verdict))
+
+
+def _relay_adjudication(authorization, decision=None):
+    controller = authorization._controller
+    with _relay_lock(controller):
+        _, state = controller.load(authorization._id)
+        return _record_relay_judgment(controller, state, decision)
+
+
+def _record_relay_judgment(controller, state, decision):
+    digest = state.get("relay_packet_digest")
+    if state["case"]["id"] != RELAY_CASE or not digest:
+        raise GradeRefused("input_changed", "there is no Relay packet for this authorization")
+    packet = json.loads(read_file(Path(state["private"]["path"]) / "relay-packet.json"))
+    if _relay_digest(packet) != digest:
+        raise GradeRefused("input_changed", "the Relay adjudication packet changed")
+    if decision is None:
+        return {"packet_digest": digest, "packet": packet}
+    if not isinstance(decision, dict) or set(decision) != {"packet_digest", "findings"} or decision["packet_digest"] != digest:
+        raise GradeRefused("input_changed", "the Relay decision belongs to another packet")
+    findings = decision["findings"]
+    if not isinstance(findings, dict) or set(findings) != set(RELAY_FINDINGS):
+        raise GradeRefused("input_changed", "the Relay decision must cover every obligation")
+    for finding in findings.values():
+        if (not isinstance(finding, dict) or set(finding) != {"status", "reason"}
+                or finding["status"] not in ("pass", "breach", "unavailable")
+                or not isinstance(finding["reason"], str) or not 0 < len(finding["reason"].strip()) <= 800):
+            raise GradeRefused("input_changed", "invalid Relay obligation finding")
+    if "relay_decision" in state:
+        raise GradeRefused("input_changed", "the Relay packet already has an adjudication")
+    state["relay_decision"] = decision
+    controller.save(state)
+    return {"accepted": digest}
+
+
 def _worker(result_fd):
     os.set_inheritable(result_fd, False)
     config = json.load(sys.stdin)
@@ -901,6 +1310,8 @@ def _worker(result_fd):
         import oracles
         oracles._IO = _Environment(config["roots"], config["trees"], config["skills"], config["scratch"],
                                    config["project"] if not config["trees"] else None)
+        oracles._IO.relay = config["relay"]
+        oracles._IO.relay_decision = config["relay_decision"]
         oracles.HERE = Path(config["references"])
         oracles.HISTORIES = oracles.HERE / "histories"
         trace = config["trace"]
@@ -919,5 +1330,13 @@ def _worker(result_fd):
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "--worker":
         _worker(int(sys.argv[2]))
+    elif len(sys.argv) == 4 and sys.argv[1] in ("--relay-packet", "--relay-judgment"):
+        authorization = _lookup(Path(sys.argv[2]), sys.argv[3])
+        decision = None
+        if sys.argv[1] == "--relay-judgment":
+            decision = json.loads(sys.stdin.read(16385))
+            if decision is None:
+                raise SystemExit("a Relay decision object is required")
+        print(json.dumps(_relay_adjudication(authorization, decision)))
     else:
         raise SystemExit("use live.py grade with a registered run ID")
