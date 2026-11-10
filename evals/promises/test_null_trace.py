@@ -1,9 +1,9 @@
 """An agent that does nothing must not earn a PASS.
 
 Two do-nothing traces are graded against every runnable case's promises with no project on disk: one with no events,
-and one whose every turn replies "Done." and calls no tool. KNOWN lists the promises that pass anyway. Each is an
-oracle that reads the absence of a bad action as success. The list may only shrink: a new entry is a new false-pass
-path, and a fixed oracle must leave the list.
+and one whose every turn replies "Done." and calls no tool. An oracle that reads the absence of a bad action as
+success passes both. KNOWN lists the promises allowed to pass, and it is empty: such an oracle must also require a
+sign that the agent did the work, and return INCONCLUSIVE without one.
 """
 
 import unittest
@@ -12,11 +12,7 @@ import freshness
 import oracles
 
 HARNESSES = ("claude-code", "codex")
-KNOWN = {
-    "empty": {"design-ladder-spares-small-changes", "how-narrow-question-no-explorers", "interrogate-read-only-when-asked"},
-    "idle": {"design-ladder-spares-small-changes", "how-narrow-question-no-explorers", "interrogate-read-only-when-asked",
-             "poteto-mode-sticky", "short-prompt-continues-in-context", "steering-prompt-redirects-run"},
-}
+KNOWN = {"empty": set(), "idle": set()}
 
 
 def null_trace(kind, harness, turns):
