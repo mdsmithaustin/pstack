@@ -391,14 +391,16 @@ The maintainer settled three questions this assessment raised.
 
 ### Implementation status on 2026-11-10
 
+Three independent adversarial reviews followed. They found that the route accepted placeholder evidence, that the plan printed conditional loads as binding and dropped each playbook's reply line, and that tree equality could not prove gate evidence fresh. Those are corrected, and the evidence cache was removed with the second-opinion call. The reviews also showed that the recommendation's claim, "Phases 1 and 2 remove more text than they add", did not hold: the context a lightweight Feature loads fell by about a tenth, and the gates were not reduced.
+
 Phases 1 to 5 and the first item of Phase 6 are implemented on the branch that carries this assessment. [PORTING.md](../PORTING.md#port-additions-beyond-substitution) lists each change under "Routes, plan script, and evidence-bound gates". Every script has model-free tests, and the lint tier runs the two new ratchets. No model ran, so the effect on behavior, cost, and a mid-tier lead is unverified.
 
 | Recommendation | State | Where |
 | --- | --- | --- |
 | Run rules in the router, routes for every code playbook, one scrutiny rule, endpoint and budget, pin reuse | Done | Mode entry, `references/routes.md`, review lens, four playbooks |
 | Manifest and plan script, risk evidence script, entry at 8,000 bytes, daily routes in the entry | Done | `routes.json`, `scripts/plan.py`, `scripts/risk-facts.py`, `references/playbooks.md`, `references/principles.md` |
-| Optional decision call that can only raise | Done, switched off | `scripts/second-opinion.py`. Tested against fake CLIs only. |
-| Gate evidence bound to a tree, cleanup once per published head, no forced reread, writing lint, opt-in recap, gated publish on demand | Done | `pstack-harness/scripts/gate.py`, `scripts/check-writing.py`, `references/gated-publish.md` |
+| Optional decision call that can only raise | Built, then removed | It had no evidence of need and was tested against fake CLIs only. |
+| Cleanup once per published head, no forced reread, writing lint, opt-in recap, gated publish on demand | Done | `routes.json`, `scripts/check-writing.py`, `references/gated-publish.md` |
 | One spawn rule, reviewer at or above the lead's tier, printed brief clauses, panels on the intensive route | Done | `references/delegation.md`, `subagents.py clauses`, `routes.json` |
 | Context per route, unused-skill report, promises per owner, compensations register | Done | `tools/check-route-bytes.py`, `tools/unused-skills.py`, `ledger.py by-owner`, PORTING.md |
 | Lead model and effort in live records | Done | `lead_model` and `lead_effort` in the sealed run metadata |

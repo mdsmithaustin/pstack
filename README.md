@@ -95,7 +95,7 @@ morning.
 
 when invoked it:
 
-1. matches your task to a [playbook](./skills/poteto-mode/playbooks/) and tracks progress under the mode's [worklist and completion rules](./skills/poteto-mode/SKILL.md#playbooks). a [plan script](./skills/poteto-mode/scripts/plan.py) prints the worklist, each step's skill loads, and the gates, so the answer is the same on every model and CLI.
+1. matches your task to a [playbook](./skills/poteto-mode/playbooks/) and tracks progress under the mode's [worklist and completion rules](./skills/poteto-mode/SKILL.md#playbooks). a [plan script](./skills/poteto-mode/scripts/plan.py) prints the worklist items, each step's skill loads, and the gates, so the same recorded facts give the same route on every CLI.
 1. for bug fix, feature, refactoring, and perf work, records five risk facts and lets the script pick a lightweight, standard, or intensive [route](./skills/poteto-mode/references/routes.md). say `keep this lightweight` or `be thorough` to set the route yourself.
 2. routes to the other skills as the steps fire.
 3. writes unslopped replies framed for the consumer and the maintainer.
@@ -222,7 +222,7 @@ help:              /poteto-help which skill should i use to review this branch?
 
 pstack ships both complete personas inside the installed `pstack-harness` skill. `npx skills` delivers these payloads with the skills; it does not register native agents. [`/setup-pstack`](./skills/setup-pstack/SKILL.md) checks them and can install native registrations into an explicit project or user destination.
 
-[`poteto-agent`](./agents/poteto-agent.md) is a scoped delegate for one unit of a playbook step. It reads `poteto-mode` in full, including its inline Principles index, before work. When its brief names a narrow role whose output cannot land in the project, such as a judge, a reviewer, or a design runner, it reads only the files its brief names. Before each commit or amend, the delegate reads deslop in full, applies its rules to the proposed commit, and returns evidence of cleanup or a justified no-change result. The parent checks that evidence against the commits. The delegate pushes a branch or opens a PR only when its brief says to. The main conversation runs `/poteto-mode` and owns the plan. It spawns one delegate per unit and does not resume a delegate across phases. [Comment Sicko](./agents/comment-sicko.md), usually invoked through [`/no-comments`](./skills/no-comments/SKILL.md), edits scoped comments and reports application-code refactor targets. it does not write application code.
+[`poteto-agent`](./agents/poteto-agent.md) is a scoped delegate for one unit of a playbook step. It reads `poteto-mode` in full before work, and does not run the playbook router itself. When its brief names a narrow role whose output cannot land in the project, such as a judge, a reviewer, or a design runner, it reads only the files its brief names. Before each commit or amend, the delegate reads deslop in full, applies its rules to the proposed commit, and returns evidence of cleanup or a justified no-change result. The parent checks that evidence against the commits. The delegate pushes a branch or opens a PR only when its brief says to. The main conversation runs `/poteto-mode` and owns the plan. It spawns one delegate per unit and does not resume a delegate across phases. [Comment Sicko](./agents/comment-sicko.md), usually invoked through [`/no-comments`](./skills/no-comments/SKILL.md), edits scoped comments and reports application-code refactor targets. it does not write application code.
 
 The [persona contract](./skills/pstack-harness/references/named-roles.md) uses the native persona when the live agent catalog lists it, or supplies the complete persona to a generic delegate. Claude uses Markdown registrations, and Codex uses TOML. Hermes receives the full persona through delegation context. The normalized native names are `poteto-agent` and `comment-sicko`; `Comment Sicko` remains a supported logical alias. Model and effort choices still come from pstack's existing model policy.
 
@@ -230,7 +230,7 @@ A ready payload, an installed native file, and an agent loaded in the current se
 
 ## principles
 
-twenty-four short skills, one principle each. `poteto-mode` indexes them inline and reads that index at task start. the standalone files are there so other skills can reference a principle by name, and so the index can point at the full rule for each.
+twenty-four short skills, one principle each. `poteto-mode` lists them in its [principles reference](./skills/poteto-mode/references/principles.md), and loads a leaf when a step or trigger calls for it. the standalone files are there so other skills can reference a principle by name, and so the index can point at the full rule for each.
 
 <details>
 <summary>all twenty-four principles</summary>

@@ -141,8 +141,9 @@ and useful tests even when deleting them would improve a size metric.
 
 Orchestration should fit the task's risk and uncertainty. Use a lightweight,
 standard, or intensive approach with an explicit reason for extra agents,
-repeated attempts, or deeper review. These are agreed planning choices, not
-implemented configuration labels. Set a task-specific effort budget and escalation
+repeated attempts, or deeper review. These are route names in
+`skills/poteto-mode/references/routes.md` for Bug fix, Feature, Refactoring,
+and Perf issue. Other playbooks have one procedure. Set a task-specific effort budget and escalation
 rule. If effort grows without useful evidence or progress, change the approach.
 Ask the user when the next step changes agreed scope, cost limits, or authority.
 

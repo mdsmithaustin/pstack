@@ -20,6 +20,8 @@ import sys
 from pathlib import Path
 
 REPAIR = re.compile(r"\b(fix|fixes|fixed|revert|hotfix|regression|bug)\b", re.I)
+GENERIC_STEMS = {"index", "__init__", "mod", "main", "lib", "utils", "util", "types", "constants", "helpers", "common", "base"}
+GITNEXUS_TIMEOUT_SECONDS = 60
 TEST_PATH = re.compile(r"(^|/)(tests?|__tests__|spec)(/|$)|(^|/)test_[^/]+$|[._-](test|spec)\.[a-z]+$", re.I)
 
 
@@ -29,7 +31,7 @@ def git(project, *args):
 
 def history(project, path, days):
     subjects = git(project, "log", "--format=%s", "--follow", "--", path).stdout.splitlines()
-    recent = git(project, "log", "--format=%s", f"--since={days}.days", "--", path).stdout.splitlines()
+    recent = git(project, "log", "--format=%s", "--follow", f"--since={days}.days", "--", path).stdout.splitlines()
     return {
         "source": "git log",
         "commits": len(subjects),
@@ -41,10 +43,13 @@ def history(project, path, days):
 
 def grep_files(project, word, exclude):
     """Files that name the word, or None when the search itself failed. Exit 1 is git grep's no-match status."""
-    done = git(project, "grep", "-l", "-w", "-F", "-e", word)
+    done = git(project, "grep", "-l", "-w", "-F", "-e", word, "--", ":/")
     if done.returncode not in (0, 1):
         return None
-    return sorted(name for name in done.stdout.splitlines() if name != exclude)
+    top = Path(git(project, "rev-parse", "--show-toplevel").stdout.strip())
+    names = [(top / name).resolve() for name in done.stdout.splitlines()]
+    skip = (Path(project) / exclude).resolve() if exclude else None
+    return sorted(name.relative_to(top.resolve()).as_posix() for name in names if name != skip)
 
 
 def split_tests(files):
@@ -63,10 +68,15 @@ def text_reach(project, word, exclude, kind):
 
 
 def gitnexus_reach(project, symbol):
-    done = subprocess.run(["gitnexus", "impact", symbol], capture_output=True, text=True, cwd=project)
-    if done.returncode != 0:
+    """GitNexus impact for a symbol, or None when it fails, hangs, or prints nothing."""
+    try:
+        done = subprocess.run(["gitnexus", "impact", symbol], capture_output=True, text=True, cwd=project,
+                              timeout=GITNEXUS_TIMEOUT_SECONDS)
+    except (subprocess.TimeoutExpired, OSError):
         return None
     lines = [line for line in done.stdout.splitlines() if line.strip()]
+    if done.returncode != 0 or not lines:
+        return None
     return {"source": "gitnexus impact", "term": symbol, "output_lines": len(lines), "output": lines[:40]}
 
 
@@ -77,8 +87,12 @@ def collect(args):
     notes = []
     indexed = (project / ".gitnexus").is_dir() and shutil.which("gitnexus") is not None
     if indexed:
-        refresh = subprocess.run(["gitnexus", "analyze", "--index-only"], capture_output=True, text=True, cwd=project)
-        if refresh.returncode != 0:
+        try:
+            refreshed = subprocess.run(["gitnexus", "analyze", "--index-only"], capture_output=True, text=True, cwd=project,
+                                       timeout=GITNEXUS_TIMEOUT_SECONDS).returncode == 0
+        except (subprocess.TimeoutExpired, OSError):
+            refreshed = False
+        if not refreshed:
             indexed = False
             notes.append("gitnexus analyze --index-only failed, so reach falls back to git grep.")
     else:
@@ -87,16 +101,23 @@ def collect(args):
         notes.append("This clone is shallow, so commit counts are a lower bound. Treat a low count as unknown.")
     paths = []
     for path in args.paths:
+        if not (project / path).exists():
+            raise SystemExit(f"risk-facts.py: {path} does not exist under {project}. Check the path. Its history and reach are unknown.")
         entry = {"path": path, "history": history(project, path, args.days)}
         if not entry["history"]["tracked"]:
             entry["note"] = "New or untracked path: no history, and absent from any GitNexus index."
-        entry["reach"] = text_reach(project, Path(path).stem, path, "module name")
+        stem = Path(path).stem
+        if stem.lower() in GENERIC_STEMS:
+            entry["reach"] = {"source": "git grep (module name)", "term": stem, "unavailable": True, "other_files": None, "files": [],
+                              "test_files": None, "tests": [], "why": "the file name is too generic to search for"}
+        else:
+            entry["reach"] = text_reach(project, stem, path, "module name")
         paths.append(entry)
     symbols = []
     for symbol in args.symbol:
         reach = gitnexus_reach(project, symbol) if indexed else None
         if indexed and reach is None:
-            notes.append(f"gitnexus impact {symbol} failed, so its reach comes from git grep.")
+            notes.append(f"gitnexus impact {symbol} failed, timed out, or printed nothing, so its reach comes from git grep.")
         symbols.append(reach or text_reach(project, symbol, None, "symbol"))
     if not args.symbol:
         notes.append("Pass --symbol for each function, type, or constant you will change to get caller evidence for it.")
@@ -111,7 +132,8 @@ def render(report):
         out.append(f"{entry['path']}")
         out.append(f"  history ({past['source']}): {past['commits']} commits, {recent} recent, {past['repair_commits']} that read as repairs")
         if reach.get("unavailable"):
-            out.append(f"  reach ({reach['source']}, term `{reach['term']}`): unavailable, the search failed. Record reach as unknown.")
+            why = reach.get("why", "the search failed")
+            out.append(f"  reach ({reach['source']}, term `{reach['term']}`): unavailable, {why}. Pass --symbol, or record reach as unknown.")
         else:
             out.append(f"  reach ({reach['source']}, term `{reach['term']}`): {reach['other_files']} other files, {reach['test_files']} test files")
         if "note" in entry:

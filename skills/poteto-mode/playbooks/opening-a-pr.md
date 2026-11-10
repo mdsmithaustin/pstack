@@ -1,6 +1,6 @@
 ### Opening a PR
 
-Use when the matched playbook produces a PR.
+Use when the matched playbook produces a PR. When the task's endpoint stops short of a pull request, follow only the parts up to it: the commit rules always, the push for a pushed branch, and name the branch in the reply.
 
 Read this playbook in full. It has no numbered steps.
 

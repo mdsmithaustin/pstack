@@ -10,7 +10,9 @@ ROOT = Path(__file__).resolve().parents[1]
 MODE = ROOT / "skills/poteto-mode"
 SCRIPT = MODE / "scripts/plan.py"
 MANIFEST = json.loads((MODE / "routes.json").read_text(encoding="utf-8"))
-LOW = ["--consequence", "low:a", "--reach", "low:b", "--uncertainty", "low:c", "--complexity", "low:d", "--reversibility", "low:e"]
+EVIDENCE = {"consequence": "no data or auth path", "reach": "one caller by grep", "uncertainty": "spec has an example",
+            "complexity": "two commits on file", "reversibility": "one revert undoes it"}
+LOW = [part for name, text in EVIDENCE.items() for part in (f"--{name}", f"low:{text}")]
 
 
 def run(*args, cwd=None):
@@ -24,7 +26,7 @@ def plan(*args, cwd=None):
 
 
 def facts(**levels):
-    merged = {"consequence": "low:a", "reach": "low:b", "uncertainty": "low:c", "complexity": "low:d", "reversibility": "low:e", **levels}
+    merged = {**{name: f"low:{text}" for name, text in EVIDENCE.items()}, **levels}
     return [part for name, value in merged.items() for part in (f"--{name}", value)]
 
 
@@ -61,6 +63,32 @@ class RouteTable(unittest.TestCase):
         self.assertIn("low, material, unknown", done.stderr)
 
 
+class Evidence(unittest.TestCase):
+    def test_placeholder_evidence_does_not_buy_the_lightweight_route(self):
+        for thin in ("ok", "x", "-", "n/a", "none", "fine", "unknown", "low", "trivial."):
+            with self.subTest(evidence=thin):
+                result = plan("feature", *facts(reach=f"low:{thin}"))
+                self.assertEqual(result["facts"]["reach"]["level"], "unknown")
+                self.assertNotEqual(result["route"], "lightweight")
+
+    def test_all_placeholders_cannot_reach_lightweight(self):
+        thin = [part for name in MANIFEST["facts"] for part in (f"--{name}", "low:ok")]
+        self.assertEqual(plan("feature", *thin)["route"], "intensive")
+
+    def test_a_repeated_flag_is_refused(self):
+        done = run("feature", "--consequence", "material:billing table", *LOW)
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("more than once", done.stderr)
+
+    def test_some_facts_without_the_rest_is_an_error_not_a_guess(self):
+        done = run("feature", "--reach", "low:one caller by grep")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("record all five facts", done.stderr)
+
+    def test_an_abbreviated_flag_is_refused(self):
+        self.assertEqual(run("feature", *LOW, "--raise", "standard", "--reason", "new module").returncode, 2)
+
+
 class Overrides(unittest.TestCase):
     def test_lead_can_raise_with_a_reason(self):
         result = plan("feature", *LOW, "--raise-to", "standard", "--reason", "new to this module")
@@ -73,6 +101,28 @@ class Overrides(unittest.TestCase):
 
     def test_raise_needs_a_reason(self):
         self.assertEqual(run("feature", *LOW, "--raise-to", "intensive").returncode, 2)
+
+    def test_a_user_route_still_needs_the_facts(self):
+        done = run("feature", "--user-route", "lightweight")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("record all five facts", done.stderr)
+
+    def test_lowering_below_the_table_warns(self):
+        lowered = plan("feature", *facts(consequence="material:writes the billing table"), "--user-route", "lightweight")
+        self.assertEqual(lowered["route"], "lightweight")
+        self.assertIn("below the table's", lowered["warning"])
+        self.assertIn("warning:", run("feature", *facts(consequence="material:writes the billing table"), "--user-route", "lightweight").stdout)
+        self.assertIsNone(plan("feature", *LOW, "--user-route", "intensive")["warning"])
+
+    def test_a_user_route_and_a_raise_together_are_refused(self):
+        done = run("feature", *LOW, "--user-route", "lightweight", "--raise-to", "intensive", "--reason", "billing")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("not both", done.stderr)
+
+    def test_a_route_on_a_fixed_playbook_is_noted_not_applied(self):
+        result = plan("babysit", "--user-route", "lightweight")
+        self.assertEqual(result["route"], "standard")
+        self.assertIn("does not apply", result["warning"])
 
     def test_user_sets_the_route_in_either_direction(self):
         lowered = plan("feature", *facts(consequence="material:data", uncertainty="unknown"), "--user-route", "lightweight")
@@ -94,7 +144,7 @@ class Worklist(unittest.TestCase):
         self.assertEqual(plan("bug-fix", *LOW)["steps"][1]["uses"], [])
 
     def test_fixed_procedures_keep_the_panels_their_steps_require(self):
-        loads = lambda name: {skill for step in plan(name)["steps"] for skill in step["loads"]}
+        loads = lambda name: {skill for step in plan(name)["steps"] for skill in step["loads"] + step["conditional"]}
         self.assertIn("swarm", loads("autopilot-full"))
         self.assertIn("arena", loads("eval"))
         self.assertFalse(any(step["held_for_intensive"] for step in plan("autopilot-full")["steps"]))
@@ -131,6 +181,27 @@ class Worklist(unittest.TestCase):
         self.assertIn("Call the Skill tool with `spec-probes`", claude)
         self.assertIn('read "${PSTACK_SKILLS_ROOT:?}/spec-probes/SKILL.md" in full', codex)
 
+    def test_a_load_behind_a_condition_is_not_printed_as_binding(self):
+        steps = {step["name"]: step for step in plan("code-review")["steps"]}
+        self.assertIn("interrogate", steps["Correctness checked"]["conditional"])
+        self.assertNotIn("interrogate", steps["Correctness checked"]["loads"])
+        self.assertIn("principle-boundary-discipline", steps["Boundaries checked"]["loads"])
+        text = run("code-review").stdout
+        self.assertIn("load only when the step's own condition holds: interrogate", text)
+
+    def test_the_reply_line_and_its_loads_are_printed(self):
+        feature = plan("feature", *LOW)
+        self.assertTrue(feature["reply"].startswith("**Reply:** what you built"))
+        self.assertIn("Last item, the reply. **Reply:**", run("feature", *LOW).stdout)
+        autopilot = plan("autopilot-full")
+        self.assertEqual(autopilot["reply_loads"], ["ketchup"])
+        self.assertIn("Call the Skill tool with `ketchup`", run("autopilot-full", "--harness", "claude-code").stdout.split("Last item, the reply.")[1])
+
+    def test_the_playbook_path_is_portable(self):
+        result = plan("feature", *LOW)
+        self.assertEqual(result["file"], "${PSTACK_SKILLS_ROOT}/poteto-mode/playbooks/feature.md")
+        self.assertNotIn(str(ROOT), run("feature", *LOW).stdout)
+
     def test_fixed_procedure_playbook_needs_no_facts(self):
         result = plan("babysit")
         self.assertEqual((result["route"], result["route_source"]), ("standard", "fixed"))
@@ -161,15 +232,11 @@ class GatesAndEndpoint(unittest.TestCase):
             self.assertIn("preserve", [gate["id"] for gate in plan(name, *args)["gates"]], name)
         self.assertEqual([gate["id"] for gate in plan("investigation")["gates"]], ["preserve", "reply-prose"])
 
-    def test_only_tree_bound_gates_are_marked_reusable(self):
-        gates = {gate["id"]: gate["reuse"] for gate in plan("feature", *LOW)["gates"]}
-        self.assertEqual({name for name, reuse in gates.items() if reuse == "tree"},
-                         {"cleanup", "comment-prose", "comments", "documentation"})
-        text = run("feature", *LOW).stdout
-        preserve = next(line for line in text.split("\n") if line.startswith("- preserve"))
-        reply = next(line for line in text.split("\n") if line.startswith("- reply-prose"))
-        self.assertNotIn("Tree-bound", preserve + reply)
-        self.assertIn("Tree-bound", next(line for line in text.split("\n") if line.startswith("- cleanup")))
+    def test_a_playbook_that_changes_nothing_gets_no_publication_endpoint(self):
+        for name in ("investigation", "code-review", "research"):
+            result = plan(name)
+            self.assertEqual(result["default_endpoint"], "what this playbook's Reply line names", name)
+            self.assertNotIn("PR", result["default_endpoint"], name)
 
     def test_endpoint_follows_the_repository(self):
         with tempfile.TemporaryDirectory() as directory:
