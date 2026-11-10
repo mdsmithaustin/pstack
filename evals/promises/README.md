@@ -215,7 +215,15 @@ Six oracles used to pass them, because each read the absence of a bad action as 
 
 A correct run can now grade `INCONCLUSIVE` where it graded PASS, for example a follow-up turn answered in text alone. Those go to a reader. Verdicts recorded before this change were graded by the lenient oracles; regrade their saved traces before citing a PASS on these six promises.
 
-These traces are the cheapest false-pass probe, not a complete one. They do not cover oracles that pass on a keyword in the reply or on a command that names a file without reading it.
+A third trace calls no tool and replies with text stuffed with the phrases reply-reading oracles look for. Five promises still pass it on the agent's own words: `arena-second-opinion-includes-current-design`, `interrogate-keeps-run-proven-findings`, `technical-writing-picks-mode-then-sentences`, `why-reports-cited-history`, and `why-reports-null-results`. `test_null_trace.py` pins that list. A new promise that passes the trace fails the test, and so does a fixed oracle that is still listed. A PASS on these five is weak evidence until its trace is read; take them first in `freshness.py audit-sample` reviews.
+
+These traces are the cheapest false-pass probe, not a complete one. A reply that pairs its claims with unrelated tool calls is not covered.
+
+### Shell commands that name a file
+
+A shell command counts as a read of a skill file only when it shows the file's text. `ls`, `test`, `stat`, `wc`, `find`, checksum commands, and a search that only counts or lists matches (`grep -c`, `rg -l`, `grep -q`) name the file without showing it, and earn no read credit. A failed call earns none when the read is its only command. This applies wherever an oracle asks what the lead read, including the 16 routing promises, which used to pass on `ls` of the playbook.
+
+A read inside a longer chain keeps its credit when the call fails, because the trace records one result for the whole call and the failure may belong to a later command. That leniency is deliberate and is the reverse of the failed-command-chain edge above. A file the harness adapter lists in `files_read` also keeps its credit without a matching event.
 
 ## Parent grading authority
 
