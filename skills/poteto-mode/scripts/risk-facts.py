@@ -30,14 +30,19 @@ def git(project, *args):
 
 
 def history(project, path, days):
-    subjects = git(project, "log", "--format=%s", "--follow", "--", path).stdout.splitlines()
-    recent = git(project, "log", "--format=%s", "--follow", f"--since={days}.days", "--", path).stdout.splitlines()
+    every = git(project, "log", "--format=%s", "--follow", "--", path)
+    lately = git(project, "log", "--format=%s", "--follow", f"--since={days}.days", "--", path)
+    tracked = git(project, "ls-files", "--error-unmatch", "--", path).returncode == 0
+    if every.returncode != 0 or lately.returncode != 0:
+        return {"source": "git log", "unavailable": True, "commits": None, f"commits_last_{days}_days": None,
+                "repair_commits": None, "tracked": tracked}
+    subjects, recent = every.stdout.splitlines(), lately.stdout.splitlines()
     return {
         "source": "git log",
         "commits": len(subjects),
         f"commits_last_{days}_days": len(recent),
         "repair_commits": sum(1 for subject in subjects if REPAIR.search(subject)),
-        "tracked": git(project, "ls-files", "--error-unmatch", "--", path).returncode == 0,
+        "tracked": tracked,
     }
 
 
@@ -130,7 +135,10 @@ def render(report):
         past, reach = entry["history"], entry["reach"]
         recent = next(value for key, value in past.items() if key.startswith("commits_last_"))
         out.append(f"{entry['path']}")
-        out.append(f"  history ({past['source']}): {past['commits']} commits, {recent} recent, {past['repair_commits']} that read as repairs")
+        if past.get("unavailable"):
+            out.append(f"  history ({past['source']}): unavailable, the history query failed. Record accumulated complexity as unknown.")
+        else:
+            out.append(f"  history ({past['source']}): {past['commits']} commits, {recent} recent, {past['repair_commits']} that read as repairs")
         if reach.get("unavailable"):
             why = reach.get("why", "the search failed")
             out.append(f"  reach ({reach['source']}, term `{reach['term']}`): unavailable, {why}. Pass --symbol, or record reach as unknown.")

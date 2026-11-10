@@ -41,6 +41,12 @@ class BriefClauses(unittest.TestCase):
         text = clauses("--source", "t.md", "--start-commit", "no commits")[1]
         self.assertIn("preserve.py\" --since 'no commits'`", text)
 
+    def test_a_bug_fix_delegate_lands_the_reproducer_first(self):
+        text = clauses("--source", "t.md", "--failing-test-first")[1]
+        self.assertIn("Land the failing reproducer in its own commit before the fix", text)
+        self.assertNotIn("Commit the tests with the code that passes them.", text)
+        self.assertIn("Commit the tests with the code that passes them.", clauses("--source", "t.md")[1])
+
     def test_source_is_required(self):
         self.assertEqual(clauses()[0], 2)
 

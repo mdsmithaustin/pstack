@@ -127,6 +127,21 @@ class RiskFacts(unittest.TestCase):
         self.assertIn("cart.py", reach["files"])
         self.assertIn("tests/test_pricing.py", reach["tests"])
 
+    def test_a_failed_history_query_is_unavailable_not_zero(self):
+        bin_dir = Path(self.directory.name) / "logbin"
+        bin_dir.mkdir()
+        real = subprocess.run(["sh", "-c", "command -v git"], capture_output=True, text=True).stdout.strip()
+        tool = bin_dir / "git"
+        tool.write_text(f'#!/bin/sh\nfor a in "$@"; do if [ "$a" = log ]; then echo boom >&2; exit 128; fi; done\nexec {real} "$@"\n')
+        tool.chmod(tool.stat().st_mode | stat.S_IEXEC)
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+        past = self.facts("pricing.py", env=env)["paths"][0]["history"]
+        self.assertTrue(past["unavailable"])
+        self.assertIsNone(past["commits"])
+        text = subprocess.run([sys.executable, str(SCRIPT), "--project", str(self.repo), "pricing.py"],
+                              capture_output=True, text=True, env=env).stdout
+        self.assertIn("history (git log): unavailable", text)
+
     def test_no_match_is_a_real_zero(self):
         reach = self.facts("pricing.py", "--symbol", "nothing_names_this")["symbols"][0]
         self.assertEqual((reach.get("unavailable"), reach["other_files"]), (None, 0))
