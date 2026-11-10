@@ -784,10 +784,17 @@ def _lookup(out, run_id):
     return _Controller(out).load(run_id)[0]
 
 
+def run_record(run, turns):
+    """The run metadata sealed before the first turn. Sealing refuses any later difference except in turns."""
+    return {"harness": run.harness, "case": run.case["id"], "skills_at": run.skills_at,
+            "project": str(run.project), "timeout_s": run.timeout_s, "turns": turns, "baseline": run.baseline,
+            "lead_model": getattr(run, "model", None) or "harness default",
+            "lead_effort": getattr(run, "effort", None) or "harness default"}
+
+
 def _before_turns(run, scratch=()):
     _runtime()
-    record = {"harness": run.harness, "case": run.case["id"], "skills_at": run.skills_at,
-              "project": str(run.project), "timeout_s": run.timeout_s, "turns": [], "baseline": run.baseline}
+    record = run_record(run, [])
     controller = _Controller(run.root.parent, create=True)
     authorization = controller.issue(run.root, run.project, run.case, record, allocations=(run.project.parent, *scratch))
     if run.case["id"] == RELAY_CASE and run.harness == "codex":

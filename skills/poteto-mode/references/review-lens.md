@@ -1,6 +1,6 @@
 # Review lens
 
-The Code review playbook opens this file at its intent, design, and deslop checks. Each question names the evidence to gather and when to leave the code alone. A question with no evidence behind it is not a finding. The governing leaf holds the rule. This file holds the review questions and a smells table.
+The Code review playbook opens this file at its intent, design, and deslop checks. Every code-changing playbook opens its [Independent scrutiny](#independent-scrutiny) section at its proof step. Each question names the evidence to gather and when to leave the code alone. A question with no evidence behind it is not a finding. The governing leaf holds the rule. This file holds the review questions and a smells table.
 
 ## Vocabulary and concepts (**principle-model-the-domain**)
 
@@ -30,6 +30,18 @@ When a change extends an existing function or module, inspect its recent history
 Assess the next likely change from requirements and history. Restructure under the existing behavioral tests when the current design carries demonstrated maintenance cost, or explain why its current structure remains adequate. Preserve useful tests and add coverage only for a missing behavioral contract. Neither a touch count nor a size threshold decides this judgment. A third extension alone does not require a refactor, and hypothetical requirements do not justify an abstraction.
 
 The independent reviewer checks the evidence and the restructure-or-keep decision. Report a concrete structural problem or a supported reason to leave the design. A larger patch for an in-scope, behavior-preserving restructure is not itself a departure from existing patterns.
+
+## Independent scrutiny
+
+Every code change gets independent scrutiny before it counts as reviewed. The author's own checks never substitute for it. This applies on every route.
+
+Credit an existing independent human or agent review when it covers the current artifact against the original task and the structural lens, including the history decision. Record the reviewed revision and separate spec and structural verdicts. Keep pending review pending. Reopen only affected coverage after repairs unless new risk warrants more.
+
+When human PR review is the chosen scrutiny, record the revision to review and the required spec and structural coverage as pending. Deliver the reviewable PR within the task's endpoint. Report delivery for review, never reviewed completion or acceptance. Required repository and documentation gates still apply. A repository with no remote has no PR review to credit, so use the reviewer below or report the user's review of the local branch as pending.
+
+Otherwise, without adequate existing review, brief one read-only reviewer on the `trail reviewer` role. Give it the original task, spec, or issue by path, the way to run the integrated result, the start commit, and the integrated revision. Leave out your plan, briefs, tests, and your restatement of the goal. Ask it to check the behavior against the task text and to apply [Accumulated complexity](#accumulated-complexity) independently. Keep spec findings and the structural verdict separate. Keep the reviewer on a model at or above your own tier. If you cannot spawn the reviewer, report both reviews as not run.
+
+After an independent verdict, resolve missing evidence or disagreement with the same reviewer before closing the proof step. Another review pass needs a named unresolved concern.
 
 ## Unrequested behavior changes (**principle-redesign-from-first-principles**)
 

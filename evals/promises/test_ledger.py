@@ -189,3 +189,34 @@ class AuditTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ByOwnerTest(unittest.TestCase):
+    LEDGER = {"promises": {
+        "a": {"check": "live", "owners": ["skills/how/SKILL.md", "skills/how/references/x.md"]},
+        "b": {"check": "static", "owners": ["skills/how/SKILL.md", "agents/poteto-agent.md", "README.md"]},
+    }}
+
+    def test_promises_group_under_the_skill_that_owns_the_file(self):
+        report = ledger.by_owner(self.LEDGER, ["how"])
+        self.assertEqual(report, {"skills/how": {"a": "live", "b": "static"}})
+
+    def test_non_skill_owners_keep_their_path(self):
+        report = ledger.by_owner(self.LEDGER, ["agents/poteto-agent.md", "README.md"])
+        self.assertEqual(report, {"agents/poteto-agent.md": {"b": "static"}, "README.md": {"b": "static"}})
+
+    def test_a_skill_with_no_promise_is_listed_empty(self):
+        report = ledger.by_owner(self.LEDGER, [])
+        self.assertEqual(report["skills/pr-recap"], {})
+        self.assertEqual(ledger.by_owner(self.LEDGER, ["pr-recap"]), {"skills/pr-recap": {}})
+
+    def test_a_file_path_or_trailing_slash_resolves_to_its_skill(self):
+        for unit in ("skills/how/SKILL.md", "skills/how/", "skills/how"):
+            with self.subTest(unit=unit):
+                self.assertEqual(ledger.by_owner(self.LEDGER, [unit]), {"skills/how": {"a": "live", "b": "static"}})
+
+    def test_counts_print_one_line_per_unit(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(ledger.main(["by-owner", "--counts", "how"]), 0)
+        self.assertRegex(out.getvalue(), r"^\d+\tskills/how\n$")

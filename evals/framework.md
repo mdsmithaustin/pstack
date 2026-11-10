@@ -14,6 +14,11 @@ principles is not approval of every existing workflow, delegation step, or revie
 cost. The [suite alignment assessment](suite-alignment-audit.md) maps these
 decisions to existing mechanisms and distinguishes gaps from missing evidence.
 
+Two principles were added on 2026-11-10 after that assessment was applied to
+one playbook only. [Scope and rule ownership](#scope-and-rule-ownership) and
+[Lead model floor and subtraction](#lead-model-floor-and-subtraction) record
+them. Both are agreed design intent. Neither has runtime evidence yet.
+
 ## Two purposes
 
 The skill suite's purpose is to deliver spec-correct, maintainable changes through
@@ -30,6 +35,70 @@ replace the existing shipping playbook or shorten a user's requested task.
 
 ## Suite operating principles
 
+### Scope and rule ownership
+
+The principles govern the whole suite. Each rule has one owner, chosen by what
+it decides. A playbook cites rules. It does not restate them or hold one that
+another playbook needs.
+
+| Owner | Owns | Loaded |
+| --- | --- | --- |
+| Router ([mode entry](../skills/poteto-mode/SKILL.md) and [task triggers](../skills/poteto-mode/references/task-triggers.md)) | How a task is run. This covers intensity, independent scrutiny, the stop rule, the effort budget, and the completion endpoint. | Always, before a playbook is chosen. |
+| `principle-*` leaf skill | One judgment about the artifact, such as its design, tests, or complexity. | When its trigger arrives. |
+| Shared reference, such as the [review lens](../skills/poteto-mode/references/review-lens.md) or [delegation](../skills/poteto-mode/references/delegation.md) | The procedure for applying a rule. This covers the questions, the evidence, and when to leave the code alone. | When the step arrives. |
+| Playbook | The outcomes and their order for one task type. | When matched. |
+
+Three consequences follow.
+
+- A rule about how a task is run cannot live in a leaf or a playbook. It decides
+  which leaves, agents, and steps load, so it applies before any of them.
+- Where a leaf already owns a rule, the rule stays there. The test rule belongs
+  to `principle-test-behavior-not-implementation`. The complexity rule belongs
+  to `principle-laziness-protocol`. Proceeding on reversible work belongs to
+  `principle-never-block-on-the-human`.
+- A rule that two playbooks need belongs in neither. A principle implemented in
+  one playbook is not implemented.
+
+Some leaves describe both the artifact and the run, such as
+`principle-prove-it-works` and `principle-sequence-verifiable-units`. Leave them
+where they are until a demonstrated failure justifies a move.
+
+### Lead model floor and subtraction
+
+The router and every default route must work when the lead is a mid-tier model
+at medium reasoning effort. On 2026-11-10 that means Claude Sonnet 5.5, GPT-6.1
+Sol, or Grok 4.7, each at medium. A stronger lead is an upgrade, never a
+requirement. No default route may depend on the lead holding hundreds of
+standing instructions, choosing among dozens of similar skills, or tracking
+evidence freshness from memory.
+
+Design for the floor with one structure, not a branch per model tier.
+
+- **Scripts carry what is deterministic.** Route selection from recorded facts,
+  worklist creation, skill and gate lists, role resolution, brief assembly,
+  evidence freshness, and format checks belong in small scripts that print the
+  next action. Instructions carry judgment only. A script gives the same answer
+  on every model and harness.
+- **The lead decides little, and decides it early.** The lead supplies facts
+  and judgment. It does not derive policy. Identification of a skill, a
+  subagent role, an effort level, and a risk route must each be a short lookup,
+  not a reading of the whole suite.
+- **Less is more, and more so over time.** Models keep improving. An
+  instruction that compensates for a model weakness is temporary. Record why it
+  exists so it can be removed when the floor model no longer needs it.
+- **Subtraction is a supported operation.** Subtraction means a route loads
+  less. Taking a skill, gate, or rule out of what a route loads must be one
+  small change. A structure that only makes addition cheap fails this
+  principle.
+
+This floor is a design target. No evaluation in this repository establishes
+that the current router meets it. Structural choices made toward it rest on
+published research, vendor guidance, and this repository's prior results, as
+the [suite alignment assessment](suite-alignment-audit.md#reassessment-on-2026-11-10)
+records. Report the floor as unverified until targeted evidence exists.
+
+### Operating principles
+
 Optimize both new work and maintenance of existing software. Measure them
 separately so improvement in one does not conceal degradation in the other.
 Greenfield features, prototypes, and investigations need acceptance criteria
@@ -37,9 +106,31 @@ appropriate to their purpose; code evolution also needs preservation evidence.
 
 Keep the suite as small as possible while protecting promises and demonstrated
 benefits. Size includes instruction volume, overlapping skills, runtime context,
-repeated reviews, and maintenance burden. Consolidation is useful only when
-agents still discover and apply the shared rule. Prefer an existing mechanism
-that works. A new skill or review step requires evidence of an unmet need.
+repeated reviews, and maintenance burden.
+
+Size is what a route places in the lead's context. We limit it for two reasons:
+to protect the context window, and to avoid instructing a model where it already
+works well. An instruction needs evidence that the floor model fails without it.
+Moving text so that it loads only when needed reduces size. A skill that nothing
+loads is waste, which is a separate cleanup concern.
+
+Three measures follow, and they are not interchangeable.
+
+- **Context** is the skill and reference Markdown a route makes the lead read,
+  plus the text a script prints for it. `tools/check-route-bytes.py` reports it
+  per route. Its counts are source bytes, which approximate tokens and omit
+  reads a route makes only on a condition. What a session actually loaded is
+  the true figure, and saved traces record it.
+- **Need** is whether the floor model fails without an instruction. Bytes do
+  not answer it. A short instruction the model does not need fails this test,
+  and a long one it does need passes. Label each instruction as shown to help,
+  shown not needed, or untested, and treat untested text as provisional.
+- **Waste** is a skill that no step, trigger, or promise reaches.
+  `tools/unused-skills.py` lists candidates for review and gates nothing.
+
+Scripts, data files, and tests are maintenance surface. Their source never
+enters the lead's context, so they are not size. They are still a cost to own,
+and a new script needs the same evidence of an unmet need as a new skill.
 
 Less code means avoiding maintenance cost without meaningful outcome value,
 not optimizing line count. Tests must protect an identifiable behavior or
@@ -50,8 +141,9 @@ and useful tests even when deleting them would improve a size metric.
 
 Orchestration should fit the task's risk and uncertainty. Use a lightweight,
 standard, or intensive approach with an explicit reason for extra agents,
-repeated attempts, or deeper review. These are agreed planning choices, not
-implemented configuration labels. Set a task-specific effort budget and escalation
+repeated attempts, or deeper review. These are route names in
+`skills/poteto-mode/references/routes.md` for Bug fix, Feature, Refactoring,
+and Perf issue. Other playbooks have one procedure. Set a task-specific effort budget and escalation
 rule. If effort grows without useful evidence or progress, change the approach.
 Ask the user when the next step changes agreed scope, cost limits, or authority.
 
@@ -244,6 +336,15 @@ because they are deferred. The ledger's static category is not runtime proof.
 The [closed efficiency pilot](results/2026-11-08-eval-efficiency.md) and other
 historical comparisons retain their limits. This framework authorizes no fresh
 model calls and claims no measured token savings.
+
+The [port value comparison](port-value/results/2026-10-19.md) is the only
+matched run that includes an arm without the suite. All three arms passed every
+task, so it shows no benefit and no harm to acceptance. The current port arm
+recorded 4,294,087 input tokens against 1,635,247 for native Codex and
+1,541,349 for upstream pstack. It did not activate poteto-mode, used two
+repetitions, and could not confirm whether parent usage includes child work.
+Treat it as an observed cost of installed skills on those tasks, not as a
+measured cost of the mode.
 
 The suite principles above are settled. Follow-up must define representative
 new-work and evolution cases, PR observations, thresholds, harness coverage and

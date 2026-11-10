@@ -146,7 +146,7 @@ Babysit reports documentation readiness alongside forge status. A status-only re
 /poteto-mode open the pr. small ordered commits, evidence in the description.
 ```
 
-The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) works from a worktree, rebases the work into small ordered commits, cleans the diff, unslops the prose, and returns the PR link. Five narrow PRs beat one fat one, and stacked follow-ups beat a growing branch. The playbook also invokes [pr-recap](../../skills/pr-recap/SKILL.md), which defines when to post a reviewer recap and its comment format.
+The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) works from a worktree, rebases the work into small ordered commits, cleans the diff, unslops the prose, and returns the PR link. Five narrow PRs beat one fat one, and stacked follow-ups beat a growing branch. When you or the repository's contributor instructions ask for recaps, the playbook also invokes [pr-recap](../../skills/pr-recap/SKILL.md), which defines the reviewer recap and its comment format.
 
 You don't have to ask for the PR. A playbook that ends in Opening a PR, such as Feature or Bug fix, commits, pushes, and opens the PR as its last steps. Say "no PR" or "don't commit" in the prompt to stop it earlier. In a repository with no remote, Feature and Bug fix still commit and record the PR step as skipped. In an existing repository, the commits go on a branch off your main branch, not on main. Every commit leaves out credential files such as `.env`, and your own notes and data you did not ask to version.
 

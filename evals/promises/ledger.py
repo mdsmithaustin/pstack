@@ -200,6 +200,25 @@ def owners_report(ledger, upstream_root, pids):
     return out
 
 
+def owner_unit(owner):
+    """The skill, persona, or other unit a promise owner path belongs to."""
+    parts = Path(owner).parts
+    return "/".join(parts[:2]) if parts[0] in ("skills", "agents") and len(parts) > 1 else owner
+
+
+def by_owner(ledger, units):
+    """Invert the ledger: which promises each skill or persona protects, with each promise's check."""
+    out = {}
+    for pid, promise in sorted(ledger["promises"].items()):
+        for unit in sorted({owner_unit(o) for o in promise.get("owners", [])}):
+            out.setdefault(unit, {})[pid] = promise.get("check")
+    listed = sorted(p.parent.relative_to(ROOT).as_posix() for p in (ROOT / "skills").glob("*/SKILL.md"))
+    for unit in listed:
+        out.setdefault(unit, {})
+    wanted = [owner_unit(u.rstrip("/")) if "/" in u or u in out else f"skills/{u}" for u in units]
+    return {u: out.get(u, {}) for u in wanted} if wanted else dict(sorted(out.items()))
+
+
 @contextlib.contextmanager
 def upstream_tree(path, ref):
     if path or not ref:
@@ -228,10 +247,23 @@ def main(argv=None):
     o.add_argument("--upstream-ref")
     o.add_argument("--ledger", default=str(LEDGER))
     o.add_argument("promises", nargs="*")
+    b = sub.add_parser("by-owner", help="list the promises each skill protects; a skill with none is a removal candidate")
+    b.add_argument("--ledger", default=str(LEDGER))
+    b.add_argument("--counts", action="store_true", help="print one count per unit instead of the promise ids")
+    b.add_argument("units", nargs="*", help="skill names or owner paths; default is every skill")
     args = parser.parse_args(argv)
     if args.cmd == "format":
         return format_ledger(args.ledger, args.check)
     ledger = load(args.ledger)
+    if args.cmd == "by-owner":
+        report = by_owner(ledger, args.units)
+        if args.counts:
+            for unit, promises in report.items():
+                print(f"{len(promises)}\t{unit}")
+        else:
+            json.dump(report, sys.stdout, indent=1)
+            print()
+        return 0
     with upstream_tree(args.upstream, args.upstream_ref) as upstream:
         if args.cmd == "owners":
             if upstream is None:
