@@ -168,9 +168,7 @@ def build(args, manifest):
         for skill in dict.fromkeys(LOAD.findall(text)):
             if skill in panels and route != "intensive" and tiered:
                 held.append(skill)
-            elif route == "lightweight" and skill not in keeps and skill != "pstack-harness":
-                continue
-            elif route == "lightweight" and skill == "pstack-harness":
+            elif route == "lightweight" and skill not in keeps:
                 continue
             else:
                 loads.append(skill)
