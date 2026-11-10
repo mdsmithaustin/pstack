@@ -7,11 +7,29 @@ This assessment inspects instructions and existing evaluation documentation.
 It does not establish runtime compliance, quantify savings, or approve deletion.
 No model benchmark calls were run.
 
-The table below describes commit `3dfcb0c`. Its Feature rows are out of date.
-The [reassessment on 2026-11-10](#reassessment-on-2026-11-10) covers the whole
-suite at commit `6ec0c01` and adds the two principles agreed that day.
+## Follow-up status on 2026-11-10
 
-## Existing mechanisms and gaps
+The assessment below preserves the findings from 2026-11-08. Two subsequent
+changes address several instruction-level gaps:
+
+- [PR #490](https://github.com/mdsmithaustin/pstack/pull/490) adds history-informed
+  structural scrutiny and compares the review verdict with the recorded design
+  rationale. It also clarifies reuse of adequate behavior coverage.
+- [PR #491](https://github.com/mdsmithaustin/pstack/pull/491) replaces Feature's
+  source-file cutoff with risk-based compact and full routes. It permits reuse
+  of adequate acceptance coverage and revision-bound independent review, and
+  keeps unmet review obligations open at an authorized handoff.
+
+These changes update the mechanisms assessed below. They do not establish
+suite-wide effectiveness, long-term erosion results, or an efficiency gain.
+Separate new-work and evolution measurements, total effort budgets, portable
+capability evidence, and evidence for consolidation remain open. The framework's
+agreed goals and unresolved measurement decisions still apply.
+
+The [reassessment on 2026-11-10](#reassessment-on-2026-11-10) below covers the
+whole suite at commit `6ec0c01` and adds the principles agreed that day.
+
+## Mechanisms and gaps at the assessed revision
 
 | Agreed requirement | Existing mechanism inspected | Assessment and smallest next action |
 | --- | --- | --- |
