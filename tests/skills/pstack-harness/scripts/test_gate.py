@@ -14,7 +14,7 @@ class GateEvidence(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         self.repo = Path(self.directory.name)
         self.git('init', '-q')
-        self.git('config', 'user.email', 'test@example.invalid')
+        self.git('config', 'user.email', 't@t')
         self.git('config', 'user.name', 'Test')
         (self.repo / 'a.txt').write_text('one\n')
         self.git('add', 'a.txt')

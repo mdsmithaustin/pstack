@@ -50,7 +50,7 @@ def route_files(root, plan_module, manifest, playbook, route):
     if entry.get("tiered"):
         levels = {name: LOW for name in manifest["facts"]} | FACTS[route]
     plan = plan_module.build(plan_module.argparse.Namespace(
-        playbook=playbook, user_route=None, raise_to=None, reason=None, harness="other", project=root, **levels,
+        playbook=playbook, user_route=None, raise_to=None, reason=None, second_opinion=None, harness="other", project=root, **levels,
     ), manifest)
     files = list(ALWAYS) + [f"skills/poteto-mode/{entry['file']}"]
     if entry.get("tiered"):

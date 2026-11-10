@@ -31,6 +31,8 @@ flowchart TD
 
 The diagram shows the common routes. There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, reviewing someone else's pull request or diff, visual parity, authoring and evaluating skills, autonomous runs, opening a PR, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue or a stack on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup. The [playbook directory](../../skills/poteto-mode/playbooks/) has the full set.
 
+For Bug fix, Feature, Refactoring, and Perf issue, the mode also decides how much process the task gets. It records five risk facts with evidence, and a script maps them to a lightweight, standard, or intensive route. Lightweight work is done directly, with no delegate and no design panel. You can set the route yourself in either direction by saying so. The task runs to the endpoint you state, and without one it stops at the furthest reviewable state the repository supports, such as a pull request, or a local branch when there is no remote.
+
 ## Say the goal, not the ceremony
 
 You don't write a spec. You say what's wrong or what you want, plus anything you already know that saves the agent time:

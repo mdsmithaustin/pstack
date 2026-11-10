@@ -18,7 +18,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from grade_boundary import create_file, grade, GradeRefused, read_file, write_file, _before_turns, _json, _lookup, _Root, _seal, _write_record
+from grade_boundary import create_file, grade, GradeRefused, read_file, run_record, write_file, _before_turns, _json, _lookup, _Root, _seal, _write_record
 from harnesses.login import LoginRequired, auth_death, death_record, error_verdict
 
 HERE = Path(__file__).resolve().parent
@@ -370,8 +370,7 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
 
 
 def meta(run):
-    return {"harness": run.harness, "case": run.case["id"], "skills_at": run.skills_at, "project": str(run.project),
-            "timeout_s": run.timeout_s, "turns": run.turns, "baseline": run.baseline}
+    return run_record(run, run.turns)
 
 
 def main(argv=None):

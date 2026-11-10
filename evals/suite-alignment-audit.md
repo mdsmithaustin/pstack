@@ -389,6 +389,34 @@ The maintainer settled three questions this assessment raised.
 3. **Default endpoint.** Accepted as [Default endpoints](#default-endpoints)
    lists, including repositories with no remote.
 
+### Implementation status on 2026-11-10
+
+Phases 1 to 5 and the first item of Phase 6 are implemented on the branch that carries this assessment. [PORTING.md](../PORTING.md#port-additions-beyond-substitution) lists each change under "Routes, plan script, and evidence-bound gates". Every script has model-free tests, and the lint tier runs the two new ratchets. No model ran, so the effect on behavior, cost, and a mid-tier lead is unverified.
+
+| Recommendation | State | Where |
+| --- | --- | --- |
+| Run rules in the router, routes for every code playbook, one scrutiny rule, endpoint and budget, pin reuse | Done | Mode entry, `references/routes.md`, review lens, four playbooks |
+| Manifest and plan script, risk evidence script, entry at 8,000 bytes, daily routes in the entry | Done | `routes.json`, `scripts/plan.py`, `scripts/risk-facts.py`, `references/playbooks.md`, `references/principles.md` |
+| Optional decision call that can only raise | Done, switched off | `scripts/second-opinion.py`. Tested against fake CLIs only. |
+| Gate evidence bound to a tree, cleanup once per published head, no forced reread, writing lint, opt-in recap, gated publish on demand | Done | `pstack-harness/scripts/gate.py`, `scripts/check-writing.py`, `references/gated-publish.md` |
+| One spawn rule, reviewer at or above the lead's tier, printed brief clauses, panels on the intensive route | Done | `references/delegation.md`, `subagents.py clauses`, `routes.json` |
+| Removal check, promises per owner, bytes per route, compensations register | Done | `tools/check-removal.py`, `ledger.py by-owner`, `tools/check-route-bytes.py`, PORTING.md |
+| Lead model and effort in live records | Done | `lead_model` and `lead_effort` in the sealed run metadata |
+| Capability-by-workflow support table | Not done | Left out with the harness certification work, at the maintainer's direction. |
+
+Five things differ from the recommendation as written.
+
+- The always-on triggers were not all folded into the manifest. The manifest owns each gate's cadence. Task triggers keep the procedure text that ledger promises quote, and one line that tells the lead to follow the plan's gates.
+- The removal check is a ratchet over files under `skills/` and `agents/`, not a rule that a skill is named only in the manifest. Counts can fall and cannot rise without a reviewed flag. `unslop` is still named in 19 shipped files.
+- Bytes per route live in a new `tools/check-route-bytes.py`. `loading-path.py` is unchanged, because its receipts pin its output.
+- The loaded bytes fell less than the entry did. A lightweight Feature now loads about 127 KB of source across its plan, against roughly 150 KB before by the same count. The larger change is frequency: cleanup runs once per push instead of once per commit, and unchanged evidence is reused.
+- The sealed metadata change cannot be exercised here. Seventy-five grade-boundary tests need the reviewed macOS runtime and were skipped. Run them there before relying on `lead_model`.
+
+Two risks deserve a targeted look before this merges.
+
+- A generated checklist block for the worklist was tried in 2026-10 and not adopted, because leads stopped keeping a worklist. The plan script prints the items at run time and says it is not the worklist, which differs from that block, but no run has tested it.
+- Narrowing `architect` to the intensive route and cleanup to once per push changes two guide promises. The guide, ledger claims, and quotes are updated. The framework asks for independent maintainer review before weakening a promise.
+
 ### Scope left out on purpose
 
 The first review of the suite also found that no task in the repository has

@@ -17,7 +17,7 @@ class RiskFacts(unittest.TestCase):
         self.repo = Path(self.directory.name) / "repo"
         self.repo.mkdir()
         self.git("init", "-q")
-        self.git("config", "user.email", "test@example.invalid")
+        self.git("config", "user.email", "t@t")
         self.git("config", "user.name", "Test")
         (self.repo / "tests").mkdir()
         self.write("pricing.py", "def total(items):\n    return sum(items)\n", "add pricing")

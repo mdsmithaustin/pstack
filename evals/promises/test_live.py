@@ -1362,3 +1362,21 @@ class HermesRetention(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LeadModelRecord(unittest.TestCase):
+    def run_with(self, **overrides):
+        return live.Run(Path("/tmp/run"), "codex", {"id": "case", "fixture": "project"}, "pin", 60, **overrides)
+
+    def test_metadata_names_the_lead_model_and_effort(self):
+        record = live.meta(self.run_with(model="gpt-6.1-sol", effort="medium"))
+        self.assertEqual((record["lead_model"], record["lead_effort"]), ("gpt-6.1-sol", "medium"))
+
+    def test_an_unset_lead_is_recorded_as_the_harness_default(self):
+        record = live.meta(self.run_with())
+        self.assertEqual((record["lead_model"], record["lead_effort"]), ("harness default", "harness default"))
+
+    def test_the_sealed_pre_turn_record_carries_the_same_fields(self):
+        run = self.run_with(model="sonnet", effort="medium")
+        before = live.run_record(run, [])
+        self.assertEqual({k: v for k, v in live.meta(run).items() if k != "turns"}, {k: v for k, v in before.items() if k != "turns"})

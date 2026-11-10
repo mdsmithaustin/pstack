@@ -1269,6 +1269,25 @@
     "skills/poteto-mode/references/task-triggers.md"
    ]
   },
+  "endpoint-follows-user-then-repository": {
+   "check": "static",
+   "claim": "A task runs to the endpoint the user states. Without one it stops at the furthest reviewable state the repository supports, including a local branch when there is no remote.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/references/routes.md",
+     "quote": "With no stated endpoint, use the furthest reviewable state the repository supports."
+    },
+    {
+     "file": "skills/poteto-mode/references/routes.md",
+     "quote": "| No remote | Commits on a local branch. Give the branch and its diff command in the reply. |"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/references/routes.md",
+    "skills/poteto-mode/scripts/plan.py"
+   ]
+  },
   "escape-hatch-stops-at-dead-end": {
    "check": "static",
    "claim": "Autonomous run surfaces a genuine dead end and stops rather than spinning or reinterpreting the goal.",
@@ -2044,6 +2063,24 @@
     "skills/poteto-mode/playbooks/shipping.md"
    ],
    "scenario": "shipping-run"
+  },
+  "lightweight-route-works-directly": {
+   "check": "static",
+   "claim": "On the lightweight route the lead works directly, with no investigation or implementation delegate and no panel, and keeps preservation, real-surface proof, and independent scrutiny.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/references/routes.md",
+     "quote": "Work directly. Spawn no investigation or implementation delegate and no panel."
+    },
+    {
+     "file": "skills/poteto-mode/references/routes.md",
+     "quote": "Keep preservation, real-surface proof, and independent scrutiny."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/references/routes.md"
+   ]
   },
   "loop-is-harness-facility-not-pstack": {
    "check": "static",
@@ -3372,6 +3409,26 @@
    ],
    "scenario": "code-review-run"
   },
+  "route-follows-recorded-risk-facts": {
+   "check": "static",
+   "claim": "For Bug fix, Feature, Refactoring, and Perf issue, a script maps five recorded risk facts to a lightweight, standard, or intensive route, with no model call.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/references/routes.md",
+     "quote": "The plan script maps the facts to a route. It needs no model and gives the same answer on every CLI."
+    },
+    {
+     "file": "skills/poteto-mode/references/routes.md",
+     "quote": "A `low` with no evidence counts as `unknown`."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/references/routes.md",
+    "skills/poteto-mode/scripts/plan.py",
+    "skills/poteto-mode/routes.json"
+   ]
+  },
   "routed-skill-loads-after-compaction": {
    "check": "live",
    "claim": "After `/compact`, a `/poteto-mode` step-away request still loads figure-it-out by name.",
@@ -4185,6 +4242,25 @@
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/SKILL.md"
+   ]
+  },
+  "user-sets-route-either-direction": {
+   "check": "static",
+   "claim": "The user can set the route in either direction, and the lead can raise it but not lower it.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/references/routes.md",
+     "quote": "The user can set the route in either direction."
+    },
+    {
+     "file": "skills/poteto-mode/references/routes.md",
+     "quote": "You cannot lower it below the table's result."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/references/routes.md",
+    "skills/poteto-mode/scripts/plan.py"
    ]
   },
   "verification-skill-has-five-sections": {
@@ -6102,7 +6178,7 @@
    "class": "substituted",
    "file": "04-design.md",
    "ported_as": [
-    "768154bdbbfd"
+    "a4a3c944357b"
    ],
    "sources": [
     "upstream"
@@ -7086,6 +7162,15 @@
    ],
    "text": "A config written before the panels shrank to three entries still lists four panel entries, so delete those panel lines, including any under `## codex`, or delete the file, then run `/setup-pstack` again."
   },
+  "464ca5ab6894": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "lightweight-route-works-directly",
+   "sources": [
+    "port"
+   ],
+   "text": "Lightweight work is done directly, with no delegate and no design panel."
+  },
   "466c0e59800d": {
    "class": "promise",
    "file": "08-principles.md",
@@ -7239,6 +7324,15 @@
    ],
    "text": "`/reflect` and `/correct` split the work."
   },
+  "4b41a62e3fb1": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "opening-a-pr-deslops-diff",
+   "sources": [
+    "port"
+   ],
+   "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) requires deslop's [Before each commit check](../../skills/deslop/SKILL.md#before-each-commit) before each push, and before every commit or amend on the intensive route."
+  },
   "4b84fcd1e65d": {
    "class": "promise",
    "file": "01-setup.md",
@@ -7330,6 +7424,14 @@
     "port"
    ],
    "text": "The skill's [trail review](../../skills/show-me-your-work/SKILL.md#cross-model-review-of-the-trail) produces an Attention section."
+  },
+  "4eed6d325b4b": {
+   "class": "context",
+   "file": "02-poteto-mode.md",
+   "sources": [
+    "port"
+   ],
+   "text": "For Bug fix, Feature, Refactoring, and Perf issue, the mode also decides how much process the task gets."
   },
   "4feaecd8b3ed": {
    "also": [
@@ -8283,6 +8385,15 @@
    ],
    "text": "**Your theory of the cause, at first.** A stated guess narrows the search to wherever you pointed. Let the agent restate the problem before you share your hunch."
   },
+  "68681aa6a5a7": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "route-follows-recorded-risk-facts",
+   "sources": [
+    "port"
+   ],
+   "text": "It records five risk facts with evidence, and a script maps them to a lightweight, standard, or intensive route."
+  },
   "68d84dbb65ba": {
    "class": "substituted",
    "file": "01-setup.md",
@@ -8571,15 +8682,6 @@
    ],
    "text": "[`/reflect`](../../skills/reflect/SKILL.md) sends the transcript to three parallel reviewers, then a synthesizer sorts the proposals into `Accepted`, `Rejected`, and `Backlog` and waits for your approval before any skill changes."
   },
-  "7007dee5bfc7": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
-   "sources": [
-    "port"
-   ],
-   "text": "Multi-file work with several plausible shapes triggers `/architect` on its own, except for a confirmed bug with one localized repair."
-  },
   "70634e327351": {
    "class": "promise",
    "file": "10-recipes-and-pitfalls.md",
@@ -8589,6 +8691,18 @@
     "port"
    ],
    "text": "Forcing a test through brittle mocks proves less than running the real command, and the playbook is allowed to say so."
+  },
+  "70baf625c96e": {
+   "also": [
+    "lightweight-route-works-directly"
+   ],
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "user-sets-route-either-direction",
+   "sources": [
+    "port"
+   ],
+   "text": "Say `keep this lightweight` for a small change you understand. `/poteto-mode` then works directly, with no delegate and no design panel."
   },
   "70dd8431c562": {
    "class": "promise",
@@ -8799,6 +8913,15 @@
    ],
    "text": "`/poteto-mode` is the front door."
   },
+  "7523e29adfc3": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "user-sets-route-either-direction",
+   "sources": [
+    "port"
+   ],
+   "text": "You can set the route yourself in either direction by saying so."
+  },
   "75bc08340d22": {
    "class": "promise",
    "file": "04-design.md",
@@ -8817,19 +8940,6 @@
     "upstream"
    ],
    "text": "You can override the verdict."
-  },
-  "768154bdbbfd": {
-   "also": [
-    "architect-runs-arena-for-sketches",
-    "design-ladder-spares-small-changes"
-   ],
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
-   "sources": [
-    "port"
-   ],
-   "text": "A change that crosses two or more source files and admits several plausible shapes earns `/architect`, which brings `/arena` with it. Feature chooses compact execution from risk evidence, not module count. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary."
   },
   "768813397fb2": {
    "class": "context",
@@ -9385,7 +9495,7 @@
    "class": "substituted",
    "file": "05-build-and-clean.md",
    "ported_as": [
-    "cb76efa5c5d6",
+    "4b41a62e3fb1",
     "4070ee73075a"
    ],
    "promise": "opening-a-pr-deslops-diff",
@@ -9547,14 +9657,6 @@
     "port"
    ],
    "text": "This page covers stating a finish condition, vetting a measured number, generating a verification skill for your app, formally verifying a property tests rarely reach, opening the PR, and driving it to merged."
-  },
-  "8a4079b02648": {
-   "class": "context",
-   "file": "06-verify-and-ship.md",
-   "sources": [
-    "port"
-   ],
-   "text": "The playbook also invokes [pr-recap](../../skills/pr-recap/SKILL.md), which defines when to post a reviewer recap and its comment format."
   },
   "8a52a937d01b": {
    "class": "context",
@@ -10359,6 +10461,14 @@
    ],
    "text": "It pushes nothing else except work-in-progress snapshots under `refs/pstack/wip/`, or under the agent ref convention the repository names."
   },
+  "a23fad8f96bb": {
+   "class": "context",
+   "file": "06-verify-and-ship.md",
+   "sources": [
+    "port"
+   ],
+   "text": "When you or the repository's contributor instructions ask for recaps, the playbook also invokes [pr-recap](../../skills/pr-recap/SKILL.md), which defines the reviewer recap and its comment format."
+  },
   "a2ddaf682313": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -10414,6 +10524,19 @@
     "port"
    ],
    "text": "Reach for it when parallelism buys coverage or lets independent checks race."
+  },
+  "a4a3c944357b": {
+   "also": [
+    "architect-runs-arena-for-sketches",
+    "design-ladder-spares-small-changes"
+   ],
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
+   "sources": [
+    "port"
+   ],
+   "text": "On the intensive route, a change that crosses two or more source files and admits several plausible shapes earns `/architect`, which brings `/arena` with it. On the standard route the lead compares the shapes itself. Feature chooses compact execution from risk evidence, not module count. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary."
   },
   "a53e0cd9784d": {
    "also": [
@@ -11284,6 +11407,15 @@
    ],
    "text": "Two things are worth leaving out:"
   },
+  "b6e73c54e0fc": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "endpoint-follows-user-then-repository",
+   "sources": [
+    "port"
+   ],
+   "text": "The task runs to the endpoint you state, and without one it stops at the furthest reviewable state the repository supports, such as a pull request, or a local branch when there is no remote."
+  },
   "b708946e82da": {
    "class": "context",
    "file": "02-poteto-mode.md",
@@ -12066,15 +12198,6 @@
    ],
    "text": "An agent that knows it's being evaluated behaves differently."
   },
-  "cb76efa5c5d6": {
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "opening-a-pr-deslops-diff",
-   "sources": [
-    "port"
-   ],
-   "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) requires deslop's [Before each commit check](../../skills/deslop/SKILL.md#before-each-commit) for every commit or amend."
-  },
   "cbdc744f083c": {
    "class": "promise",
    "file": "03-understand.md",
@@ -12131,6 +12254,15 @@
     "port"
    ],
    "text": "Block it with types, or with a lint or CI check whose error names the fix."
+  },
+  "ce17b917d2e6": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
+   "sources": [
+    "port"
+   ],
+   "text": "On the intensive route, multi-file work with several plausible shapes triggers `/architect` on its own, except for a confirmed bug with one localized repair."
   },
   "ce48bab5e706": {
    "class": "promise",
@@ -12346,7 +12478,7 @@
    "class": "substituted",
    "file": "04-design.md",
    "ported_as": [
-    "7007dee5bfc7",
+    "ce17b917d2e6",
     "c7761e9fc81b",
     "94abf5e9dc8f"
    ],

@@ -70,6 +70,24 @@ def parse_fact(value):
     return level, evidence
 
 
+def merge_second_opinion(facts, path):
+    """A second opinion can raise a fact from low. It never lowers one. A bad file changes nothing."""
+    try:
+        answer = json.loads(Path(path).read_text(encoding="utf-8"))
+        levels = answer["levels"]
+        if answer.get("status") != "answered" or set(levels) != set(facts) or any(v not in LEVELS for v in levels.values()):
+            raise ValueError("not an answered second opinion")
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return facts, f"second opinion ignored: {error}"
+    raised = []
+    merged = dict(facts)
+    for name, (level, evidence) in facts.items():
+        if level == "low" and levels[name] != "low":
+            merged[name] = (levels[name], f"second opinion from {answer.get('cli', 'a CLI')} raised this from low. {evidence}".strip())
+            raised.append(name)
+    return merged, "second opinion raised: " + ", ".join(raised) if raised else "second opinion raised nothing"
+
+
 def table_route(facts):
     """Unknown context is not low risk. Intensive needs harm that is unclear or hard to undo."""
     raised = [name for name, (level, _) in facts.items() if level != "low"]
@@ -107,7 +125,7 @@ def pending(args, path, prose):
     endpoint, endpoint_why, _ = default_endpoint(args.project)
     return {
         "playbook": args.playbook, "file": str(path), "full_read": False, "route": "pending",
-        "route_source": "table", "route_reason": "no risk facts recorded yet", "tiered": True, "facts": {},
+        "route_source": "table", "route_reason": "no risk facts recorded yet", "tiered": True, "facts": {}, "second_opinion": None,
         "opening": prose, "steps": [], "lightweight_worklist": None, "gates": [], "scrutiny": None,
         "default_endpoint": endpoint, "default_endpoint_reason": endpoint_why,
     }
@@ -120,12 +138,14 @@ def build(args, manifest):
     path = MODE / entry["file"]
     prose, steps = read_playbook(path)
     tiered = entry.get("tiered", False)
-    facts = {}
+    facts, second = {}, None
     if tiered:
         missing = [name for name in manifest["facts"] if getattr(args, name) is None]
         if len(missing) == len(manifest["facts"]) and not args.user_route and not args.raise_to:
             return pending(args, path, prose)
         facts = {name: parse_fact(getattr(args, name) or "unknown") for name in manifest["facts"]}
+        if args.second_opinion:
+            facts, second = merge_second_opinion(facts, args.second_opinion)
         route, why = table_route(facts)
         source = "table"
         if args.raise_to:
@@ -174,7 +194,7 @@ def build(args, manifest):
         "playbook": args.playbook, "file": str(path), "full_read": any(line.startswith(FULL_READ) for line in prose),
         "route": route, "route_source": source, "route_reason": why, "tiered": tiered,
         "facts": {name: {"level": level, "evidence": evidence} for name, (level, evidence) in facts.items()},
-        "opening": prose, "steps": planned,
+        "second_opinion": second, "opening": prose, "steps": planned,
         "lightweight_worklist": entry.get("lightweight_worklist") if route == "lightweight" else None,
         "gates": gates, "scrutiny": scrutiny,
         "default_endpoint": endpoint, "default_endpoint_reason": endpoint_why,
@@ -186,6 +206,8 @@ def render(plan, harness):
     out.append(f"route: {plan['route']} ({plan['route_source']}: {plan['route_reason']})")
     for name, fact in plan["facts"].items():
         out.append(f"  {name}: {fact['level']}" + (f" ({fact['evidence']})" if fact["evidence"] else ""))
+    if plan["second_opinion"]:
+        out.append(f"  {plan['second_opinion']}")
     out.append("")
     out.append("This output is not the worklist. Create the worklist in your carrier now from the items below, in this order. Keep one in progress.")
     out.append(f"First item: `{plan['playbook']} playbook opening`. Record these fields in it:")
@@ -249,6 +271,7 @@ def main(argv=None):
     parser.add_argument("--user-route", choices=ROUTES, help="The route the user asked for, in either direction")
     parser.add_argument("--raise-to", choices=ROUTES, help="A higher route the lead chooses, with --reason")
     parser.add_argument("--reason", help="Why the lead raises the route")
+    parser.add_argument("--second-opinion", type=Path, help="Answer file from second-opinion.py. It can only raise a fact")
     parser.add_argument("--harness", choices=("claude-code", "codex", "grok", "hermes", "other"), default="other")
     parser.add_argument("--project", type=Path, default=Path.cwd(), help="Repository to inspect for a remote")
     parser.add_argument("--json", action="store_true")

@@ -34,6 +34,7 @@ When new evidence changes a fact, rerun the plan script and expand the worklist 
 
 - The user can set the route in either direction. Pass `--user-route <route>`. The worklist records `route: <name> (user)`.
 - You can raise the route with `--raise-to <route> --reason <why>`. You cannot lower it below the table's result.
+- A second opinion can raise a fact. It is off unless the repository holds `.agents/pstack-second-opinion` naming `codex` or `claude`. When it is on and the `risk-facts.py` evidence disagrees with a fact you recorded as low, run `python3 "${PSTACK_SKILLS_ROOT:?}/poteto-mode/scripts/second-opinion.py"` with the same facts, `--task`, and `--out <file>`, then pass `--second-opinion <file>` to the plan script. An unavailable answer changes nothing.
 - No route change skips a gate the repository requires, or the [authorization](authorization.md) that an irreversible action needs.
 
 ## Endpoint
