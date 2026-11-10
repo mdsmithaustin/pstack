@@ -126,7 +126,7 @@ The [2026-11-01 comparison](results/2026-11-01-feature-edge-pass.md) owns the sk
 
 A live verdict is evidence about the bytes it ran against. `freshness.py` records those bytes with each verdict and reports the promises a change left without current evidence. It runs no model and authorizes no paid call.
 
-`receipts.json` holds one receipt per promise, harness, and case. A receipt carries the verdict counts, the skills commit, and SHA-256 digests of the promise's owner files at that commit, of the case's `case.json`, fixture, and history, and of the grader (`oracles.py` and `grade_boundary.py`). It holds no model answer, trace, or run path. The file stays in the ledger's canonical form.
+`receipts.json` holds one receipt per promise, harness, and case. A receipt carries the verdict counts, the skills commit, and SHA-256 digests of the promise's owner files at that commit, of the case inputs, and of the grader (`oracles.py` and `grade_boundary.py`). The case inputs are the case directory, the case directory named by `references`, the fixture, and the history. `live.py run` writes the case and grader digests into the run's `run.json` before the first turn, when the controller freezes the same files for grading, so a receipt names the bytes the run used and not the bytes present when it was recorded. It holds no model answer, trace, or run path. The file stays in the ledger's canonical form.
 
 After a live wave, fold its verdicts in and commit the result with the change that was tested:
 
@@ -134,7 +134,7 @@ After a live wave, fold its verdicts in and commit the result with the change th
 python3 evals/promises/freshness.py record "$RUN_OUT"
 ```
 
-`record` skips a run it already counted, a run a dead login ended, and an arm case with `skill_overlays`, since that case runs rewritten skill text. It also refuses to replace a receipt that tested the current tree with a run that did not.
+`record` skips a run it already counted, a run a dead login ended, and an arm case with `skill_overlays`, since that case runs rewritten skill text. It skips a run whose `run.json` carries no input digests, which includes every run made before this tool. It also refuses to replace a receipt that tested the current tree with a run that did not.
 
 `check` gives each live promise one state per policy harness:
 
@@ -144,6 +144,7 @@ python3 evals/promises/freshness.py record "$RUN_OUT"
 | `missing` | No receipt exists for this harness. |
 | `stale` | An owner file, or the case, fixture, or history, changed after the receipt. The reason names the owner. |
 | `unsettled` | The verdict differs from the one it replaced, or runs disagree, with fewer than three runs on the same bytes. |
+| `unresolved` | Every run graded `INCONCLUSIVE` and no reader has recorded a decision. An unread transcript or a run that never started is not evidence about the skill. |
 | `disputed` | A reader recorded disagreement with the verdict. |
 | `deferred` | Every bound case is deferred, so nothing can run. |
 
@@ -152,7 +153,7 @@ python3 evals/promises/freshness.py check --base origin/main
 python3 evals/promises/freshness.py plan --base origin/main --budget-s 3600
 ```
 
-`--base` limits the report to promises the change reaches: one of their owners changed, or an input of one of their bound cases did. Without it the report covers every live promise. `plan` prints, for each harness, the runnable cases that settle the most open promises per second of time limit, and the `live.py run` command for them. The summed time limit is an upper bound on a run, not a cost estimate. Under `--budget-s`, promises the picks do not reach stay listed as `uncovered`. An unsettled promise is planned on the case its receipt came from, so its repeats run on the same bytes.
+`--base` limits the report to promises the change reaches: one of their owners changed, or an input of one of their bound cases did. Without it the report covers every live promise. `plan` prints, for each harness, the runnable cases that settle the most open promises per second of time limit, and the `live.py run` command for them. A case's time limit is its per-turn `timeout_s` times its turns, because the harness applies the limit to each turn. The summed limit is an upper bound on a run, not a cost estimate. Arm cases are never planned, since `record` would not accept their verdicts. Under `--budget-s`, promises the picks do not reach stay listed as `uncovered`. An unsettled promise is planned on the case its receipt came from, so its repeats run on the same bytes.
 
 A verdict that matches the one it replaces settles in one run. A changed verdict needs three runs, which spends repetitions only where a result moved. A receipt with mixed runs reports each count rather than a majority.
 
@@ -168,7 +169,7 @@ python3 evals/promises/freshness.py audit "$PROMISE" "$HARNESS" "$CASE" --agrees
 python3 evals/promises/freshness.py audit "$PROMISE" "$HARNESS" "$CASE" --disputes --note "passed on a keyword"
 ```
 
-The sample is ordered by a digest of each receipt's identity, so it cannot favor verdicts that look easy to confirm. A disputed receipt is debt until a new run or a grader fix replaces it. An audit lasts as long as its receipt: a new run on changed bytes starts unread.
+The sample is ordered by a digest of each receipt's identity, so it cannot favor verdicts that look easy to confirm. The sample draws from every bound case with a fresh receipt, not only the one that represents its promise in `check`. A disputed receipt is debt until a new run or a grader fix replaces it. `audit --agrees` on an `unresolved` receipt records that a reader accepts the run could not decide, and clears the debt. An audit lasts as long as its receipt: a new run on changed bytes starts unread.
 
 ## Known oracle gaps
 
