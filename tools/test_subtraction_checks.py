@@ -103,6 +103,11 @@ class RouteBytes(unittest.TestCase):
         self.assertNotIn("skills/poteto-mode/references/delegation.md", report["feature:lightweight"]["files"])
         self.assertIn("skills/poteto-mode/references/delegation.md", report["feature:standard"]["files"])
 
+    def test_the_gated_reference_is_not_counted_on_any_route(self):
+        report = load(BYTES, "check_route_bytes").measure(ROOT)
+        for key, value in report.items():
+            self.assertNotIn("skills/poteto-mode/references/gated-publish.md", value["files"], key)
+
     def test_surface_reports_scripts_apart_from_context(self):
         done = subprocess.run([sys.executable, str(BYTES), "--surface"], capture_output=True, text=True)
         self.assertEqual(done.returncode, 0)

@@ -20,7 +20,7 @@ from pathlib import Path
 TITLE = re.compile(r"^(feat|fix|docs|refactor|test|chore|perf|build|ci|style|revert)(\([^()\s]+\))?!?: \S(.*\S)?$")
 REQUIRED = ["Why", "What changed", "Scope", "Blast Radius", "Verification"]
 OPTIONAL = {"Tradeoffs", "Departures from existing patterns", "Demo"}
-FENCE = re.compile(r"^\s*(```|~~~)")
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 INLINE = re.compile(r"`[^`]*`")
 URL = re.compile(r"\bhttps?://\S+")
 CONNECTOR_COLON = re.compile(r"\w: [a-z]")
@@ -29,12 +29,16 @@ LONG_DASH = "—"
 
 def prose_lines(text, blank_code=True):
     """Yield (line number, line) outside code fences, with inline code and URLs blanked unless told otherwise."""
-    fenced = False
+    opened = None
     for number, line in enumerate(text.split("\n"), 1):
-        if FENCE.match(line):
-            fenced = not fenced
+        match = FENCE.match(line)
+        if match and opened is None:
+            opened = match.group(1)
             continue
-        if not fenced:
+        if match and match.group(1)[0] == opened[0] and len(match.group(1)) >= len(opened) and not match.group(2).strip():
+            opened = None
+            continue
+        if opened is None:
             yield number, URL.sub("", INLINE.sub("", line)) if blank_code else line
 
 

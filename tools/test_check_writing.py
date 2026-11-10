@@ -52,6 +52,17 @@ class Writing(unittest.TestCase):
         self.assertEqual(done.returncode, 1)
         self.assertIn("missing `## Why`", done.stdout)
 
+    def test_a_shorter_fence_inside_a_longer_one_stays_code(self):
+        nested = "Text.\n\n````md\n```\nx \u2014 y\n```\nstill code \u2014 here\n````\n\nAfter the block.\n"
+        self.assertEqual(self.check("prose", nested).stdout.strip(), "PASS")
+
+    def test_a_mismatched_closer_does_not_reopen_prose_early(self):
+        text = "```\ncode \u2014 one\n~~~\ncode \u2014 two\n```\nProse \u2014 here.\n"
+        done = self.check("prose", text)
+        self.assertEqual(done.returncode, 1)
+        self.assertEqual(done.stdout.count("FAIL"), 1)
+        self.assertIn("FAIL line 6", done.stdout)
+
     def test_no_headings_skips_the_layout_for_a_repository_template(self):
         self.assertEqual(self.check("body", "## Summary\n\nDone.\n", "--no-headings").returncode, 0)
 

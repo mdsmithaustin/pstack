@@ -283,6 +283,7 @@ class Manifest(unittest.TestCase):
     def test_a_sandbox_alone_is_not_a_gated_repository(self):
         text = (MODE / "playbooks/opening-a-pr.md").read_text(encoding="utf-8")
         self.assertIn("`SANDBOX_NAME` alone does not make it gated.", text)
+        self.assertIn("before the first commit, amend, push, PR operation, rebase, or merge preparation", text)
 
     def test_tiered_playbooks_cite_routes_and_scrutiny(self):
         for name, entry in MANIFEST["playbooks"].items():

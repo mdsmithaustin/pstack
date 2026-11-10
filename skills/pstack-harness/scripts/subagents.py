@@ -294,7 +294,10 @@ def render_clauses(args: argparse.Namespace) -> str:
         lines.append(f"Before every commit, run `{PRESERVE}{shlex.quote(args.start_commit)}` and return its last output for each commit. "
                      "Fix each failure in code. Use `--reasons <file>` only where the playbook allows a waiver, and return the file.")
         lines.append(f"Complete deslop's Before each commit check {CLEANUP[args.cleanup]}, and return one evidence reference for each checked scope.")
-        lines.append("Commit the tests with the code that passes them.")
+        if args.failing_test_first:
+            lines.append("Land the failing reproducer in its own commit before the fix, as the playbook orders.")
+        else:
+            lines.append("Commit the tests with the code that passes them.")
     lines.append("Push a branch or open a PR only when a later line of this brief says to.")
     lines.append("Carry every line above into nested delegates, replacement owners, and fix rounds.")
     lines.append("Return a thin report: what changed, the evidence for each claim, and what is still open.")
@@ -312,6 +315,8 @@ def main() -> int:
     clauses.add_argument("--cleanup", choices=tuple(CLEANUP), default="commit", help="The run's cleanup cadence")
     clauses.add_argument("--unattended", action="store_true")
     clauses.add_argument("--no-commits", action="store_true", help="The lead keeps the commits")
+    clauses.add_argument("--failing-test-first", action="store_true",
+                         help="Bug fix: the failing reproducer lands in a commit before the fix")
     for command in ("check", "install"):
         subparser = commands.add_parser(command)
         subparser.add_argument("--harness", choices=("claude-code", "codex", "hermes"))

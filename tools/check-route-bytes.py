@@ -53,7 +53,7 @@ OPT_IN_GATES = {"recap"}
 LINK = re.compile(r"\[[^\]]*\]\(([^)#\s]+\.md)(?:#[^)]*)?\)")
 READ_VERB = re.compile(r"\b(read|open|opens|follow|apply|continue in)\b", re.I)
 PLAYBOOK_PATH = re.compile(r"`(playbooks/[a-z-]+\.md)`")
-CONDITIONAL = re.compile(r"^\W*(If|When|Where|For|On the|Otherwise|Only)\b")
+CONDITIONAL = re.compile(r"^\W*(If|When|Where|For|On the|Otherwise|Only|In any of those cases|In that case|In a gated)\b")
 RUN_PR = re.compile(r"\bRun \*\*Opening a PR\*\*")
 SENTENCE = re.compile(r"(?<=[.!?])\s+")
 SURFACE_SUFFIXES = {".py", ".ts", ".mjs", ".sh"}
