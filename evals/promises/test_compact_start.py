@@ -9,11 +9,15 @@ class CompactStart(unittest.TestCase):
     def test_normalized_start_wording_through_public_grading(self):
         cases = (
             ("playbooks/feature.md starting at abc1234", PASS),
+            ("playbooks/feature.md starting\tat\tabc1234", PASS),
             ("playbooks/feature.md starting at " + "a" * 40, PASS),
             ("playbooks/feature.md start abc1234", PASS),
             ("playbooks/feature.md record start commit", PASS),
             ("playbooks/feature.md start no commits", PASS),
             ("playbooks/feature.md abc1234", FAIL),
+            ("playbooks/feature.md starting at", FAIL),
+            ("playbooks/feature.md starting at\nabc1234", FAIL),
+            ("playbooks/feature.md starting\nat abc1234", FAIL),
             ("playbooks/feature.md starting at; unrelated abc1234", FAIL),
             ("playbooks/feature.md starting at abc123g", FAIL),
             ("playbooks/feature.md starting at abc123", FAIL),
@@ -30,7 +34,7 @@ class CompactStart(unittest.TestCase):
                         "type": "function_call", "name": "update_plan", "call_id": "plan",
                         "arguments": json.dumps({"plan": [
                             {"step": opening, "status": "in_progress"},
-                            {"step": "Implement and verify", "status": "pending"},
+                            {"step": "Implement and verify abc1234", "status": "pending"},
                         ]}),
                     }},
                 ]
