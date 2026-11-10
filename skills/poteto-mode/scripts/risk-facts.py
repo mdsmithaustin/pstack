@@ -40,7 +40,10 @@ def history(project, path, days):
 
 
 def grep_files(project, word, exclude):
-    done = git(project, "grep", "-l", "-w", "-F", "--", word)
+    """Files that name the word, or None when the search itself failed. Exit 1 is git grep's no-match status."""
+    done = git(project, "grep", "-l", "-w", "-F", "-e", word)
+    if done.returncode not in (0, 1):
+        return None
     return sorted(name for name in done.stdout.splitlines() if name != exclude)
 
 
@@ -50,7 +53,11 @@ def split_tests(files):
 
 
 def text_reach(project, word, exclude, kind):
-    callers, tests = split_tests(grep_files(project, word, exclude))
+    found = grep_files(project, word, exclude)
+    if found is None:
+        return {"source": f"git grep ({kind})", "term": word, "unavailable": True, "other_files": None, "files": [],
+                "test_files": None, "tests": []}
+    callers, tests = split_tests(found)
     return {"source": f"git grep ({kind})", "term": word, "other_files": len(callers), "files": callers[:15],
             "test_files": len(tests), "tests": tests[:15]}
 
@@ -103,13 +110,18 @@ def render(report):
         recent = next(value for key, value in past.items() if key.startswith("commits_last_"))
         out.append(f"{entry['path']}")
         out.append(f"  history ({past['source']}): {past['commits']} commits, {recent} recent, {past['repair_commits']} that read as repairs")
-        out.append(f"  reach ({reach['source']}, term `{reach['term']}`): {reach['other_files']} other files, {reach['test_files']} test files")
+        if reach.get("unavailable"):
+            out.append(f"  reach ({reach['source']}, term `{reach['term']}`): unavailable, the search failed. Record reach as unknown.")
+        else:
+            out.append(f"  reach ({reach['source']}, term `{reach['term']}`): {reach['other_files']} other files, {reach['test_files']} test files")
         if "note" in entry:
             out.append(f"  note: {entry['note']}")
     for reach in report["symbols"]:
         if reach["source"] == "gitnexus impact":
             out.append(f"{reach['term']} ({reach['source']}): {reach['output_lines']} lines")
             out.extend(f"  {line}" for line in reach["output"])
+        elif reach.get("unavailable"):
+            out.append(f"{reach['term']} ({reach['source']}): unavailable, the search failed. Record reach as unknown.")
         else:
             out.append(f"{reach['term']} ({reach['source']}): {reach['other_files']} files, {reach['test_files']} test files")
             out.extend(f"  {name}" for name in reach["files"] + reach["tests"])

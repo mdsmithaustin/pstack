@@ -22,6 +22,7 @@ LEVELS = ("low", "material", "unknown")
 STEP = re.compile(r"^(\d+)\. (.*)$")
 BOLD = re.compile(r"\*\*(.+?)\*\*")
 LOAD = re.compile(r"call the Skill tool with `([a-z0-9-]+)`", re.I)
+NAMED = re.compile(r"(?:`([a-z0-9-]+)`|\*\*([a-z0-9-]+)\*\*) skill")
 SENTENCE_END = re.compile(r"(?<=[.!?])\s")
 FULL_READ = "Read this playbook in full."
 
@@ -172,7 +173,10 @@ def build(args, manifest):
                 continue
             else:
                 loads.append(skill)
-        planned.append({"number": number, "name": name, "outcome": outcome(text), "loads": loads,
+        named = [a or b for a, b in NAMED.findall(text)]
+        uses = [] if route == "lightweight" else [s for s in dict.fromkeys(named)
+                                                 if s not in loads and s not in held and (MODE.parent / s / "SKILL.md").is_file()]
+        planned.append({"number": number, "name": name, "outcome": outcome(text), "loads": loads, "uses": uses,
                         "held_for_intensive": held, "skipped": skips.get(name)})
 
     endpoint, endpoint_why, has_remote = default_endpoint(args.project)
@@ -182,7 +186,8 @@ def build(args, manifest):
         if gate["applies"] == "code" and not changes_code:
             continue
         when = gate["when"].get(route) or gate["when"]["all"]
-        gates.append({"id": gate["id"], "skill": gate.get("skill"), "run": gate.get("run"), "when": when})
+        gates.append({"id": gate["id"], "skill": gate.get("skill"), "run": gate.get("run"), "when": when,
+                      "reuse": gate.get("reuse")})
     scrutiny = None
     if changes_code:
         scrutiny = ("Credit an existing independent review of the current revision, or leave human PR review pending at delivery. "
@@ -218,7 +223,7 @@ def render(plan, harness):
         out.append("Then: Record the five risk facts with evidence, as references/routes.md defines them. Change no file before this item closes.")
         out.append("Then: Rerun this script with the facts, and replace this item with the items it prints.")
         return "\n".join(out)
-    if plan["full_read"]:
+    if plan["full_read"] and not plan["steps"]:
         out.append(f"Then: Read {plan['file']} in full. It has no numbered steps.")
     elif plan["lightweight_worklist"]:
         by_name = {step["name"]: step for step in plan["steps"]}
@@ -235,11 +240,15 @@ def render(plan, harness):
     else:
         if plan["opening"]:
             out.append("   opening prose, kept with the first item: " + " ".join(plan["opening"]))
+        if plan["full_read"]:
+            out.append(f"Then: Read {plan['file']} in full. Its steps index the sections after them.")
         out.append("Then one item per step:")
         for step in plan["steps"]:
             out.append(f"{step['number']}. {step['outcome']}")
             if step["loads"]:
                 out.append("   load: " + "; ".join(load_phrase(skill, harness) for skill in step["loads"]))
+            if step["uses"]:
+                out.append("   also uses, as the step's text says: " + ", ".join(step["uses"]))
             if step["held_for_intensive"]:
                 out.append("   intensive only: " + ", ".join(step["held_for_intensive"])
                            + ". Compare the options yourself and record them. Raise the route when you cannot choose.")
@@ -250,7 +259,8 @@ def render(plan, harness):
     out.append("gates:")
     for gate in plan["gates"]:
         action = load_phrase(gate["skill"], harness) if gate["skill"] else f"run `{gate['run']}`"
-        out.append(f"- {gate['id']}: {action}, {gate['when']}.")
+        reuse = " Tree-bound: `gate.py check` can show it is still current." if gate["reuse"] == "tree" else ""
+        out.append(f"- {gate['id']}: {action}, {gate['when']}.{reuse}")
     if plan["scrutiny"]:
         out.append("")
         out.append("independent scrutiny: " + plan["scrutiny"])

@@ -88,6 +88,26 @@ class Worklist(unittest.TestCase):
         self.assertEqual(result["steps"][0]["outcome"],
                          "**Reproduced.** The defect fires on the matching surface, under your control, on demand.")
 
+    def test_skills_a_step_names_without_a_load_sentence_are_still_shown(self):
+        root_caused = plan("bug-fix", *facts(reach="material:x"))["steps"][1]
+        self.assertEqual(root_caused["uses"], ["how", "why"])
+        self.assertEqual(plan("bug-fix", *LOW)["steps"][1]["uses"], [])
+
+    def test_fixed_procedures_keep_the_panels_their_steps_require(self):
+        loads = lambda name: {skill for step in plan(name)["steps"] for skill in step["loads"]}
+        self.assertIn("swarm", loads("autopilot-full"))
+        self.assertIn("arena", loads("eval"))
+        self.assertFalse(any(step["held_for_intensive"] for step in plan("autopilot-full")["steps"]))
+
+    def test_a_full_read_playbook_with_steps_still_lists_them(self):
+        result = plan("orchestrate")
+        self.assertTrue(result["full_read"])
+        self.assertEqual([step["name"] for step in result["steps"]][:3], ["Frame", "Install the runtime", "Pilot"])
+        text = run("orchestrate").stdout
+        self.assertIn("in full. Its steps index the sections after them.", text)
+        self.assertIn("1. **Frame.**", text)
+        self.assertNotIn("It has no numbered steps", text)
+
     def test_panels_load_only_on_intensive(self):
         standard = plan("feature", *facts(reach="material:x"))
         designed = next(step for step in standard["steps"] if step["name"] == "Designed")
@@ -135,8 +155,21 @@ class GatesAndEndpoint(unittest.TestCase):
         recap = next(gate for gate in plan("feature", *LOW)["gates"] if gate["id"] == "recap")
         self.assertIn("only when the user or the repository", recap["when"])
 
-    def test_answer_playbooks_get_only_the_reply_gate(self):
-        self.assertEqual([gate["id"] for gate in plan("investigation")["gates"]], ["reply-prose"])
+    def test_every_playbook_gets_the_preserve_gate(self):
+        for name in ("investigation", "babysit", "opening-a-pr", "feature"):
+            args = LOW if name == "feature" else []
+            self.assertIn("preserve", [gate["id"] for gate in plan(name, *args)["gates"]], name)
+        self.assertEqual([gate["id"] for gate in plan("investigation")["gates"]], ["preserve", "reply-prose"])
+
+    def test_only_tree_bound_gates_are_marked_reusable(self):
+        gates = {gate["id"]: gate["reuse"] for gate in plan("feature", *LOW)["gates"]}
+        self.assertEqual({name for name, reuse in gates.items() if reuse == "tree"},
+                         {"cleanup", "comment-prose", "comments", "documentation"})
+        text = run("feature", *LOW).stdout
+        preserve = next(line for line in text.split("\n") if line.startswith("- preserve"))
+        reply = next(line for line in text.split("\n") if line.startswith("- reply-prose"))
+        self.assertNotIn("Tree-bound", preserve + reply)
+        self.assertIn("Tree-bound", next(line for line in text.split("\n") if line.startswith("- cleanup")))
 
     def test_endpoint_follows_the_repository(self):
         with tempfile.TemporaryDirectory() as directory:

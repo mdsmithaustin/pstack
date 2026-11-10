@@ -6,6 +6,7 @@ that holds one word, `codex` or `claude`. The call is tool-less, ephemeral, and 
 It sends the task summary and the evidence the lead recorded, and asks for one level per fact.
 
 The answer can only raise a fact. Pass the output file to plan.py with --second-opinion.
+Each run first removes an earlier answer at --out, so a stale file is never reused.
 Any failure prints an `unavailable` result and exits 1, and the table's own route stands.
 This call never chooses the route. plan.py does, from the merged facts.
 
@@ -135,6 +136,7 @@ def main(argv=None):
     parser.add_argument("--timeout", type=float, default=180)
     parser.add_argument("--out", type=Path, required=True, help="Where to write the answer for plan.py")
     args = parser.parse_args(argv)
+    args.out.unlink(missing_ok=True)
     switch = args.project / SWITCH
     cli = switch.read_text(encoding="utf-8").strip() if switch.is_file() else ""
     if cli not in ("codex", "claude"):

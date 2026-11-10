@@ -74,6 +74,27 @@ class GateEvidence(unittest.TestCase):
         self.gate('record', 'cleanup')
         self.assertEqual(self.gate('list').stdout.splitlines(), ['cleanup: pass (current)', 'documentation: pass (stale)'])
 
+    def test_concurrent_records_keep_every_gate(self):
+        names = [f'gate-{index}' for index in range(12)]
+        running = [subprocess.Popen([sys.executable, str(SCRIPT), '--project', str(self.repo), 'record', name],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) for name in names]
+        for process in running:
+            _, errors = process.communicate()
+            self.assertEqual(process.returncode, 0, errors)
+        listed = [line.split(':')[0] for line in self.gate('list').stdout.splitlines()]
+        self.assertEqual(sorted(listed), sorted(names))
+        self.assertEqual(list((self.repo / '.git/pstack').glob('*.tmp')), [])
+        self.assertFalse((self.repo / '.git/pstack/gates.lock').exists())
+
+    def test_a_stale_lock_is_cleared(self):
+        import os
+        import time
+        lock = self.repo / '.git/pstack/gates.lock'
+        lock.mkdir(parents=True)
+        old = time.time() - 600
+        os.utime(lock, (old, old))
+        self.assertEqual(self.gate('record', 'cleanup').returncode, 0)
+
     def test_outside_a_repository_is_a_usage_error(self):
         with tempfile.TemporaryDirectory() as directory:
             done = subprocess.run([sys.executable, str(SCRIPT), '--project', directory, 'check', 'cleanup'], capture_output=True, text=True)
