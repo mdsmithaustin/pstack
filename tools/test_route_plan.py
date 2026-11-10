@@ -276,6 +276,15 @@ class Manifest(unittest.TestCase):
                 self.assertIn("../references/routes.md", text, name)
                 self.assertIn("../references/review-lens.md#independent-scrutiny", text, name)
 
+    def test_a_lead_without_the_script_is_still_sent_to_the_gates_endpoint_and_scrutiny(self):
+        triggers = (MODE / "references/task-triggers.md").read_text(encoding="utf-8")
+        line = next(line for line in triggers.split("\n") if line.startswith("- A gate the plan prints"))
+        self.assertIn("With no plan, run cleanup before every commit or amend", line)
+        self.assertIn("(routes.md#endpoint)", line)
+        self.assertIn("(review-lens.md#independent-scrutiny)", line)
+        self.assertIn("## Endpoint", (MODE / "references/routes.md").read_text(encoding="utf-8"))
+        self.assertIn("## Independent scrutiny", (MODE / "references/review-lens.md").read_text(encoding="utf-8"))
+
     def test_entry_and_more_playbooks_list_every_playbook(self):
         listed = set()
         for doc in (MODE / "SKILL.md", MODE / "references/playbooks.md"):
