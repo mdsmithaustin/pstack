@@ -128,6 +128,40 @@ class Worklist(unittest.TestCase):
         self.assertEqual(run("nope").returncode, 2)
 
 
+class OneStep(unittest.TestCase):
+    def test_step_prints_that_step_and_no_other(self):
+        done = run("bug-fix", "--step", "2", "--route", "standard")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("2. **Root-caused.** One mechanism explains the symptom", done.stdout)
+        self.assertIn("rule them out until one survives", done.stdout)
+        self.assertNotIn("**Reproduced.**", done.stdout)
+        self.assertNotIn("**Repaired.**", done.stdout)
+
+    def test_step_keeps_indented_sub_items(self):
+        text = run("feature", "--step", "5").stdout
+        for label in ("Blocking first steps", "Independent workstreams", "Shared mutable state", "Smallest safe decomposition"):
+            self.assertIn(label, text)
+        self.assertNotIn("**Built.**", text)
+
+    def test_step_text_is_the_playbook_text(self):
+        source = (MODE / "playbooks/perf-issue.md").read_text(encoding="utf-8")
+        line = next(line for line in source.split("\n") if line.startswith("4. "))
+        self.assertIn(line, run("perf-issue", "--step", "4").stdout)
+
+    def test_lightweight_step_says_what_to_skip(self):
+        self.assertIn("Lightweight route: do this step's work yourself.", run("bug-fix", "--step", "3", "--route", "lightweight").stdout)
+        self.assertNotIn("Lightweight route", run("bug-fix", "--step", "3", "--route", "intensive").stdout)
+
+    def test_missing_step_and_unknown_playbook_are_usage_errors(self):
+        self.assertEqual(run("bug-fix", "--step", "9").returncode, 2)
+        self.assertEqual(run("nope", "--step", "1").returncode, 2)
+
+    def test_the_plan_names_the_step_command_with_its_route(self):
+        self.assertIn("`bug-fix --step <number> --route standard`", run("bug-fix", *facts(reach="material:x")).stdout)
+        self.assertIn("(steps 1, 2, 4)", run("feature", *LOW).stdout)
+        self.assertNotIn("--step", run("opening-a-pr").stdout)
+
+
 class GatesAndEndpoint(unittest.TestCase):
     def test_cleanup_runs_per_published_head_except_on_intensive(self):
         light = {gate["id"]: gate["when"] for gate in plan("feature", *LOW)["gates"]}

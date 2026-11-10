@@ -6,7 +6,9 @@ routing policy, so the answer is the same on every model and harness. Steps and
 their outcome sentences come from the playbook file, which owns them. Gates, panels,
 and the flags of code-changing playbooks come from routes.json beside the mode entry.
 
-Exit 2 means a usage error, such as an unknown playbook or a lowered route.
+With --step N it prints the full text of one step instead, for the moment that step starts.
+
+Exit 2 means a usage error, such as an unknown playbook, a missing step, or a lowered route.
 """
 import argparse
 import json
@@ -43,6 +45,46 @@ def read_playbook(path):
         else:
             current.append(line.strip())
     return prose, [(number, " ".join(part for part in block if part)) for number, block in steps]
+
+
+def step_text(path, wanted):
+    """One step's lines as the playbook has them, sub-items included, or None when the step is absent."""
+    block = None
+    for line in path.read_text(encoding="utf-8").split("\n"):
+        match = STEP.match(line)
+        if match:
+            if block is not None:
+                break
+            if int(match.group(1)) == wanted:
+                block = [line]
+        elif block is not None:
+            if line[:1] not in ("", " ", "\t"):
+                break
+            block.append(line)
+    return "\n".join(block).rstrip() if block else None
+
+
+def render_step(args, manifest):
+    path = playbook_path(args.playbook)
+    text = step_text(path, args.step)
+    if text is None:
+        raise SystemExit(f"plan.py: {args.playbook} has no step {args.step}.")
+    out = [f"{args.playbook} step {args.step}, from {path}", ""]
+    if args.route == "lightweight":
+        out += ["Lightweight route: do this step's work yourself. Skip its sentences that delegate, spawn a subagent, or load a skill the plan did not list. Keep its outcome, its checks, and its commands.", ""]
+    elif args.route == "standard":
+        panels = ", ".join(f"`{name}`" for name in manifest["panels"])
+        out += [f"Standard route: the panels ({panels}) stay unloaded. Where this step names one, compare the options yourself and record them.", ""]
+    out += [text, "", "The bold outcome binds. The other sentences are the default route. Mark the item completed only with its evidence."]
+    return "\n".join(out)
+
+
+def playbook_path(playbook):
+    path = MODE / "playbooks" / f"{playbook}.md"
+    if not re.fullmatch(r"[a-z0-9-]+", playbook) or not path.is_file():
+        known = sorted(found.stem for found in (MODE / "playbooks").glob("*.md"))
+        raise SystemExit(f"plan.py: unknown playbook {playbook!r}. Known: {', '.join(known)}.")
+    return path
 
 
 def step_name(text):
@@ -133,10 +175,7 @@ def pending(args, path, prose):
 
 
 def build(args, manifest):
-    path = MODE / "playbooks" / f"{args.playbook}.md"
-    if not re.fullmatch(r"[a-z0-9-]+", args.playbook) or not path.is_file():
-        known = sorted(found.stem for found in (MODE / "playbooks").glob("*.md"))
-        raise SystemExit(f"plan.py: unknown playbook {args.playbook!r}. Known: {', '.join(known)}.")
+    path = playbook_path(args.playbook)
     entry = manifest["playbooks"].get(args.playbook, {})
     prose, steps = read_playbook(path)
     tiered = entry.get("tiered", False)
@@ -230,7 +269,8 @@ def render(plan, harness):
         out.append("Then these tracked outcomes:")
         for index, item in enumerate(plan["lightweight_worklist"], 1):
             covered = [by_name[name] for name in item["covers"] if name in by_name]
-            out.append(f"{index}. {item['item']}. Outcomes: " + " ".join(step["outcome"] for step in covered))
+            numbers = ", ".join(str(step["number"]) for step in covered)
+            out.append(f"{index}. {item['item']} (steps {numbers}). Outcomes: " + " ".join(step["outcome"] for step in covered))
             loads = [skill for step in covered for skill in step["loads"]]
             if loads:
                 out.append("   load: " + "; ".join(load_phrase(skill, harness) for skill in loads))
@@ -262,7 +302,9 @@ def render(plan, harness):
         out.append("")
         out.append("independent scrutiny: " + plan["scrutiny"])
     out.append("")
-    out.append("Read each step's full text in the playbook when its turn comes. Another review pass needs a named unresolved concern.")
+    if not plan["full_read"]:
+        out.append(f"When a step starts, print its full text: rerun this script as `{plan['playbook']} --step <number> --route {plan['route']}`.")
+    out.append("Another review pass needs a named unresolved concern.")
     return "\n".join(out)
 
 
@@ -277,11 +319,16 @@ def main(argv=None):
     parser.add_argument("--raise-to", choices=ROUTES, help="A higher route the lead chooses, with --reason")
     parser.add_argument("--reason", help="Why the lead raises the route")
     parser.add_argument("--second-opinion", type=Path, help="Answer file from second-opinion.py. It can only raise a fact")
+    parser.add_argument("--step", type=int, metavar="N", help="Print the full text of step N and nothing else")
+    parser.add_argument("--route", choices=ROUTES, help="With --step, the route the plan printed")
     parser.add_argument("--harness", choices=("claude-code", "codex", "grok", "hermes", "other"), default="other")
     parser.add_argument("--project", type=Path, default=Path.cwd(), help="Repository to inspect for a remote")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     try:
+        if args.step is not None:
+            print(render_step(args, manifest))
+            return 0
         plan = build(args, manifest)
     except SystemExit as error:
         if isinstance(error.code, str):
