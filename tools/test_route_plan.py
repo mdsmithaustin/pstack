@@ -319,6 +319,31 @@ class GatesAndEndpoint(unittest.TestCase):
             subprocess.run(["git", "-C", directory, "remote", "add", "origin", "https://example.invalid/r.git"], check=True)
             self.assertIn("PR", plan("feature", *LOW, "--project", directory)["default_endpoint"])
 
+    def test_every_code_step_that_runs_opening_a_pr_keeps_its_commits(self):
+        line = "   still commit when the push or PR is skipped"
+        for name, entry in MANIFEST["playbooks"].items():
+            args = facts(reach="material:shared caller") if entry.get("tiered") else []
+            steps = [step for step in plan(name, *args)["steps"] if step["runs_pr"]]
+            with self.subTest(playbook=name):
+                self.assertTrue(steps, "a code playbook needs a step that runs Opening a PR")
+                text = run(name, *args).stdout.split("\n")
+                for step in steps:
+                    at = next(index for index, row in enumerate(text) if row.startswith(f"{step['number']}. "))
+                    self.assertEqual(text[at + 1], line)
+        self.assertIn(line, run("feature", *LOW).stdout, "the lightweight grouped worklist keeps the line")
+
+    def test_a_playbook_that_changes_no_code_gets_no_commit_line(self):
+        for name in ("babysit", "shipping", "investigation", "autopilot-full"):
+            with self.subTest(playbook=name):
+                self.assertFalse(any(step["runs_pr"] for step in plan(name)["steps"]))
+                self.assertNotIn("still commit", run(name).stdout)
+
+    def test_the_router_owns_the_commit_rule_for_a_skipped_pr(self):
+        routes = (MODE / "references/routes.md").read_text(encoding="utf-8")
+        self.assertIn("A skipped push or PR never skips that step's commits.", routes)
+        for name in ("perf-issue", "visual-parity", "authoring-a-skill", "refactoring"):
+            self.assertNotIn("skipped push or PR", (MODE / "playbooks" / f"{name}.md").read_text(encoding="utf-8"), name)
+
 
 class Manifest(unittest.TestCase):
     def test_manifest_lists_only_playbooks_that_exist_and_need_a_flag(self):

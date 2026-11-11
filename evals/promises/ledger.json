@@ -3996,6 +3996,30 @@
     "skills/pstack-harness/references/registration.md"
    ]
   },
+  "skipped-pr-keeps-commits": {
+   "check": "static",
+   "claim": "In every playbook that changes code, a skipped push or PR never skips the commits of the step that runs Opening a PR, and the plan prints that on the step.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/references/routes.md",
+     "quote": "A skipped push or PR never skips that step's commits."
+    },
+    {
+     "file": "skills/poteto-mode/scripts/plan.py",
+     "quote": "still commit when the push or PR is skipped"
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "Short of a pull request, stop at the endpoint: always commit, push only for a pushed branch, and name the branch in the reply."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/references/routes.md",
+    "skills/poteto-mode/scripts/plan.py",
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ]
+  },
   "skipped-step-stays-in-worklist": {
    "check": "live",
    "claim": "A playbook step the agent chooses not to do stays in the worklist marked `skipped: <reason>`.",
@@ -5057,6 +5081,15 @@
     "port"
    ],
    "text": "Each PR gets one owner agent that carries it from build through merge, and no owner merges on its own verdict."
+  },
+  "113a460f0430": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "skipped-pr-keeps-commits",
+   "sources": [
+    "port"
+   ],
+   "text": "Every playbook that changes code keeps its commits when the push or the PR is skipped, and the printed plan says so on the step that opens the PR."
   },
   "1157d5dd9345": {
    "class": "context",
