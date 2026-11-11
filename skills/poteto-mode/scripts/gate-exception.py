@@ -3,12 +3,13 @@
 
 Reads `no-mistakes axi status` text from a file, or from stdin. It never calls the gate.
 
-  no-mistakes axi status --run <run-id> | gate-exception.py
+  no-mistakes axi status --run <run-id> | python3 "${PSTACK_SKILLS_ROOT:?}/poteto-mode/scripts/gate-exception.py"
 
 Exit 0: no Test exception is recorded.
 Exit 1: a Test exception is recorded with no operator reason. Never report that run as passed or merge-ready.
 Exit 3: a Test exception is recorded with a reason. Any caller can write a reason, so match it to the operator's own approval.
-Exit 2: the status is empty, reports an error, or names no run. Nothing was checked.
+Exit 2: the status cannot be read, is empty, reports an error, names no run, or contains an unparsed Test exception.
+No reliable exception verdict is available.
 
 When the text holds several runs, the worst record decides the exit code.
 """
