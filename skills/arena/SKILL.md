@@ -18,7 +18,7 @@ Every candidate gets the same prompt, so the prompt is the contract.
 
 ## Phase B: Fan out
 
-Spawn all N subagents in one message with `run_in_background: true`, each with the task, the path to the shared grounding, its own output path, and instructions to produce the artifact and a short rationale naming the alternatives it considered and what it rejected. After fan-out, send a runner or judge only a correction to the source or scope, never your tests, reading, or pick. If the question changes, reframe and re-run.
+Spawn all N subagents in one message with `run_in_background: true`, each with the task, the path to the shared grounding, its own output path, and instructions to produce the artifact and a short rationale naming the alternatives it considered and what it rejected. Send a running runner or judge only a correction to the source or scope or a stop order, never your tests, reading, or pick. If the question changes, reframe and re-run.
 
 ### Required arms
 

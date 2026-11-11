@@ -6,7 +6,7 @@ Sources, in order of trust:
 
 1. The installed CLI: version output, help, the tool text and bundled docs inside the binary, and the tool schemas a live session shows.
 2. The vendor's documentation and public source, fetched on 2026-11-11.
-3. This repository's records and this workspace's saved sessions, scanned read-only. Counts below are aggregates. No prompt or transcript text is copied here.
+3. This repository's records and this workspace's saved sessions, scanned read-only. Counts below are aggregates. The Codex section quotes base-instruction lines that those sessions record. No user prompt and no other transcript text is copied here.
 
 A cell marked **unverified** names what was tried. Nothing about one harness is inferred from another.
 
