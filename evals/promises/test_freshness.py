@@ -125,6 +125,23 @@ class Record(Tree):
         self.record()
         self.assertEqual(self.state("routes"), ("fresh", "PASS 1"))
 
+    def test_a_regraded_run_replaces_its_verdict_instead_of_counting_twice(self):
+        self.run_dir("route-case", "claude-code", {"routes": "PASS"})
+        self.record(keep=True)
+        verdict = self.out / "run-1" / "verdict.json"
+        verdict.write_text(verdict.read_text().replace("PASS", "FAIL"), encoding="utf-8")
+        self.record()
+        entry = self.receipts["receipts"]["routes"]["claude-code"]["route-case"]
+        self.assertEqual(entry["verdicts"], {"FAIL": 1})
+
+    def test_replaying_saved_runs_cannot_clear_a_dispute(self):
+        self.run_dir("route-case", "claude-code", {"routes": "PASS"}, grader="g1")
+        self.run_dir("route-case", "claude-code", {"routes": "PASS"}, grader="g2")
+        self.record(keep=True)
+        freshness.record_audit(self.receipts, "routes", "claude-code", "route-case", False, "keyword only", "2026-11-10")
+        self.record()
+        self.assertEqual(self.state("routes")[0], "disputed")
+
     def test_a_flipped_verdict_stays_unsettled_until_three_runs_on_the_same_bytes(self):
         self.run_dir("route-case", "claude-code", {"routes": "PASS"})
         self.record()
@@ -247,6 +264,12 @@ class Touched(Tree):
         self.assertEqual(reached("evals/promises/cases/route-case/case.json"), {"routes"})
         self.assertEqual(reached("evals/promises/fixtures/tally/tally.py"), {"routes", "builds"})
         self.assertEqual(reached("README.md", "skills/a/references/x.md"), set())
+
+    def test_a_deleted_fixture_still_reaches_the_cases_that_used_it(self):
+        shutil.rmtree(self.here / "fixtures" / "tally")
+        reached = {row["promise"] for row in freshness.touched(
+            self.rows(), ["evals/promises/fixtures/tally/tally.py"], CASES, here=self.here, root=self.root)}
+        self.assertEqual(reached, {"routes", "builds"})
 
     def test_a_case_that_borrows_another_cases_checks_goes_stale_with_them(self):
         CASES["build-case"]["references"] = "route-case"

@@ -23,7 +23,7 @@ def case_paths(case_id, spec, here=HERE):
     paths.append(here / "fixtures" / spec["fixture"])
     if spec.get("history"):
         paths.append(here / "histories" / spec["history"])
-    return [p for p in paths if p.exists()]
+    return paths
 
 
 def case_digest(case_id, spec, here=HERE):

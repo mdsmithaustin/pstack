@@ -94,8 +94,9 @@ def load_policy(path=POLICY):
 def record(out, receipts, promises, cases, *, today, reader_at=commit_reader, read_now=None, here=HERE):
     """Fold each graded run under `out` into `receipts`. Returns one line per cell written.
 
-    A run already folded in is skipped, and so is a run on bytes other than the tree's when the receipt on record
-    already matches the tree: an old output directory cannot displace current evidence. The case and grader digests
+    A run already folded in is skipped and a regraded one replaces its verdict. So is a run that an earlier, replaced
+    receipt held, and a run on bytes other than the tree's when the receipt on record already matches the tree: an old
+    output directory cannot displace current evidence. The case and grader digests
     come from the run's own record, written before its first turn, so a run is never credited with bytes it did not
     use; a run without them is skipped. An arm case and a run a dead login ended carry no verdict about the committed
     skill and are skipped too.
@@ -103,17 +104,17 @@ def record(out, receipts, promises, cases, *, today, reader_at=commit_reader, re
     read_now = read_now or tree_reader()
     lines = []
     for path in sorted(report.run_verdicts(out), key=lambda p: p.stat().st_mtime):
-        raw = path.read_bytes()
-        run = json.loads(raw)
-        # Names the run, so folding the same output directory in twice counts each run once.
-        run_id = sha(path.parent.name.encode() + b"\0" + raw)[:16]
+        run = json.loads(path.read_bytes())
         case_id, harness, commit = run.get("case"), run["harness"], run.get("skills_at")
         spec = cases.get(case_id)
         if spec is None or not commit or spec.get("skill_overlays"):
             lines.append(f"skipped {path.parent.name}: {'arm case' if spec and commit else 'no bound case or skills commit'}")
             continue
         started = path.parent / "run.json"
-        stored = json.loads(started.read_text(encoding="utf-8")).get("inputs") if started.is_file() else None
+        record_bytes = started.read_bytes() if started.is_file() else b"{}"
+        stored = json.loads(record_bytes).get("inputs")
+        # Names the run by what it started with, not by its verdict, so a regrade of the same run replaces its verdict.
+        run_id = sha(path.parent.name.encode() + b"\0" + record_bytes)[:16]
         if not stored:
             lines.append(f"skipped {path.parent.name}: its record carries no input digests, so its verdicts cannot be bound to bytes")
             continue
@@ -134,15 +135,26 @@ def record(out, receipts, promises, cases, *, today, reader_at=commit_reader, re
             if prior and prior["inputs"] == current != inputs:
                 lines.append(f"skipped {pid} {harness} {case_id}: the receipt on record tested the current tree and this run did not")
                 continue
+            superseded = set(prior.get("superseded", ())) if prior else set()
+            if run_id in superseded:
+                continue
             if prior and prior["inputs"] == inputs and prior["grader"] == grader:
-                if run_id in prior["runs"]:
+                if prior["runs"].get(run_id) == verdict:
                     continue
-                counts, runs, previous = dict(prior["verdicts"]), prior["runs"], prior.get("previous")
+                runs, previous = dict(prior["runs"]), prior.get("previous")
             else:
-                counts, runs, previous = {}, [], unanimous(prior["verdicts"]) if prior else None
-            counts[verdict] = counts.get(verdict, 0) + 1
-            entry = {"grader": grader, "inputs": inputs, "recorded": today, "runs": sorted([*runs, run_id]),
+                runs, previous = {}, unanimous(prior["verdicts"]) if prior else None
+                if prior:
+                    superseded |= set(prior["runs"])
+            runs[run_id] = verdict
+            counts = {}
+            for each in runs.values():
+                counts[each] = counts.get(each, 0) + 1
+            entry = {"grader": grader, "inputs": inputs, "recorded": today, "runs": dict(sorted(runs.items())),
                      "skills_at": commit, "verdicts": counts}
+            if superseded:
+                # A replaced receipt's runs stay named, so replaying saved evidence cannot swap it back in.
+                entry["superseded"] = sorted(superseded)
             if previous:
                 entry["previous"] = previous
             if model:
