@@ -4,7 +4,7 @@
 
 1. Your harness's native subagent or delegation tool, whatever it is called.
 2. No such tool → invoke your own CLI non-interactively as a subprocess (its help names the command and flags), one invocation per arm, run concurrently in background shells, each arm's report collected from stdout or a file path named in its brief.
-3. No subprocesses either → run the arms sequentially inline, one at a time, each writing its report to a file before the next starts, then synthesize. A verdict or review that runs inline is not independent. Label it `self-review` in the verdict and in the reply.
+3. No subprocesses either → run the arms sequentially inline, one at a time, each writing its report to a file before the next starts, then synthesize. Keep the panel rule's arm count. A verdict or review that runs inline is not independent. Label it `self-review` in the verdict and in the reply.
 
 Each writer gets its own git worktree, whichever mechanism spawns it. When the brief names no commit and `git -C <project> rev-parse --verify -q 'HEAD^{commit}'` prints nothing, make no worktree and use the fallback below. Keep the location a native isolation option picks when the option makes a git worktree, that is, when `git -C <its path> rev-parse --path-format=absolute --git-common-dir` prints the project's. When you run `git worktree add` yourself, make one worktree at a time, and never place the worktree beside the repository:
 

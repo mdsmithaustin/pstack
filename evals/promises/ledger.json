@@ -46,7 +46,9 @@
    "owners": [
     "skills/architect/SKILL.md",
     "skills/architect/references/runner-prompt.md",
-    "skills/arena/SKILL.md"
+    "skills/arena/SKILL.md",
+    "skills/setup-pstack/scripts/check-models-config.py",
+    "skills/pstack-harness/references/roles.md"
    ],
    "scenario": "architect-run"
   },
@@ -3567,7 +3569,7 @@
   "same-model-design-comparison-skipped": {
    "check": "script",
    "claim": "When every runner arm and every cross-judge arm of an arena or architect design comparison resolves to the lead's own model, at any effort, the resolver marks the comparison `skip` and the lead designs once and says so. A user request for the comparison itself still runs the panel, and delegation that protects the lead's context and required reviews are unaffected.",
-   "harness_sensitive": false,
+   "harness_sensitive": true,
    "owners": [
     "skills/setup-pstack/scripts/check-models-config.py",
     "skills/pstack-harness/references/roles.md",
@@ -4751,12 +4753,14 @@
    "text": "```mermaid\nflowchart TD\n    A[Your prompt] --> B[poteto-mode]\n    B --> C[Read the Principles section]\n    C --> D{Match the task}\n    D -->|Read-only question| E[Investigation]\n    D -->|Defect| F[Bug fix]\n    D -->|New behavior| G[Feature]\n    D -->|Structure only| H[Refactoring]\n    D -->|Measured slowness| I[Perf issue]\n    D -->|Large work or no match| J[figure-it-out]\n    E --> K[Verify and report]\n    F --> K\n    G --> K\n    H --> K\n    I --> K\n    J --> K\n```"
   },
   "03b0d1bfe453": {
-   "class": "promise",
+   "class": "substituted",
    "file": "01-setup.md",
+   "ported_as": [
+    "3d15e40ea990"
+   ],
    "promise": "panel-list-sets-arm-count",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "For a panel role the value is a list, and one subagent runs per entry, so the list length sets the panel size."
   },
@@ -6965,6 +6969,15 @@
    ],
    "text": "Choose the targets you use, including `hermes-agent` for Hermes."
   },
+  "3d15e40ea990": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "panel-list-sets-arm-count",
+   "sources": [
+    "port"
+   ],
+   "text": "For a panel role the value is a list, and one subagent runs per entry, so the list length sets the panel size, except that pstack skips a [design comparison](04-design.md) whose every arm would run on your chat's own model."
+  },
   "3d1cf9c0d7a8": {
    "class": "substituted",
    "file": "07-overnight.md",
@@ -8121,12 +8134,14 @@
    "text": "Next: [Recipes and pitfalls](./10-recipes-and-pitfalls.md)."
   },
   "5f75f2aa6f29": {
-   "class": "promise",
+   "class": "substituted",
    "file": "01-setup.md",
+   "ported_as": [
+    "e6960638bfcd"
+   ],
    "promise": "panel-list-sets-arm-count",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "Shorten a panel list. Each entry runs one subagent."
   },
@@ -11166,6 +11181,15 @@
    ],
    "text": "The [Pause safely playbook](../../skills/poteto-mode/playbooks/pause-safely.md) finishes or backs out of the current step, commits a work-in-progress checkpoint, and writes a resume note."
   },
+  "ad5a1ba0e54b": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "When every runner and judge would run on the coordinator's own model, it sketches the candidates itself, as `/arena` does below."
+  },
   "ad8042391c17": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -13418,6 +13442,15 @@
     "port"
    ],
    "text": "[`/create-verification-skill`](../../skills/create-verification-skill/SKILL.md) interviews the repository, not you."
+  },
+  "e6960638bfcd": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "panel-list-sets-arm-count",
+   "sources": [
+    "port"
+   ],
+   "text": "Shorten a panel list. Each entry runs one subagent, unless pstack skips the comparison because every arm would run on your chat's own model."
   },
   "e698328a6e14": {
    "class": "promise",
