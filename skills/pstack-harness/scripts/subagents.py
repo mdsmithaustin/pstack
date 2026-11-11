@@ -98,18 +98,16 @@ EFFORT_DESCRIPTION = (
     "pstack-harness skill."
 )
 DELEGATE_TEMPLATE = Path("references/subagents/effort-delegate.md")
-# pstack-harness/SKILL.md states this rule in the same words, and tools/test_subagents.py holds the two together.
-READ_RULE = (
+HARNESS_SKILL_READ_RULE = (
     "A cut-off read is no read. A return that is shortened, warns that it was cut, or that you capped with "
     "`head`, `tail`, or a line limit leaves the file or diff unread. Read the missing part before you act."
 )
 
 
-def read_rule_lines(skills_root: Path) -> list[str]:
-    """The read rule a subagent needs before its first read, since the skill that owns the rule is itself read."""
+def read_rule_preamble(skills_root: Path) -> list[str]:
     plan = shlex.quote(str(skills_root / "pstack-harness/scripts/read-plan.py"))
     return [
-        READ_RULE,
+        HARNESS_SKILL_READ_RULE,
         "On Codex, a tool call cuts long output from the middle and keeps the start and the end. There, read a file "
         f"with the commands that `python3 {plan} <file> --max-output-tokens <n>` prints, each in its own call and in "
         "order. Set `<n>` to the lowest output cap on those calls, 10000 when you set none. Save a diff or other "
@@ -130,7 +128,7 @@ def render_brief(role: Role, skills_root: Path) -> str:
         + json.dumps(str(skills_root), ensure_ascii=False) + ".\n"
     )
     guidance += "".join(f"- {name}: {json.dumps(str(path), ensure_ascii=False)}\n" for name, path in zip(role.skills, paths))
-    guidance += "".join(f"{line}\n" for line in read_rule_lines(skills_root))
+    guidance += "".join(f"{line}\n" for line in read_rule_preamble(skills_root))
     if role.signature is None and role.native_name is None:
         guidance += f"Put the exact line `persona: {role.id}` on its own line in your first reply.\n"
     return guidance + "\n" + role.body
@@ -296,7 +294,7 @@ CLEANUP = {
 
 def render_clauses(args: argparse.Namespace, skills_root: Path) -> str:
     """The clauses every delegate brief must carry. The lead adds scope and judgment after them."""
-    lines = read_rule_lines(skills_root)
+    lines = read_rule_preamble(skills_root)
     lines += [f"Read the original task in full before any work: {args.source}. It is the source. Notes after it are the lead's reading."]
     if args.unattended:
         lines.append("This run is unattended. Do not wait for a human reply. Say so in every brief you write.")
