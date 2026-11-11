@@ -517,7 +517,7 @@
       "files": ["fixtures/signup-spec.md"],
       "expected_behavior": [
         "Separates SU-302's trimming from SU-304's stripping with whitespace inside a value: an `invite_code` with inner whitespace that matches an open invite once all whitespace is removed returns 201, and a `display_name` with inner whitespace is saved with it.",
-        "Ties each test to the requirement or spec sentence that gives its expected result, and labels any test whose result no requirement gives as an assumption."
+        "Ties each test to the requirement or spec sentence that gives its expected result, and writes no test whose result no requirement gives. Such an answer is listed apart as an assumption or open question."
       ],
       "assertions": [
         {
@@ -542,7 +542,7 @@
             {
               "name": "spec-citations",
               "scale": "1-5",
-              "rubric": "5 = Every proposed test names the requirement or quotes the spec sentence that gives its expected result, by ID, quote, or a heading it sits under, and any test whose result no requirement gives is labeled an assumption, or the response proposes no such test. An open question kept out of the tests is not a test. 4 = Every test is tied to a requirement, but one test whose result no requirement gives is not labeled an assumption. 3 = Most tests are tied to a requirement but some are not, or two or more tests expect results that no requirement gives without labeling them. 2 = Few tests are tied to a requirement. 1 = No test is tied to the spec text."
+              "rubric": "5 = Every proposed test names the requirement or quotes the spec sentence that gives its expected result, by ID, quote, or a heading it sits under, and the response proposes no test whose result no requirement gives. An open question kept out of the tests is not a test. 4 = No test expects a result that no requirement gives, but one test is not tied to a requirement. 3 = Most tests are tied to a requirement but some are not, or one test expects a result that no requirement gives. A test labeled as an assumption counts. 2 = Few tests are tied to a requirement, or two or more tests expect results that no requirement gives. 1 = No test is tied to the spec text."
             }
           ]
         },

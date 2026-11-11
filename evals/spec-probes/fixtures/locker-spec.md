@@ -2,7 +2,7 @@
 
 LK-401. `POST /pickup` takes a JSON body with `locker` and `pin`. When the pin matches the parcel waiting in that locker, the door opens and the response is 200.
 
-LK-402. A `pin` is four to six digits. Any other `pin` returns 422.
+LK-402. A `pin` is a string of four to six digits. Any other `pin` returns 422.
 
 LK-403. A wrong pin returns 403. After three wrong pins in a row for one locker, that locker returns 423 until staff reset it.
 
