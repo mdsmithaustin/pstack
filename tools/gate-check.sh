@@ -43,6 +43,7 @@ run lint "promise ledger canonical form" . "${py[@]}" evals/promises/ledger.py f
 run lint "promise evidence freshness" . "${py[@]}" evals/promises/freshness.py check --strict --quiet
 run lint "pstack-models default" . "${py[@]}" skills/setup-pstack/scripts/check-models-config.py skills/setup-pstack/examples/pstack-models.md
 run lint "route byte budgets" . "${py[@]}" tools/check-route-bytes.py
+run lint "skill line length" . "${py[@]}" tools/check-line-words.py
 run lint "skill reference spelling" . "${py[@]}" -m unittest discover -s tools -p test_skill_references.py
 
 run test "tools unit tests" . "${py[@]}" -m unittest discover -s tools -p 'test_*.py'

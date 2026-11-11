@@ -29,7 +29,7 @@ Open a worklist with one entry per phase before launching anything.
 
 ## Phase B: Fan out
 
-Spawn all N workers in one message with no persona, `run_in_background: true`, and the spawn call **Spawn a role** builds from each worker's step 4 role.
+Spawn all N workers in one message with no persona, in the background, and with the spawn call **Spawn a role** builds from each worker's step 4 role.
 
 A worker that must start from another pushed branch gets a worktree at that branch's SHA, named in its brief.
 

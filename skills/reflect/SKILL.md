@@ -21,7 +21,7 @@ That covers the legacy flat (`<id>.jsonl`), current nested (`<id>/<id>.jsonl`), 
 
 ## 2. Spawn three reviewers in parallel
 
-One message, three `Task` calls, `subagent_type: general-purpose`, with `model` set as below, agent mode (`readonly: false`). Reviewers need MCP access to look up the tickets, chat threads, and observability traces the transcript references, and readonly strips MCPs. Call the Skill tool with `pstack-harness` for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call.
+One message, three spawns with no persona, each on the model set below and with full tool access. Reviewers need MCP access to look up the tickets, chat threads, and observability traces the transcript references, and a read-only mode can remove MCP tools. Call the Skill tool with `pstack-harness` for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call.
 
 Each reviewer and the synthesizer name a role line in the pstack models config and a default. Call the Skill tool with `pstack-harness` to resolve its model, effort, and agent type. Its **Spawn a role** section also covers a missing config, `inherit-parent`, and a rejected value.
 
@@ -35,7 +35,7 @@ Pass each template verbatim, substituting the transcript path or digest where ma
 
 ## 3. Synthesize
 
-One `Task` call, `subagent_type: general-purpose`, `model` from the `reflect judgment, divergent, synthesizer` line (default `opus`), agent mode (`readonly: false`). It spot-verifies citations through MCP, and readonly strips MCPs. Pass `references/synthesizer.md` verbatim, with each reviewer's full output inlined where marked. It returns an Accepted / Rejected / Backlog list.
+One spawn with no persona, on the model from the `reflect judgment, divergent, synthesizer` line (default `opus`), with full tool access. It spot-verifies citations through MCP, and a read-only mode can remove MCP tools. Pass `references/synthesizer.md` verbatim, with each reviewer's full output inlined where marked. It returns an Accepted / Rejected / Backlog list.
 
 ## 4. Structural enforcement check
 
