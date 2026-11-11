@@ -2080,7 +2080,7 @@
    "check": "live",
    "claim": "For a routed playbook, the lead runs the plan script with its recorded risk facts and gets a route before it changes the project.",
    "harness_sensitive": true,
-   "live_case": "tally fixture with no remote; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when a plan script call for the playbook returned a lightweight, standard, or intensive route before the lead's first project write. Fail when a project write has no routed plan before it. A plan call whose recorded output head holds no route line is inconclusive. The oracle does not grade whether the facts or their evidence are true.",
+   "live_case": "tally fixture with no remote; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when a plan script call for the playbook returned a lightweight, standard, or intensive route before the lead's first project write. Fail when a project write has no routed plan before it. A plan call whose recorded output head holds no route line and has no recorded failure is inconclusive only when it returned before the first project write or there was no write. The oracle does not grade whether the facts or their evidence are true.",
    "owners": [
     "skills/poteto-mode/SKILL.md",
     "skills/poteto-mode/references/routes.md",
@@ -4417,7 +4417,7 @@
    "check": "live",
    "claim": "After the plan prints, the lead creates a worklist from the plan's items in order and updates it as the work moves.",
    "harness_sensitive": true,
-   "live_case": "tally fixture with no remote; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when a worklist snapshot after the routed plan holds every plan item in order and an item later changes state. Fail when a finished run that changed the project has no worklist snapshot after the routed plan, or none of its items ever changes state. A kept worklist whose item names do not match the plan's is inconclusive and needs a reader.",
+   "live_case": "tally fixture with no remote; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; pass when a worklist snapshot after the routed plan holds every plan item in order and an item later changes state. Fail when a finished run that changed the project has no worklist snapshot after the routed plan, or no item changes state from the first snapshot that follows the plan onward. If no snapshot follows the plan, state changes count after the routed plan. A kept worklist whose item names do not match the plan's is inconclusive and needs a reader.",
    "owners": [
     "skills/poteto-mode/SKILL.md",
     "skills/poteto-mode/scripts/plan.py",
