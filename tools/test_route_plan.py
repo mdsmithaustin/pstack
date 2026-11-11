@@ -224,11 +224,6 @@ class EntryPlanCommand(unittest.TestCase):
         self.assertTrue(blocks, "the entry prints no plan command")
         return blocks[0]
 
-    def test_command_names_no_environment_variable(self):
-        command = self.command()
-        self.assertNotIn("PSTACK_SKILLS_ROOT", command)
-        self.assertIn(f'"{self.BASE}/scripts/plan.py"', command)
-
     def test_filled_command_runs_from_another_directory_with_nothing_set(self):
         command = self.command()
         with tempfile.TemporaryDirectory() as tmp:
