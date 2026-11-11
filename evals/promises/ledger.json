@@ -11903,6 +11903,15 @@
    ],
    "text": "You can request either mode directly:"
   },
+  "c00776ae9233": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-unattended-continues-review-coverage",
+   "sources": [
+    "port"
+   ],
+   "text": "For unattended Review coverage continuations and their blocked outcomes, the agent follows [gated publish](../../skills/poteto-mode/references/gated-publish.md)."
+  },
   "c0288e8d1b96": {
    "class": "context",
    "file": "02-poteto-mode.md",
@@ -13351,15 +13360,6 @@
     "port"
    ],
    "text": "Then setup offers once to generate a formal verification skill with [`/create-formal-verification-skill`](../../skills/create-formal-verification-skill/SKILL.md), unless the project already has one."
-  },
-  "e5055111f6de": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "opening-a-pr-gated-unattended-continues-review-coverage",
-   "sources": [
-    "port"
-   ],
-   "text": "In an unattended run, the agent continues a Review step that parked only for incomplete coverage, which approves nothing, before it reports the gate as blocked."
   },
   "e54f8645ae93": {
    "class": "context",
