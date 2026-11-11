@@ -4619,11 +4619,12 @@ def lead_prints_plan(view):
     measures = {"route": routed[-1]["route"] if routed else None, "plan_calls": len(calls)}
     if routed and (write is None or routed[0]["returned"] < write[0]):
         return verdict(PASS, (), [f"the plan script printed the {routed[0]['route']} route at seq {routed[0]['seq']}", *evidence], measures=measures)
-    if write:
-        return verdict(FAIL, [f"the lead {write[1]} at seq {write[0]} with no routed plan returned before it"], evidence, measures=measures)
-    unread = [c for c in calls if c["prints_plan"] and c["ok"] is not False and c["route"] is None]
+    unread = [c for c in calls if c["prints_plan"] and c["ok"] is not False and c["route"] is None
+              and c["returned"] is not None and (write is None or c["returned"] < write[0])]
     if unread:
         return inconclusive(f"the plan call at seq {unread[0]['seq']} succeeded but its recorded output head carries no route line", *evidence, measures=measures)
+    if write:
+        return verdict(FAIL, [f"the lead {write[1]} at seq {write[0]} with no routed plan returned before it"], evidence, measures=measures)
     return inconclusive("no routed plan and no project write, so the route never came due", *evidence, measures=measures)
 
 

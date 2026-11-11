@@ -141,6 +141,12 @@ class LeadPrintsPlan(unittest.TestCase):
             with self.subTest(name):
                 self.assertEqual(grade(self.PID, trace(events), CASE)["verdict"], INCONCLUSIVE)
 
+    def test_redirected_output_before_an_edit_is_inconclusive_but_after_it_is_too_late(self):
+        for plan_seq, write_seq, expected in ((1, 4, INCONCLUSIVE), (4, 1, FAIL)):
+            with self.subTest(plan_seq=plan_seq):
+                events = bash(plan_seq, f"{RUN} {LOW} > /tmp/plan.txt", head="") + [edit(write_seq, SOURCE)]
+                self.assertEqual(grade(self.PID, trace(events), CASE)["verdict"], expected)
+
 
 class PlanStepLoads(unittest.TestCase):
     PID = "plan-step-loads-arrive-with-step"
