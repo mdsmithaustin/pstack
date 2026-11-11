@@ -116,7 +116,7 @@ def render_step(args, manifest):
     tiered = manifest["playbooks"].get(args.playbook, {}).get("tiered", False)
     out = [f"{args.playbook} step {args.step}, from {display_path(path)}", ""]
     if tiered and args.route == "lightweight":
-        out += ["Lightweight route: do this step's work yourself. Skip its sentences that delegate, spawn a subagent, or load a skill the plan did not list. Keep its outcome, its checks, and its commands.", ""]
+        out += ["Lightweight route: do this step's work yourself. Skip its sentences that delegate the work or spawn a design panel, or load a skill the plan did not list. Keep its outcome, its checks, its commands, and the independent scrutiny the plan lists.", ""]
     elif tiered and args.route == "standard":
         panels = ", ".join(f"`{name}`" for name in manifest["panels"])
         out += [f"Standard route: the panels ({panels}) stay unloaded. Where this step names one, compare the options yourself and record them.", ""]

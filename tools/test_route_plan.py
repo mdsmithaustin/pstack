@@ -238,6 +238,12 @@ class OneStep(unittest.TestCase):
         self.assertIn("Lightweight route: do this step's work yourself.", run("bug-fix", "--step", "3", "--route", "lightweight").stdout)
         self.assertNotIn("Lightweight route", run("bug-fix", "--step", "3", "--route", "intensive").stdout)
 
+    def test_the_lightweight_banner_keeps_the_independent_scrutiny_step(self):
+        banner = run("feature", "--step", "7", "--route", "lightweight")
+        self.assertEqual(banner.returncode, 0, banner.stderr)
+        self.assertIn("the independent scrutiny the plan lists", banner.stdout)
+        self.assertNotIn("spawn a subagent", banner.stdout)
+
     def test_a_route_banner_never_appears_on_a_fixed_playbook(self):
         for name, step in (("hillclimb", "5"), ("research", "1"), ("babysit", "1")):
             lightweight = run(name, "--step", step, "--route", "lightweight")
