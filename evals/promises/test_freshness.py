@@ -142,6 +142,26 @@ class Record(Tree):
         self.record()
         self.assertEqual(self.state("routes")[0], "disputed")
 
+    def test_a_run_can_be_regraded_twice_after_its_receipt_inputs_change(self):
+        self.run_dir("route-case", "claude-code", {"routes": "PASS"})
+        self.record(keep=True)
+        original = dict(self.receipts["receipts"]["routes"]["claude-code"]["route-case"]["runs"])
+        owners = PROMISES["routes"]["owners"]
+        owners.append("skills/b/SKILL.md")
+        self.addCleanup(owners.pop)
+        self.record(keep=True)
+        verdict_path = self.out / "run-1" / "verdict.json"
+        run = json.loads(verdict_path.read_text(encoding="utf-8"))
+        for verdict in ("FAIL", "PASS"):
+            with self.subTest(verdict=verdict):
+                run["promises"]["routes"]["verdict"] = verdict
+                self.write(verdict_path, json.dumps(run))
+                self.record(keep=True)
+                entry = self.receipts["receipts"]["routes"]["claude-code"]["route-case"]
+                self.assertEqual(entry["verdicts"], {verdict: 1})
+                self.assertEqual(set(entry["runs"]), set(original))
+                self.assertFalse(set(entry["runs"]) & set(entry.get("superseded", ())))
+
     def test_a_flipped_verdict_stays_unsettled_until_three_runs_on_the_same_bytes(self):
         self.run_dir("route-case", "claude-code", {"routes": "PASS"})
         self.record()

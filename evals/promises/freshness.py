@@ -147,6 +147,7 @@ def record(out, receipts, promises, cases, *, today, reader_at=commit_reader, re
                 if prior:
                     superseded |= set(prior["runs"])
             runs[run_id] = verdict
+            superseded -= set(runs)
             counts = {}
             for each in runs.values():
                 counts[each] = counts.get(each, 0) + 1
