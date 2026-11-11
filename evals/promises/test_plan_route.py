@@ -151,6 +151,14 @@ class LeadPrintsPlan(unittest.TestCase):
         events = bash(1, f"{RUN} {LOW}; git checkout -b feat/json-flag", ok=False, head=plan_head("lightweight")) + [edit(4, SOURCE)]
         self.assertEqual(grade(self.PID, trace(events), CASE)["verdict"], PASS)
 
+    def test_a_route_the_output_head_cannot_bind_to_this_playbooks_plan_is_inconclusive(self):
+        other = RUN.replace("feature", "bug-fix")
+        mixed = bash(1, f"{other} {LOW}; {RUN}", head=plan_head("standard").replace("feature", "bug-fix"))
+        batched = bash(1, f"{RUN}; {RUN} {LOW}", head=plan_head("pending"))
+        for name, call in (("another playbook's route", mixed), ("pending, then a routed plan past the head", batched)):
+            with self.subTest(name):
+                self.assertEqual(grade(self.PID, trace(call + [edit(4, SOURCE)]), CASE)["verdict"], INCONCLUSIVE)
+
     def test_a_plan_run_by_relative_path_from_the_skill_directory_counts(self):
         relative = f"cd .claude/skills/poteto-mode && python3 scripts/plan.py feature --harness claude-code {LOW}"
         events = bash(1, relative, head=plan_head("lightweight")) + [edit(4, SOURCE)]
