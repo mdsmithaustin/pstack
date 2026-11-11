@@ -1,0 +1,32 @@
+{
+ "promises": [
+  "lead-prints-plan-before-edits",
+  "plan-step-loads-arrive-with-step",
+  "worklist-follows-plan-and-is-kept",
+  "default-endpoint-local-branch-without-remote",
+  "worklist-opens-with-playbook-steps",
+  "worklist-in-native-task-tool"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "add a --json flag to this command. text output stays byte-identical. verify both."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "feature",
+  "implementation_paths": [
+   "tally/*.py"
+  ],
+  "loads_before_code": [
+   "spec-probes"
+  ]
+ },
+ "note": "Same turn and fixture as feature-run, kept as its own case so that case's inputs do not change. The fixture has no remote, so the default endpoint is a local branch. The turn names no route, so the lead's recorded facts pick it. The four plan oracles read the route from the plan script's recorded output.",
+ "env": {
+  "todo_tools": true
+ }
+}
