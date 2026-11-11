@@ -16,7 +16,7 @@ Three runs cannot show a rate. The counting rule and the labels below were writt
 
 ## Counting rule
 
-One run is one observation per promise. The count is runs graded PASS over runs graded PASS or FAIL. INCONCLUSIVE runs are listed beside it and never converted. Each run carries the route its last routed plan printed. A run with no routed plan that changed the project is a FAIL for the plan promise and INCONCLUSIVE for the step-load and worklist promises. Every FAIL and INCONCLUSIVE trace was read before it was counted. An oracle error found by reading is fixed with a control test, every run is regraded, and both counts are reported.
+One run is one observation per promise. The count is runs graded PASS over runs graded PASS or FAIL. INCONCLUSIVE runs are listed beside it and never converted. Each run carries the route its last routed plan printed. A run with no routed plan that changed the project is a FAIL for the plan promise and INCONCLUSIVE for `plan-step-loads-arrive-with-step` and `worklist-follows-plan-and-is-kept`. Every FAIL and INCONCLUSIVE trace was read before it was counted. An oracle error found by reading is fixed with a control test, every run is regraded, and both counts are reported.
 
 Labels: "held" is PASS in every graded run with at least 2 graded. "Did not hold" is FAIL in at least 2 runs. "Mixed" is anything else with at least 2 graded. "Not shown" is fewer than 2 graded runs.
 
@@ -33,9 +33,9 @@ Labels: "held" is PASS in every graded run with at least 2 graded. "Did not hold
 | `worklist-opens-with-playbook-steps` | 0 of 3 | 0 | Did not hold |
 | `worklist-in-native-task-tool` | 0 of 3 | 0 | Did not hold |
 
-One run reached a route, and it was lightweight. On that run alone the plan and endpoint promises passed, and the step-load, both worklist promises, and the worklist-after-plan promise failed.
+One run reached a route, and it was lightweight. On that run alone the plan and endpoint promises passed. `worklist-opens-with-playbook-steps` and `worklist-in-native-task-tool` failed. `plan-step-loads-arrive-with-step` and `worklist-follows-plan-and-is-kept` failed on the regrade only, and their sealed verdicts are INCONCLUSIVE.
 
-**The two regraded rows correct a grader gap.** In `tally-v_6uk6dp` the sealed verdicts for the step-load and worklist promises read `the installed skills hold no routes.json`. The grader copies only the mode entry and the playbooks into its skills input, so the oracles could not derive the plan. The commit after this run adds `routes.json` to that copy, with a control test. The regraded rows come from calling `oracles.check` directly on the three saved traces and projects with the fixed input. That call is outside the sealed grader, so `receipts.json` keeps the sealed INCONCLUSIVE verdicts. No run after the fix has shown the two oracles grading inside the sealed grader.
+**The two regraded rows correct a grader gap.** In `tally-v_6uk6dp` the sealed verdicts for the step-load and worklist promises read `the installed skills hold no routes.json`. The grader copied only the mode entry and the playbooks into its skills input, so the oracles could not derive the plan. The commit after this run adds `routes.json` to that copy, with a control test. The regraded rows come from calling `oracles.check` directly on the three saved traces and projects with the fixed input. That call is outside the sealed grader, so `receipts.json` keeps the sealed INCONCLUSIVE verdicts. No run after the fix has shown the two oracles grading inside the sealed grader.
 
 ## What each lead did
 
@@ -75,3 +75,15 @@ This branch changes no skill text. These are proposals for separate changes, eac
 - In `tally-v_6uk6dp` the lead wrote the source through a Python heredoc that opens a path held in a variable. The edit detector missed it, so the trace's first recorded project write is the later README append. By hand the order is the same: the routed plan returned at event 13, `spec-probes` at 17, and the source write ran at 18.
 - The oracles do not grade whether the recorded facts are true, the gates, or independent scrutiny. The third lead's reply says it ran neither the cleanup gates nor a review.
 - The traces are kept outside the repository, under the maintainer's local audit folder for this date.
+
+## Oracle changes after this run
+
+Review of this change tightened five verdict rules after the run. None came from reading these traces.
+
+- A plan call with no route line that returned before the first project write grades INCONCLUSIVE for the plan promise.
+- A plan script run by a relative path is a plan call.
+- A routed plan counts when a later command in the same shell call fails. The route line must sit in the output block for the case's playbook.
+- Worklist state changes count from the first snapshot that follows the plan.
+- The reply must name the delivering branch as a word of its own.
+
+The three runs were not regraded. A read of the saved traces shows that no run has a changed shape. `tally-4mufg78h` and `tally-cwex8hti` hold no plan call and no worklist snapshot. In `tally-v_6uk6dp` the routed plan ran alone by its full path, its recorded output head opens with the `playbook: feature` line and the lightweight route, and the reply names `json-flag` in backticks. No trace holds a worklist snapshot.
