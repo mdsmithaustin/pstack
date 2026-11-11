@@ -16,7 +16,8 @@ import re
 import sys
 from pathlib import Path
 
-RECORD = re.compile(r"^\s*test_override_reason:\s*(.+?)\s*$", re.M)
+RECORD = re.compile(r"^[ \t]*test_override_reason:[ \t]*(\S[^\r\n]*)$", re.M)
+TEST_EXCEPTION = re.compile(r"\btest[\s_-]+(?:override|exception)", re.I)
 RUN_FIELD = re.compile(r"^\s*(?:head_sha|status):\s*\S", re.M)
 GATE_ERROR = re.compile(r"^error:", re.M)
 NO_REASON = "no operator reason supplied"
@@ -30,9 +31,11 @@ def classify(text):
     if not RUN_FIELD.search(text):
         return 2, ["UNREAD: the status names no run. Nothing was checked."]
     records = RECORD.findall(text)
+    if TEST_EXCEPTION.search(RECORD.sub("", text)):
+        return 2, ["UNREAD: the status contains an unparsed Test exception. Nothing was checked."]
     if not records:
         return 0, ["PASS: no Test exception is recorded."]
-    unapproved = [record for record in records if NO_REASON in record]
+    unapproved = [record for record in records if NO_REASON in record.casefold()]
     if unapproved:
         return 1, [f"BLOCKED: a Test exception is recorded with no operator reason: {record}" for record in unapproved]
     return 3, [f"MATCH: a Test exception is recorded with this reason: {record}" for record in records] + [

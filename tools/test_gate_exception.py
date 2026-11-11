@@ -24,6 +24,49 @@ def check(text):
 
 
 class GateException(unittest.TestCase):
+    def test_captured_v1_111_0_other_branch_status_blocks(self):
+        text = '''other_branch_run:
+id: "01EXAMPLE"
+branch: fix/example
+status: completed
+head: "8e257437"
+head_sha: 8e2574377defd7701ab644ccb11e7a155bd00d75
+test_override_reason: "live validation verdict: inconclusive\\nTest exception approved: no operator reason supplied"
+verification_plan: none
+pr: "https://example.invalid/pull/1"
+outcome: passed-with-override
+'''
+        self.assertEqual(check(text).returncode, 1)
+
+    def test_unparsed_test_exceptions_are_unread(self):
+        for record in (
+            'test_override_details: "operator approved"\n',
+            'TEST_OVERRIDE_REASON: "operator approved"\n',
+            'Test exception approved: operator approved\n',
+            'TEST EXCEPTION APPROVED: operator approved\n',
+            'test override: operator approved\n',
+            'test_override_reason:   \nTest exception approved: operator approved\n',
+        ):
+            for parsed in ("", REASONED, UNAPPROVED):
+                with self.subTest(record=record, parsed=parsed):
+                    text = RUN.format(record=parsed + record, outcome="passed-with-override")
+                    done = check(text)
+                    self.assertEqual(done.returncode, 2, done.stdout)
+                    self.assertIn("UNREAD", done.stdout)
+                    with tempfile.TemporaryDirectory() as directory:
+                        saved = Path(directory) / "status.toon"
+                        saved.write_text(text, encoding="utf-8")
+                        done = subprocess.run([sys.executable, str(SCRIPT), str(saved)], capture_output=True, text=True)
+                        self.assertEqual(done.returncode, 2, done.stdout)
+
+    def test_no_reason_placeholder_is_case_insensitive(self):
+        record = UNAPPROVED.replace("no operator reason supplied", "NO Operator Reason SUPPLIED")
+        self.assertEqual(check(RUN.format(record=record, outcome="passed-with-override")).returncode, 1)
+
+    def test_ci_override_alone_is_not_a_test_exception(self):
+        done = check(RUN.format(record='ci_override_reason: "operator approved"\n', outcome="passed-with-override"))
+        self.assertEqual(done.returncode, 0, done.stdout)
+
     def test_a_run_with_no_exception_passes(self):
         done = check(RUN.format(record="", outcome="passed"))
         self.assertEqual((done.returncode, done.stdout.strip()), (0, "PASS: no Test exception is recorded."))
