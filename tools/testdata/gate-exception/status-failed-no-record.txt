@@ -1,0 +1,20 @@
+run:
+  id: "01M765HEYR39DY25N2X6VQZJKF"
+  branch: cand/completion-authorization
+  status: failed
+  head: 8eb93dea
+  head_sha: 8eb93deaffc8d77cf9d19f284a43640f7251279d
+  verification_plan: none
+  findings: none
+  steps[9]{step,status,findings,duration_ms}:
+    intent,completed,0,0
+    rebase,completed,0,1121
+    review,completed,0,12531
+    test,completed,0,128803
+    document,completed,0,58078
+    lint,completed,0,4966
+    push,failed,0,2861
+    pr,pending,0,0
+    ci,pending,0,0
+outcome: failed
+error: "step push failed: pipeline attestation write failed: rebind PR appendix: PR appendix was edited or is malformed; refusing to overwrite possible author content"

@@ -1,0 +1,22 @@
+run:
+  id: "01M76080AZEBA1X2QG6VNCFMV6"
+  branch: cand/completion-authorization
+  status: cancelled
+  head: da73014d
+  head_sha: da73014d270f79f87ff3488fb905f082003efb00
+  test_override_reason: "live validation verdict: inconclusive\nTest exception approved: Operator approved on 2026-11-11: proceed without live validation of the two untested scenarios. No live agent run exists for them, and the PR body says so."
+  verification_plan: none
+  pr: "https://github.com/mdsmithaustin/pstack/pull/508"
+  findings: 1 awaiting
+  steps[9]{step,status,findings,duration_ms}:
+    intent,completed,0,0
+    rebase,completed,0,1172
+    review,completed,0,26271
+    test,completed,1,164710
+    document,completed,0,40240
+    lint,completed,0,5550
+    push,completed,0,7273
+    pr,completed,0,5259
+    ci,failed,0,5283705
+outcome: cancelled
+error: "cancelled: superseded by new push"

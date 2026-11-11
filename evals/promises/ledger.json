@@ -488,11 +488,11 @@
   },
   "babysit-conflict-holds-pushes-not-triage": {
    "check": "static",
-   "claim": "Babysit reports a conflict instead of resolving it and pushes nothing to that PR until its owner rebases. It skips CI work for that PR, still reads status and triages review comments, and holds each real fix for the owner's rebase wave.",
+   "claim": "Babysit reports a conflict instead of resolving it and pushes nothing to that PR until its owner rebases or, in a gated repository, the gate's monitor does. It skips CI work for that PR, still reads status and triages review comments, and holds each real fix for the owner's rebase wave.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/babysit.md",
-     "quote": "A conflict is the one blocker you report rather than resolve. Say which branch needs the rebase, and push nothing to that PR until its owner rebases. Steps 6, 8, and 9 still run for it."
+     "quote": "A conflict is the one blocker you report rather than resolve. Say which branch needs the rebase, and push nothing to that PR until its owner rebases or, in a gated repository, the gate's monitor does. Steps 6, 8, and 9 still run for it."
     },
     {
      "file": "skills/poteto-mode/playbooks/babysit.md",
@@ -1748,15 +1748,15 @@
   },
   "gated-run-test-exception-checked-before-ready": {
    "check": "static",
-   "claim": "Before the agent reports a gated run's outcome or a merge-ready head, it runs the exception check on the run's status. A Test exception recorded with no operator reason is reported as blocked, never as passed or merge-ready, and a recorded reason counts only when it matches the operator's own approval of that gap.",
+   "claim": "Before the agent reports a gated run's outcome or a merge-ready head, it runs the exception check on the run's status and Test round history. A Test exception recorded with no operator reason is reported as blocked, never as passed or merge-ready, and a recorded reason counts only when it matches the operator's own approval of that gap.",
    "evidence": [
     {
      "file": "skills/poteto-mode/references/gated-publish.md",
-     "quote": "Before you report a run's outcome or a merge-ready head, run `no-mistakes axi status --run <run-id> | python3 \"${PSTACK_SKILLS_ROOT:?}/poteto-mode/scripts/gate-exception.py\"`."
+     "quote": "Before you report a run's outcome or a merge-ready head, run the exception check."
     },
     {
      "file": "skills/poteto-mode/references/gated-publish.md",
-     "quote": "Exit 1 means it recorded one with no operator reason. Never report that run as passed or merge-ready."
+     "quote": "Exit 1 means the status records a Test exception with no operator reason. Never report that run as passed or merge-ready."
     },
     {
      "file": "skills/poteto-mode/references/gated-publish.md",

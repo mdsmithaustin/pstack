@@ -1,0 +1,26 @@
+current_branch: cand/completion-authorization
+other_branch_run:
+  id: "01M75NS0HDBTENC5ET4GGXJZH9"
+  branch: cand/wait-rule
+  status: cancelled
+  head: f32cabc3
+  head_sha: f32cabc3851e26be9872e15454525c3c3c8857e7
+  verification_plan:
+    path: /Users/<user>/.no-mistakes/run-inputs/01M75NS0HDBTENC5ET4GGXJZH9/verification-plan.txt
+    sha256: 3f7285eead2f5f8c9d537486016c59c9d5acaf8a05b652e0f8694bf8d4b95110
+    source_path: <scratchpad>/verification-plan.md
+    captured_at: 1794413199
+  pr: "https://github.com/mdsmithaustin/pstack/pull/507"
+  findings: 1 awaiting
+  steps[9]{step,status,findings,duration_ms}:
+    intent,completed,0,1
+    rebase,completed,0,1088
+    review,completed,0,25889
+    test,completed,1,36376
+    document,completed,0,45015
+    lint,completed,0,4692
+    push,completed,0,7060
+    pr,completed,0,4953
+    ci,failed,0,2371632
+outcome: cancelled
+error: "cancelled: superseded by new push"
