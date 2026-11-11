@@ -91,6 +91,30 @@ class PlanCalls(unittest.TestCase):
                          [(1, "lightweight", True, []), (5, None, False, ["4"])])
 
 
+class GraderSkillInputs(unittest.TestCase):
+    """Live seed tally-v_6uk6dp: the grader's skills copy held no routes.json, so two oracles could not derive the plan."""
+
+    def test_the_graders_skills_copy_carries_what_the_plan_oracles_read(self):
+        import grade_boundary
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp).resolve() / "skills"
+            grade_boundary._copy_skill_inputs(SKILLS, copy)
+            self.assertEqual(oracles.plan_step_loads(copy, "feature", "lightweight"), oracles.plan_step_loads(SKILLS, "feature", "lightweight"))
+            self.assertTrue(oracles.plan_step_loads(copy, "feature", "lightweight"))
+
+    def test_a_skills_tree_without_a_route_manifest_still_copies(self):
+        import grade_boundary
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp).resolve() / "source" / "poteto-mode"
+            (source / "playbooks").mkdir(parents=True)
+            (source / "SKILL.md").write_text("entry\n")
+            (source / "playbooks" / "feature.md").write_text("1. **Built.** Done.\n")
+            copy = Path(tmp).resolve() / "skills"
+            grade_boundary._copy_skill_inputs(source.parent, copy)
+            self.assertFalse((copy / "poteto-mode" / "routes.json").exists())
+            self.assertIsNone(oracles.plan_step_loads(copy, "feature", "lightweight"))
+
+
 class LeadPrintsPlan(unittest.TestCase):
     PID = "lead-prints-plan-before-edits"
 

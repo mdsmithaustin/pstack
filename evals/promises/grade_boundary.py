@@ -328,6 +328,9 @@ def _snapshot(path):
         root.close()
 
 
+ROUTE_MANIFEST = Path("poteto-mode/routes.json")
+
+
 def _copy_skill_inputs(source, destination):
     root = _Root.open(source)
     try:
@@ -346,6 +349,11 @@ def _copy_skill_inputs(source, destination):
                 paths.extend(path.relative_to(root.path) for path in playbooks.files("*.md", recursive=False, include_directories=True))
             finally:
                 playbooks.close()
+        try:
+            if stat.S_ISREG(root.info(ROUTE_MANIFEST).st_mode):
+                paths.append(ROUTE_MANIFEST)
+        except FileNotFoundError:
+            pass
         destination.mkdir(parents=True, mode=0o700)
         for name in os.listdir(root.fd):
             try:
