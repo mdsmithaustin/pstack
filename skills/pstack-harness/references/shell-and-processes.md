@@ -23,7 +23,7 @@ printf '%s\n' 'opus[1m]@xhigh' '*.jsonl'
 
 ## Read a diff
 
-Read without a cap any diff, test file, or code that you will judge. Never pipe it through `head`, `tail`, or a line limit. A cap on search, log, or listing output is fine. When a skill tells you to print one part of a file, such as one playbook step, you need only that part, and it must arrive uncut.
+Read without a cap any diff, test file, or code that you will judge. Never pipe it through `head`, `tail`, or a line limit. A cap on search or log output that you only scan is fine. Never cap the list from step 1. When a skill tells you to print one part of a file, such as one playbook step, you need only that part, and it must arrive uncut.
 
 1. List the changed files with `git diff --name-only <range>`. Do not list them with `--stat`, which shortens a long path to one that matches no file.
 2. Read `git diff <range> -- <file>` for one file at a time. On Codex, read each file's diff as [Read files](codex.md#read-files) says.
