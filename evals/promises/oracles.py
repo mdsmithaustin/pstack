@@ -4514,3 +4514,263 @@ def feature_recovery_obligations(view):
     if pending:
         return inconclusive(pending, *evidence, recovery=report)
     return verdict(PASS, (), evidence, recovery=report)
+
+
+PLAN_ROUTE = re.compile(r"^route: (pending|lightweight|standard|intensive)\b", re.M)
+PLAN_LOAD = re.compile(r"call the Skill tool with `([a-z0-9-]+)`", re.I)
+PLAN_CONDITION = re.compile(r"^\W*(If|When|Where|For|On the|Once|Unless|Otherwise|Only)\b")
+PLAN_BARE_FLAGS = {"--json", "-h", "--help"}
+TRUNK_BRANCHES = {"main", "master"}
+REPLY_DIFF_COMMAND = re.compile(r"\bgit\s+(?:diff|log|show|range-diff)\b")
+
+
+def plan_invocation(argv):
+    """(playbook, step) when argv runs the plan script, else None. Every flag but --json takes a value."""
+    at = next((i for i, word in enumerate(argv) if word.endswith("poteto-mode/scripts/plan.py")), None)
+    if at is None:
+        return None
+    playbook, step, words = None, None, iter(argv[at + 1:])
+    for word in words:
+        if not word.startswith("-"):
+            playbook = playbook or word
+        elif "=" not in word and word not in PLAN_BARE_FLAGS:
+            value = next(words, None)
+            if word == "--step":
+                step = value
+        elif word.startswith("--step="):
+            step = word.partition("=")[2]
+    return playbook, step
+
+
+def plan_calls(view, playbook):
+    """The lead's plan script calls for a playbook, in trace order. `route` is the route line in the recorded output head."""
+    out = []
+    for call in view.tool_calls:
+        name = call.get("name")
+        if name not in SHELL_TOOLS:
+            continue
+        command = str((call.get("input") or {}).get(SHELL_TOOLS[name]) or "")
+        found = [hit for argv in simple_commands(command) if (hit := plan_invocation(argv)) and hit[0] == playbook]
+        if not found:
+            continue
+        result = view.results_for(call)
+        head = ((result or {}).get("output_head") or "").replace("\\n", "\n")
+        routes = PLAN_ROUTE.findall(head)
+        out.append({"seq": call.get("seq"), "returned": (result or {}).get("seq"), "ok": (result or {}).get("ok"),
+                    "steps": [step for _, step in found if step is not None], "prints_plan": any(step is None for _, step in found),
+                    "route": next((route for route in routes if route != "pending"), routes[0] if routes else None)})
+    return out
+
+
+def routed_plans(view, playbook):
+    return [call for call in plan_calls(view, playbook) if call["prints_plan"] and call["ok"] is not False
+            and call["returned"] is not None and call["route"] not in (None, "pending")]
+
+
+def route_manifest(skills_root):
+    path = Path(skills_root) / "poteto-mode" / "routes.json"
+    return json.loads(_read_text(path)) if _is_file(path) else None
+
+
+def plan_step_loads(skills_root, playbook, route):
+    """The unconditional skill loads the plan script prints under a route's worklist items, by step number.
+    The oracle derives them because a trace keeps only the head of a command's output. A test pins this to the script."""
+    manifest, shape = route_manifest(skills_root), playbook_shape(playbook, skills_root)
+    if not manifest or not shape:
+        return None
+    entry = manifest["playbooks"].get(playbook, {})
+    tiered = entry.get("tiered", False)
+    covered = {name for item in entry.get("lightweight_worklist") or [] for name in item["covers"]} if route == "lightweight" else None
+    out = {}
+    for step in shape["steps"]:
+        name = re.sub(r"\s*\(.*\)", "", step["title"]).rstrip(". ")
+        if covered and name not in covered:
+            continue
+        always = [skill for sentence in re.split(r"(?<=[.!?])\s", step["text"]) if not PLAN_CONDITION.match(sentence)
+                  for skill in PLAN_LOAD.findall(sentence)]
+        kept = [skill for skill in dict.fromkeys(always)
+                if not (tiered and skill in manifest["panels"] and route != "intensive")
+                and not (route == "lightweight" and skill not in manifest["lightweight_keeps"])]
+        if kept:
+            out[step["n"]] = kept
+    return out
+
+
+def first_project_write(view):
+    marks = [(seq, f"wrote {path}") for seq, path, kind in view.project_edits()]
+    marks += [(seq, "spawned a code delegate") for seq in view.code_delegate_seqs()]
+    return min(marks, default=None)
+
+
+def plan_playbook(view):
+    return (view.case.get("expect") or {}).get("playbook")
+
+
+@oracle("lead-prints-plan-before-edits")
+def lead_prints_plan(view):
+    playbook = plan_playbook(view)
+    if not playbook:
+        return inconclusive("case names no expect.playbook")
+    calls = plan_calls(view, playbook)
+    routed = routed_plans(view, playbook)
+    write = first_project_write(view)
+    evidence = [f"plan script calls: {[(c['seq'], c['route'] or ('step ' + ','.join(c['steps']) if c['steps'] else None), c['ok']) for c in calls]}",
+                f"first project write: {f'{write[1]} at seq {write[0]}' if write else None}"]
+    measures = {"route": routed[-1]["route"] if routed else None, "plan_calls": len(calls)}
+    if routed and (write is None or routed[0]["returned"] < write[0]):
+        return verdict(PASS, (), [f"the plan script printed the {routed[0]['route']} route at seq {routed[0]['seq']}", *evidence], measures=measures)
+    if write:
+        return verdict(FAIL, [f"the lead {write[1]} at seq {write[0]} with no routed plan returned before it"], evidence, measures=measures)
+    unread = [c for c in calls if c["prints_plan"] and c["ok"] is not False and c["route"] is None]
+    if unread:
+        return inconclusive(f"the plan call at seq {unread[0]['seq']} succeeded but its recorded output head carries no route line", *evidence, measures=measures)
+    return inconclusive("no routed plan and no project write, so the route never came due", *evidence, measures=measures)
+
+
+def lead_skill_loads(view):
+    """Skills whose SKILL.md reached the lead through a returned Skill tool call or file read, in first-load order."""
+    return list(dict.fromkeys(match.group(1) for _, rel in view.event_reads() if (match := SKILL_FILE.match(rel))))
+
+
+def load_measures(view, playbook, expected, routed, deadline):
+    manifest = route_manifest(view.skills_root) or {}
+    gates = {gate["skill"] for gate in manifest.get("gates", []) if gate.get("skill")}
+    entry_reads = [seq for seq, rel in view.event_reads() if rel == "poteto-mode/SKILL.md"]
+    in_context = view.trace.get("entry") == "injected" or bool(view.trace.get("x_entry_injections"))
+    return {
+        "route": routed[-1]["route"],
+        "entry_rereads": None if view.trace.get("x_compactions") else max(len(entry_reads) - (0 if in_context else 1), 0),
+        "step_text_calls": sorted({step for call in plan_calls(view, playbook) for step in call["steps"]}),
+        "unlisted_skill_loads": [skill for skill in lead_skill_loads(view)
+                                 if skill not in expected and skill not in gates and skill not in ("poteto-mode", "pstack-harness")],
+        "first_code_write_seq": deadline[0] if deadline else None,
+    }
+
+
+@oracle("plan-step-loads-arrive-with-step")
+def plan_step_loads_arrive(view):
+    playbook = plan_playbook(view)
+    routed = routed_plans(view, playbook) if playbook else []
+    if not routed:
+        return inconclusive("no routed plan in the trace, so no step load was printed to follow")
+    route = routed[-1]["route"]
+    by_step = plan_step_loads(view.skills_root, playbook, route)
+    if by_step is None:
+        return inconclusive("the installed skills hold no routes.json or no playbook to derive the printed loads from")
+    expected = list(dict.fromkeys(skill for skills in by_step.values() for skill in skills))
+    deadline = code_deadline(view)
+    measures = load_measures(view, playbook, expected, routed, deadline)
+    if not expected:
+        return inconclusive(f"the {route} route of {playbook} prints no step loads", measures=measures)
+    early = set((view.case.get("expect") or {}).get("loads_before_code") or [])
+    finished_with_work = turn_finished(view) and first_project_write(view) is not None
+    failures, pending, loads = [], [], {}
+    for skill in expected:
+        attempts = load_attempts(view, skill, by_return=True)
+        returned, loaded = min(((at, a) for a in attempts if principle_loaded(view, a) and (at := returned_at(view, a)) is not None),
+                               key=lambda load: load[0], default=(None, None))
+        loads[skill] = {"how": loaded[1] if loaded else None, "seq": loaded[0] if loaded else None, "returned": returned,
+                        "after_routed_plan": returned > routed[0]["returned"] if loaded else None,
+                        "before_first_code_write": (deadline is None or returned < deadline[0]) if loaded else None}
+        if skill in early and deadline and (not loaded or returned > deadline[0]):
+            failures.append(f"{skill} had not returned when the lead {deadline[1]} at seq {deadline[0]}")
+        elif not loaded and finished_with_work:
+            failures.append(f"the finished run never loaded {skill}")
+        elif not loaded:
+            pending.append(f"{skill} not loaded, and the run did not reach the point that proves it missing")
+    measures["loads"] = loads
+    evidence = [f"route {route} from the plan call at seq {routed[-1]['seq']}", f"step loads the plan prints: {by_step}",
+                f"lead loads: { {skill: (load['how'], load['seq']) for skill, load in loads.items()} }",
+                f"first code write: {f'{deadline[1]} at seq {deadline[0]}' if deadline else None}"]
+    if failures:
+        return verdict(FAIL, failures, evidence, measures=measures)
+    if pending:
+        return inconclusive(pending, *evidence, measures=measures)
+    return verdict(PASS, (), evidence, measures=measures)
+
+
+def plan_items_in(items, names):
+    pointer = 0
+    for name in names:
+        hit = next((i for i in range(pointer, len(items))
+                    if norm(name) in norm(items[i].get("text") or "") or similar(items[i].get("text") or "", name, 0.8)), None)
+        if hit is None:
+            return False
+        pointer = hit + 1
+    return True
+
+
+@oracle("worklist-follows-plan-and-is-kept")
+def worklist_follows_plan(view):
+    playbook = plan_playbook(view)
+    routed = routed_plans(view, playbook) if playbook else []
+    if not routed:
+        return inconclusive("no routed plan in the trace, so there are no plan items to follow")
+    route = routed[-1]["route"]
+    manifest, shape = route_manifest(view.skills_root), playbook_shape(playbook, view.skills_root)
+    if not manifest or not shape:
+        return inconclusive("the installed skills hold no routes.json or no playbook to derive the plan items from")
+    compact = manifest["playbooks"].get(playbook, {}).get("lightweight_worklist") if route == "lightweight" else None
+    names = [item["item"] for item in compact] if compact else [f"step {step['n']}" for step in shape["steps"]]
+    after = [snap for snap in view.worklist if (snap.get("seq") or 0) > routed[0]["returned"]]
+    follows = any(plan_items_in(snap.get("items") or [], names) if compact else not steps_in_order(snap.get("items") or [], shape, 0)[1]
+                  for snap in after)
+    states = {}
+    for snap in after:
+        for item in snap.get("items") or []:
+            states.setdefault(title(item), set()).add(item.get("state") or "pending")
+    moved = sorted(name for name, seen in states.items() if len(seen) > 1)
+    last = [(item.get("text") or "")[:80] for item in after[-1].get("items") or []] if after else []
+    evidence = [f"route {route}; plan items: {names}", f"worklist snapshots: {len(view.worklist)}, after the routed plan: {len(after)}",
+                f"carriers: {sorted({str(snap.get('carrier')) for snap in view.worklist})}", f"last worklist items: {last}",
+                f"items whose state moved: {len(moved)}"]
+    if follows and moved:
+        return passed(*evidence)
+    if turn_finished(view) and first_project_write(view) is not None:
+        if not after:
+            return failed("the finished run has no worklist snapshot after the routed plan returned", *evidence)
+        if not moved:
+            return failed("no worklist item changed state after the routed plan returned", *evidence)
+    if after and moved:
+        return inconclusive("a worklist is kept, but its items do not match the plan's items by name; a reader decides whether it paraphrases them",
+                            *evidence)
+    return inconclusive("the run did not finish with a project change, so a missing or idle worklist proves nothing", *evidence)
+
+
+@oracle("default-endpoint-local-branch-without-remote")
+def default_endpoint_local_branch(view):
+    paths = (view.case.get("expect") or {}).get("implementation_paths")
+    base = view.base_shas()
+    remotes = view.git("remote")
+    if remotes is None or not base or not paths:
+        return inconclusive("no project repository, baseline, or case implementation paths to inspect")
+    if remotes.strip():
+        return inconclusive("the repository has a remote, so its default endpoint is not a local branch")
+    if not turn_finished(view):
+        return inconclusive("the run did not finish, so the endpoint never came due")
+    carrying, new_commits = [], []
+    for branch in (view.git("for-each-ref", "--format=%(refname:short)", "refs/heads") or "").split():
+        if (view.git("rev-parse", branch) or "").strip() in base:
+            continue
+        new_commits.append(branch)
+        if (view.git("diff", "--name-only", base[-1], branch, "--", *paths) or "").strip():
+            carrying.append(branch)
+    dirty = [line for tree in view.worktrees() or [view.project]
+             for line in (view.git_in(tree, "status", "--porcelain", "--", *paths) or "").splitlines()]
+    delivered = [branch for branch in carrying if branch not in TRUNK_BRANCHES]
+    named = [branch for branch in delivered if branch in view.final_reply]
+    evidence = [f"branches with commits after the baseline: {new_commits}", f"branches whose commits change {paths}: {carrying}",
+                f"uncommitted changes in those paths: {dirty}", f"delivering branches named in the reply: {named}"]
+    measures = {"reply_has_diff_command": bool(REPLY_DIFF_COMMAND.search(view.final_reply))}
+    if not carrying and not dirty:
+        return inconclusive("the implementation paths did not change, so there was nothing to deliver", *evidence, measures=measures)
+    failures = []
+    if not carrying:
+        failures.append("the implementation paths changed but no commit after the baseline carries the change")
+    elif not delivered:
+        failures.append(f"the change is committed only on the trunk branch {carrying}")
+    elif not named:
+        failures.append(f"the final reply names none of the delivering branches {delivered}")
+    if carrying and dirty:
+        failures.append("the implementation paths still hold uncommitted changes")
+    return verdict(FAIL, failures, evidence, measures=measures) if failures else verdict(PASS, (), evidence, measures=measures)
