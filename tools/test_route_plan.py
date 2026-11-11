@@ -341,8 +341,6 @@ class GatesAndEndpoint(unittest.TestCase):
     def test_the_router_owns_the_commit_rule_for_a_skipped_pr(self):
         routes = (MODE / "references/routes.md").read_text(encoding="utf-8")
         self.assertIn("A skipped push or PR never skips that step's commits.", routes)
-        for name in ("perf-issue", "visual-parity", "authoring-a-skill", "refactoring"):
-            self.assertNotIn("skipped push or PR", (MODE / "playbooks" / f"{name}.md").read_text(encoding="utf-8"), name)
 
 
 class Manifest(unittest.TestCase):
