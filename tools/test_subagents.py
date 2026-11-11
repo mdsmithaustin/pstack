@@ -85,13 +85,14 @@ class SubagentCommands(unittest.TestCase):
     def test_brief_asks_for_a_persona_line_in_the_first_reply(self):
         brief = self.run_cli("brief", "poteto-agent").stdout
         self.assertIn("Put the exact line `persona: poteto-agent` on its own line in your first reply.\n", brief)
+        self.assertTrue(brief.startswith("Pstack installed skill paths\n"))
 
     def test_brief_states_the_read_rule_before_the_persona_body(self):
         rule = "A cut-off read is no read."
         for alias, heading in (("poteto-agent", "You are operating as"), ("Comment Sicko", "# Comment Sicko")):
             with self.subTest(alias=alias):
                 brief = self.run_cli("brief", alias).stdout
-                self.assert_read_preamble(brief)
+                self.assert_read_preamble(brief, heading)
                 self.assertEqual(brief.count(rule), 1)
                 self.assertLess(brief.index(rule), brief.index(heading))
                 self.assertLess(brief.index("On Codex"), brief.index(heading))
@@ -114,26 +115,36 @@ class SubagentCommands(unittest.TestCase):
         self.assertEqual(plan.returncode, 0, plan.stderr)
         self.assertTrue(plan.stdout.startswith("sed -n '1,"), plan.stdout)
 
-    def assert_read_preamble(self, body):
-        # The emitted instruction contract requires the guard before any other instruction.
+    def assert_read_preamble(self, body, heading):
         lines = body.lstrip().splitlines()
-        self.assertTrue(lines[0].startswith("A cut-off read is no read. "), lines[0])
-        self.assertTrue(lines[1].startswith("On Codex"), lines[1])
-        self.assertIn(shlex.quote(str(self.installed / "pstack-harness/scripts/read-plan.py")), lines[1])
+        self.assertEqual(lines[0], "Pstack installed skill paths")
+        rule = next(i for i, line in enumerate(lines) if line.startswith("A cut-off read is no read. "))
+        paths = [i for i, line in enumerate(lines) if line.startswith("- ") and "SKILL.md" in line]
+        self.assertTrue(paths)
+        self.assertGreater(rule, max(paths))
+        self.assertTrue(lines[rule + 1].startswith("On Codex"), lines[rule + 1])
+        self.assertIn(shlex.quote(str(self.installed / "pstack-harness/scripts/read-plan.py")), lines[rule + 1])
+        self.assertLess(body.index(lines[rule + 1]), body.index(heading))
 
     def test_native_wrappers_carry_the_read_rule(self):
         for harness in ("codex", "claude-code"):
             report = json.loads(self.native(harness).stdout)
-            for row in report["roles"] + report["efforts"]:
+            for row in report["roles"]:
                 with self.subTest(harness=harness, role=row["id"]):
                     text = Path(row["path"]).read_text()
                     body = tomllib.loads(text)["developer_instructions"] if harness == "codex" else text[4:].split("---\n", 1)[1]
-                    self.assert_read_preamble(body)
+                    heading = {
+                        "poteto-agent": "You are operating as",
+                        "comment-sicko": "# Comment Sicko",
+                        "trail-reviewer": "## Trail reviewer",
+                    }[row["id"]]
+                    self.assert_read_preamble(body, heading)
 
     def test_persona_with_its_own_first_line_gets_no_marker(self):
         brief = self.run_cli("brief", "Comment Sicko").stdout
         self.assertNotIn("persona: comment-sicko", brief)
         self.assertNotIn("on its own line in your first reply", brief)
+        self.assertTrue(brief.startswith("Pstack installed skill paths\n"))
         self.assertIn("Yes... Ha ha ha... Yes!", brief)
 
     def test_signature_missing_from_the_body_invalidates_the_bundle(self):
@@ -469,7 +480,7 @@ sys.exit(module.main())
                 self.assertIn(delegate, body)
                 self.assertRegex(text.splitlines()[-1], rf"<!-- pstack-generated:v1:pstack-effort-{level}:[0-9a-f]{{64}} -->")
 
-    def test_effort_agents_use_their_installed_read_plan(self):
+    def test_effort_agents_are_root_independent(self):
         self.native("claude-code")
         second_root = self.root / "second installed skills"
         shutil.copytree(ROOT / "skills", second_root)
@@ -480,11 +491,10 @@ sys.exit(module.main())
         for level in ("low", "medium", "high", "xhigh", "max"):
             first_bytes = self.effort_path(level).read_bytes()
             second_bytes = (second_project / ".claude/agents" / f"pstack-effort-{level}.md").read_bytes()
-            self.assertIn(shlex.quote(str(self.installed / "pstack-harness/scripts/read-plan.py")).encode(), first_bytes)
-            self.assertIn(shlex.quote(str(second_root / "pstack-harness/scripts/read-plan.py")).encode(), second_bytes)
+            self.assertEqual(first_bytes, second_bytes)
         report = json.loads(self.run_cli("check", "--harness", "claude-code", "--project", second_project, expected=1).stdout)
         self.assertEqual({row["native_file"] for row in report["roles"]}, {"outdated-generated"})
-        self.assertEqual({row["native_file"] for row in report["efforts"]}, {"outdated-generated"})
+        self.assertEqual({row["native_file"] for row in report["efforts"]}, {"current"})
 
     def test_codex_and_hermes_get_no_effort_agents(self):
         self.native("codex")

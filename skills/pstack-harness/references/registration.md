@@ -26,7 +26,7 @@ A wrapper that runs Codex with its own `CODEX_HOME` never reads `~/.codex/agents
 
 A Codex install also writes `.codex/agents/trail-reviewer.toml` in the same preflight group as the personas. Its native name is `trail reviewer`, with a space. It carries instructions for independent read-only reviews and inherits the session's sandbox policy. The [Codex adapter](codex.md) describes when to select it.
 
-A Claude Code install also writes five effort agents, `.claude/agents/pstack-effort-<level>.md` for `low`, `medium`, `high`, `xhigh`, and `max`. Claude Code's spawn tool has no per-call effort, and a custom agent's `effort` frontmatter overrides the session effort while the per-call `model` still applies, measured on 2.1.284. Each effort agent sets `name`, `description`, and `effort` in its frontmatter and carries one generic delegate body from the `subagents/effort-delegate.md` template beside this file. It sets no model, tools, or persona. Its read-rule preamble embeds the installed root's absolute `read-plan.py` path, so its bytes depend on that root but not the destination. Codex takes the effort per spawn and gets no effort agents. Personas and effort agents preflight as separate groups. A conflict in one group writes nothing in that group and never blocks the other.
+A Claude Code install also writes five effort agents, `.claude/agents/pstack-effort-<level>.md` for `low`, `medium`, `high`, `xhigh`, and `max`. Claude Code's spawn tool has no per-call effort, and a custom agent's `effort` frontmatter overrides the session effort while the per-call `model` still applies, measured on 2.1.284. Each effort agent sets `name`, `description`, and `effort` in its frontmatter and carries one generic delegate body from the `subagents/effort-delegate.md` template beside this file. It sets no model, tools, persona, or skills path, so its bytes are the same for every skills root and every destination. Codex takes the effort per spawn and gets no effort agents. Personas and effort agents preflight as separate groups. A conflict in one group writes nothing in that group and never blocks the other.
 
 To inspect the same registration without writing:
 
@@ -47,7 +47,7 @@ Hermes supports `check --harness hermes` with an explicit project or user root, 
 | `not-requested` | Only payloads were checked. |
 | `unsupported` | The harness has no supported native registration format. |
 | `missing` | No native file exists at the requested path. |
-| `current` | Native bytes match this installation's full briefing. Role wrappers also accept the briefing of another skills root whose named `SKILL.md` files resolve to the same files. |
+| `current` | Native bytes match this installation's full briefing, or the briefing of another skills root whose named `SKILL.md` files resolve to the same files. |
 | `outdated-generated` | An unchanged generated file can be updated. |
 | `conflict` | A user-managed, edited, or symlinked wrapper must remain untouched. |
 
