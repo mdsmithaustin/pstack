@@ -120,7 +120,8 @@ def render_brief(role: Role, skills_root: Path) -> str:
     for path in paths:
         if not path.is_file():
             raise ValueError(f"{role.id}: missing sibling skill {path}")
-    guidance = (
+    guidance = "\n".join(read_rule_preamble(skills_root)) + "\n\n"
+    guidance += (
         "Pstack installed skill paths\n\n"
         "Use these local files when the persona below requires a skill read. "
         "Read each required SKILL.md in full; follow its relative references from its directory. "
@@ -128,7 +129,6 @@ def render_brief(role: Role, skills_root: Path) -> str:
         + json.dumps(str(skills_root), ensure_ascii=False) + ".\n"
     )
     guidance += "".join(f"- {name}: {json.dumps(str(path), ensure_ascii=False)}\n" for name, path in zip(role.skills, paths))
-    guidance += "".join(f"{line}\n" for line in read_rule_preamble(skills_root))
     if role.signature is None and role.native_name is None:
         guidance += f"Put the exact line `persona: {role.id}` on its own line in your first reply.\n"
     return guidance + "\n" + role.body
@@ -378,7 +378,7 @@ def main() -> int:
             ),)
         for role in roles:
             render_brief(role, skills_root)
-        delegate_body = load_delegate(skill_directory)
+        delegate_body = "\n".join(read_rule_preamble(skills_root)) + "\n\n" + load_delegate(skill_directory)
         report["payload"] = "ready"
         if destination:
             validate_destination(destination)
