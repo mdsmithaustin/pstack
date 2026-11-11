@@ -145,7 +145,7 @@ python3 evals/promises/freshness.py record "$RUN_OUT"
 | `fresh` | A bound case has a receipt whose owner and case digests match the tree. |
 | `missing` | No receipt exists for this harness. |
 | `stale` | An owner file, or the case, fixture, or history, changed after the receipt. The reason names changed owners or reports changed case inputs. |
-| `unsettled` | The verdict differs from the one it replaced, or runs disagree, with fewer than three runs on the same bytes. |
+| `unsettled` | The verdict differs from the one it replaced, or runs disagree, with fewer than three runs on the same bytes. Receipts with only `INCONCLUSIVE` runs follow the reader-decision rule below instead. |
 | `unresolved` | Every run graded `INCONCLUSIVE` and no reader has recorded a decision. An unread transcript or a run that never started is not evidence about the skill. |
 | `disputed` | A reader recorded disagreement with the verdict. |
 | `deferred` | No bound case can supply evidence: cases are absent, deferred, not live, or use `skill_overlays`. |
@@ -155,9 +155,9 @@ python3 evals/promises/freshness.py check --base origin/main
 python3 evals/promises/freshness.py plan --base origin/main --budget-s 3600
 ```
 
-`--base` limits the report to promises the change reaches: one of their owners changed, or an input of one of their bound cases changed or was deleted. Without it the report covers every live promise. `plan` prints, for each harness, the runnable cases that settle the most open promises per second of time limit, and the `live.py run` command for them. A case's time limit is its per-turn `timeout_s` times its turns, because the harness applies the limit to each turn. The summed limit is an upper bound on a run, not a cost estimate. Arm cases are never planned, since `record` would not accept their verdicts. Under `--budget-s`, promises the picks do not reach stay listed as `uncovered`. An unsettled promise is planned on the case its receipt came from, so its repeats run on the same bytes.
+`--base` limits the report to promises the change reaches: one of their owners changed, or an input of one of their bound cases changed or was deleted. Renames include both the old and new paths. Without it the report covers every live promise. `plan` prints, for each harness, the runnable cases that settle the most open promises per second of time limit, and the `live.py run` command for them. A case's time limit is its per-turn `timeout_s` times its turns, because the harness applies the limit to each turn. The summed limit is an upper bound on a run, not a cost estimate. Arm cases are never planned, since `record` would not accept their verdicts. Under `--budget-s`, promises the picks do not reach stay listed as `uncovered`. An unsettled promise is planned on the case its receipt came from, so its repeats run on the same bytes.
 
-A verdict that matches the one it replaces settles in one run. When changed inputs or a different recorded grader replace a receipt, a changed verdict needs three runs. Regrading a counted run within the same receipt changes its count without treating its old verdict as a separate run. A receipt with mixed runs reports each count rather than a majority.
+When changed inputs or a different recorded grader replace a receipt, the settling rules in the state table apply. A matching verdict needs no repeats, subject to the reader-decision rule for `INCONCLUSIVE`. Regrading a counted run within the same receipt changes its count without treating its old verdict as a separate run. A receipt with mixed runs reports each count rather than a majority.
 
 `freshness.json` is the policy. `harnesses` lists the harnesses a change must carry evidence for; Hermes and Grok stay out of it until their adapters return graded evidence, and `--harness` reports them on request. `blocking` lists promises whose debt fails `check --strict`. CI runs `check --strict` with `--base` set to the pull request's base branch. On pushes, it reports every live promise. `--quiet` prints only the counts and the blocking debt, which is what `tools/gate-check.sh lint` shows. The list starts empty because no receipt predates this file, so the first reports show runnable live promises as `missing` and those without runnable cases as `deferred`. Add a promise to `blocking` once it has a receipt and a reason to gate on it.
 
@@ -171,7 +171,7 @@ python3 evals/promises/freshness.py audit "$PROMISE" "$HARNESS" "$CASE" --agrees
 python3 evals/promises/freshness.py audit "$PROMISE" "$HARNESS" "$CASE" --disputes --note "passed on a keyword"
 ```
 
-The sample is ordered by a digest of each receipt's identity, so it cannot favor verdicts that look easy to confirm. The sample draws from every bound case with a fresh receipt, not only the one that represents its promise in `check`. A disputed receipt is debt until a new run or a grader fix replaces it. `audit --agrees` on an `unresolved` receipt records that a reader accepts the run could not decide, and clears the debt. An audit lasts until `record` adds a run or changes a counted verdict, which starts the receipt unread. Replaying an unchanged verdict or a superseded run preserves the audit.
+The sample is ordered by a digest of each receipt's identity, so it cannot favor verdicts that look easy to confirm. The sample draws from every bound case with a fresh receipt, not only the one that represents its promise in `check`. A disputed receipt is debt until a new run or a grader fix replaces it. `audit --agrees` on an `unresolved` receipt records that a reader accepts the run could not decide, and clears the debt even if the previous verdict differed and fewer than three runs exist. The owner and case digests must still match the tree. An audit lasts until `record` adds a run or changes a counted verdict, which starts the receipt unread. Replaying an unchanged verdict or a superseded run preserves the audit.
 
 ## Known oracle gaps
 
