@@ -5704,13 +5704,24 @@ class CodexForkTurns(unittest.TestCase):
 
     def test_review_named_only_by_the_brief_opening_or_role_must_start_fresh(self):
         for head in ("Review the diff on branch x against main.", "You are the trail reviewer. Read decisions.tsv.",
-                     "Task: adversarially review this change."):
+                     "Task: adversarially review this change.", "You are an independent reviewer. Read the diff.",
+                     "You are a judge. Score each candidate."):
             with self.subTest(head=head):
                 self.assertEqual(self.grade({"fork_turns": "all", "prompt_head": head})["verdict"], FAIL)
+
+    def test_role_named_past_the_recorded_prompt_head_must_start_fresh(self):
+        message = "persona briefing line. " * 40 + "\nRole: trail reviewer\nRead decisions.tsv and return a verdict."
+        self.assertGreater(message.index("Role:"), 300)
+        call = {"seq": 1, "kind": "tool_call", "name": "spawn_agent", "input": {"message": message, "fork_turns": "all"}}
+        spawn = {"seq": 1, "tool": "spawn_agent", "fork_turns": "all", "prompt_head": message[:300]}
+        result = grade(self.PID, minimal(events=[call], spawns=[spawn], harness="codex"), {"entry": "poteto-mode"})
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("reviewer spawn", result["failures"][0])
 
     def test_incidental_review_words_do_not_make_a_reviewer(self):
         helpers = ({"prompt_head": "Draft the preview note from the files I just read."},
                    {"prompt_head": "Write the resume note. The lead reviews it later."},
+                   {"prompt_head": "You are a helper. Draft notes the reviewer can skim."},
                    {"prompt_head": "Draft the changelog.", "x_child_first_reply": "Review complete: the reviewer found nothing."})
         for helper in helpers:
             with self.subTest(helper=helper):

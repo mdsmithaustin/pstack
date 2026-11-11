@@ -4758,7 +4758,8 @@ def forked_turns(value):
 
 
 REVIEW_SEAT = re.compile(r"(?<![a-z])(?:review(?:er)?s?|judges?|verdicts?|adversar(?:y|ies|ial))(?![a-z])")
-REVIEW_ORDER = re.compile(r"\A\s*(?:(?:task|role|goal)\s*:\s*)?(?:(?:adversarially|independently)\s+)?(?:review|judge)(?![a-z])")
+REVIEW_ORDER = re.compile(r"\A\s*(?:(?:task|role|goal)\s*:\s*)?(?:(?:adversarially|independently)\s+)?(?:review|judge)(?![a-z])"
+                          r"|\A\s*(?:you are|act as) (?:the |an? )?(?:[a-z-]+ ){0,2}(?:reviewer|judge)(?![a-z])")
 
 
 def assigned_review(view, spawn):
@@ -4768,7 +4769,7 @@ def assigned_review(view, spawn):
     seat = [spawn.get(key) for key in ("persona", "subagent_type", "task_name", "role")]
     seat += [given.get(key) for key in ("agent_type", "task_name", "name")] if isinstance(given, dict) else []
     head = (spawn.get("prompt_head") or "").lower()
-    role = named_role(spawn, head) or ""
+    role = named_role(spawn, view.spawn_brief(spawn).replace("\\n", "\n").lower()) or ""
     return (any(REVIEW_SEAT.search(str(name).lower()) for name in seat if name) or bool(REVIEW_SEAT.search(role))
             or bool(REVIEW_ORDER.match(head)))
 
