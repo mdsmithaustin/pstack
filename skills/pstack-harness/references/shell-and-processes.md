@@ -25,8 +25,8 @@ printf '%s\n' 'opus[1m]@xhigh' '*.jsonl'
 
 Read without a cap any diff, test file, or code that you will judge. Never pipe it through `head`, `tail`, or a line limit. A cap on search or log output that you only scan is fine. Never cap the list from step 1. When a skill tells you to print one part of a file, such as one playbook step, you need only that part, and it must arrive uncut.
 
-1. List the changed files with `git diff --name-only <range>`. Do not list them with `--stat`, which shortens a long path to one that matches no file.
-2. Read `git diff <range> -- <file>` for one file at a time. On Codex, read each file's diff as [Read files](codex.md#read-files) says.
+1. List the changed files with `git diff --name-status <range>`. A renamed file shows both of its paths. Do not list the files with `--stat`, which shortens a long path to one that matches no file.
+2. Read `git diff <range> -- <file>` for one file at a time. For a renamed file, pass both paths, because one path alone shows the whole file as added. On Codex, read each file's diff as [Read files](codex.md#read-files) says.
 3. Check that the files you read are the files that step 1 lists. A file whose diff came back cut off is unread, so read its missing part before you judge the change.
 
 ## Inspect running processes
