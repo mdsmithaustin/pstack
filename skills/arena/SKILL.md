@@ -18,7 +18,7 @@ Every candidate gets the same prompt, so the prompt is the contract.
 
 ## Phase B: Fan out
 
-Spawn all N subagents in one message with `run_in_background: true`, each with the task, the path to the shared grounding, its own output path, and instructions to produce the artifact and a short rationale naming the alternatives it considered and what it rejected.
+Spawn all N subagents in one message with `run_in_background: true`, each with the task, the path to the shared grounding, its own output path, and instructions to produce the artifact and a short rationale naming the alternatives it considered and what it rejected. After fan-out, send a runner or judge only a correction to the source or scope, never your tests, reading, or pick. If the question changes, reframe and re-run.
 
 ### Required arms
 
@@ -26,7 +26,7 @@ An arm or exact model requested for this task remains an obligation. If it canno
 
 ## Phase C: Cross-judge
 
-After all Phase B candidates complete, choose one arm of the `arena cross-judge pool` role. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section to resolve it. Its default pool is `fable`, `opus`, `sonnet`. Spawn one readonly judge subagent. The judge never runs on the parent's model. Try the pool's entries in pool order, first those from a model family other than the parent's, then those on a different capability tier of the parent's family. An `auto` or `inherit-parent` entry is the parent model, so it never judges. An arm that **Spawn a role** moves onto the session model after a rejection is the parent model too, so move to the next entry. If no entry runs on another model, skip the judge, pick the base alone in Phase D, and say so. If you do not know the parent's model, try the pool's entries in pool order and say that the model check did not run. The judge sees the rubric and the candidates by path label, scores each criterion, and recommends a base with rationale. It runs in parallel with your reading in Phase D. Don't spawn it while candidates are still writing.
+After all Phase B candidates complete, choose one arm of the `arena cross-judge pool` role. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section to resolve it. Its default pool is `fable`, `opus`, `sonnet`. Spawn one readonly judge subagent. The judge never runs on the parent's model. Try the pool's entries in pool order, first those from a model family other than the parent's, then those on a different capability tier of the parent's family. An `auto` or `inherit-parent` entry is the parent model, so it never judges. An arm that **Spawn a role** moves onto the session model after a rejection is the parent model too, so move to the next entry. If no entry runs on another model, skip the judge, pick the base alone in Phase D, and say so. If you do not know the parent's model, try the pool's entries in pool order and say that the model check did not run. The judge sees the rubric and the candidates by path label, scores each criterion, and recommends a base with rationale. It runs in parallel with your reading in Phase D.
 
 ## Phase D: Pick a base
 
@@ -42,7 +42,7 @@ Start no graft, and spawn no implementation of the result, before you pick the b
 
 Walk each losing candidate's rationale and the cross-judge's scores once more for what is worth porting into the base, usually one or two things per candidate, not most of it. Read only the parts of a losing artifact you will graft. Fold each graft in by hand, so the result stays coherent under one mental model. Call the Skill tool with `principle-redesign-from-first-principles`. Don't paste mechanically.
 
-If the candidates converge on one shape, note the convergence subject to Phase D's actual-model disclosure and one-model limitation. Ship the consensus shape. No graft is needed. If they wildly diverge, Phase A was under-specified. Reframe and re-run rather than averaging the divergence. Before the re-run, remove this run's candidate worktrees and their branches and delete its scratch directory.
+If the candidates converge on one shape, note the convergence subject to Phase D's actual-model disclosure and one-model limitation. Ship the consensus shape. No graft is needed. If they wildly diverge, Phase A was under-specified. Reframe and re-run rather than averaging the divergence.
 
 ## Phase F: Verify
 

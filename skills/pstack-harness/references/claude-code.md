@@ -12,6 +12,8 @@ Pass `model`. The spawn tool has no effort field, so the agent type carries the 
 
 Only the live catalog proves an agent is loaded. A file on disk does not. A delegate's own spawns inherit the delegate's effort, so a nested spawn with an `inherit-parent` effort runs at the delegate's level, not the top session's.
 
+**Wait for a child.** A spawned agent runs in the background by default. Its completion notification starts your next turn and carries its report. A child that fails notifies you too, with the error and its last output. So when every remaining task belongs to a running child, say in one line what is running and end the turn. Each child notifies you on its own, so handle each notice and end the turn again while others run. Never wait with `sleep`, a `Monitor` loop, or a read or grep of the child's output file or transcript. Never report a child's result before its notification arrives. Stop a child you no longer need with `TaskStop`. The [shared wait rule](delegation.md) says what you may do while a child runs.
+
 ## Invocation and effort hints
 
 `Task` tool (custom agents from `.claude/agents/` spawn by name); `model` takes short aliases
