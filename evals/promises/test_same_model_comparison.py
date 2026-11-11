@@ -119,6 +119,11 @@ class ArchitectOracleReadsTheResolver(ResolverSandbox):
         self.assertEqual(result["verdict"], INCONCLUSIVE, result)
         self.assertIn("the resolver marked the comparison `skip`", result["failures"][0])
 
+    def test_a_rerun_of_every_role_that_marks_the_skip_replaces_the_first_resolve(self):
+        result = self.graded(self.resolver_call(7, "architect runners"), self.resolver_call(9, "--lead-model", "opus"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertIn("the resolver marked the comparison `skip`", result["failures"][0])
+
     def test_an_arena_skip_does_not_excuse_an_unmarked_architect_skip(self):
         self.write_user("architect runners: sonnet, sonnet\narena runners, arena cross-judge pool: opus, opus\n")
         for roles in (
