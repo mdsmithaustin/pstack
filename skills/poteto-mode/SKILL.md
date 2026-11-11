@@ -20,7 +20,7 @@ After a known compaction, context summary, or truncation notice, read this entry
 Match the task to a playbook below. Before task-specific work, print its plan:
 
 ```sh
-python3 "${PSTACK_SKILLS_ROOT:?}/poteto-mode/scripts/plan.py" <file-stem> --harness <claude-code|codex|grok|hermes|other>
+python3 "<this skill's base directory>/scripts/plan.py" <file-stem> --harness <claude-code|codex|grok|hermes|other>
 ```
 
 Bug fix, Feature, Refactoring, and Perf issue also need five risk facts, found in normal investigation before edits or fan-out. Read [routes](references/routes.md) before their first plan. It defines the facts, the three routes, and who may change a route. The script picks the route.
