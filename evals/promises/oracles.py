@@ -3601,11 +3601,11 @@ COMPARISON_SKIP = re.compile(r'"comparison": "skip"|so skip the comparison per S
 
 def architect_skip_marked(view):
     for _, command, ok, head in reversed(view.commands()):
-        if ok is False or "check-models-config" not in command:
+        if ok is False or "check-models-config" not in command or "architect runners" not in command:
             continue
-        if COMPARISON_SKIP.search(head):
-            return True
         for line in head.splitlines():
+            if re.match(r'\{"role": "architect runners", "arm": 1,', line) and COMPARISON_SKIP.search(line):
+                return True
             try:
                 row = json.loads(line)
             except ValueError:
