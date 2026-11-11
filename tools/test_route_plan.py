@@ -240,9 +240,11 @@ class OneStep(unittest.TestCase):
 
     def test_a_route_banner_never_appears_on_a_fixed_playbook(self):
         for name, step in (("hillclimb", "5"), ("research", "1"), ("babysit", "1")):
-            text = run(name, "--step", step, "--route", "lightweight").stdout
-            self.assertNotIn("Lightweight route", text, name)
-            self.assertNotIn("stay unloaded", run(name, "--step", step, "--route", "standard").stdout, name)
+            lightweight = run(name, "--step", step, "--route", "lightweight")
+            standard = run(name, "--step", step, "--route", "standard")
+            self.assertEqual((lightweight.returncode, standard.returncode), (0, 0), name)
+            self.assertNotIn("Lightweight route", lightweight.stdout, name)
+            self.assertNotIn("stay unloaded", standard.stdout, name)
 
     def test_missing_step_and_unknown_playbook_are_usage_errors(self):
         self.assertEqual(run("bug-fix", "--step", "9").returncode, 2)
