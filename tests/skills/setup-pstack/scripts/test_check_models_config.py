@@ -1688,10 +1688,17 @@ class PanelDiversityNote(ResolveRunner, unittest.TestCase):
         self.assertEqual([arm.get("notes") for arm in arms], [None, None, None])
 
 
-SKIP_NOTE = (
-    "every {role} and arena cross-judge pool arm resolves to the lead model ({shown}), "
-    "so skip the comparison per Spawn a role step 2"
-)
+SKIP_ACTIONS = {
+    "arena runners": (
+        "so skip a design comparison per Spawn a role step 2, "
+        "and still run every arm of a review or second opinion, labeled same-model"
+    ),
+    "architect runners": "so skip the comparison per Spawn a role step 2",
+}
+
+
+def skip_note(role, shown):
+    return f"every {role} and arena cross-judge pool arm resolves to the lead model ({shown}), {SKIP_ACTIONS[role]}"
 
 
 class SameModelComparison(ResolveRunner, unittest.TestCase):
@@ -1706,7 +1713,7 @@ class SameModelComparison(ResolveRunner, unittest.TestCase):
             with self.subTest(role=role):
                 arms, marks = self.comparison("claude-code", role, user=self.ONE_MODEL, lead_model="opus")
                 self.assertEqual(marks, ["skip", None, None])
-                self.assertIn(SKIP_NOTE.format(role=role, shown="opus"), arms[0]["notes"])
+                self.assertIn(skip_note(role, "opus"), arms[0]["notes"])
 
     def test_arms_that_differ_only_in_effort_are_one_model(self):
         user = (
@@ -1738,7 +1745,7 @@ class SameModelComparison(ResolveRunner, unittest.TestCase):
             with self.subTest(lead=lead):
                 arms, marks = self.comparison("hermes", lead_model=lead)
                 self.assertEqual(marks, ["skip", None, None])
-                self.assertIn(SKIP_NOTE.format(role="arena runners", shown="the parent model"), arms[0]["notes"])
+                self.assertIn(skip_note("arena runners", "the parent model"), arms[0]["notes"])
 
     def test_an_inheriting_arm_beside_the_lead_model_skips(self):
         user = "arena runners: opus, inherit-parent\narena cross-judge pool: auto, opus@high\n"
@@ -1788,7 +1795,7 @@ class SameModelComparison(ResolveRunner, unittest.TestCase):
                     "codex", user=user, lead_model=lead, codex_catalog=catalog_json("gpt-6.1-sol", "gpt-6-sol"),
                 )
                 self.assertEqual(marks, ["skip", None])
-                self.assertIn(SKIP_NOTE.format(role="arena runners", shown="gpt-6.1-sol"), arms[0]["notes"])
+                self.assertIn(skip_note("arena runners", "gpt-6.1-sol"), arms[0]["notes"])
 
     def test_grok_defaults_skip_for_a_grok_lead_and_run_for_the_fast_tier(self):
         self.assertEqual(self.comparison("grok", "architect runners", lead_model="grok-4.7")[1], ["skip", None, None])

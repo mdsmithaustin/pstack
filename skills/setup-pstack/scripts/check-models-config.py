@@ -27,7 +27,13 @@ PANEL_ROLES = {
 }
 JUDGE_POOL = "arena cross-judge pool"
 AGREEING_PANELS = PANEL_ROLES - {JUDGE_POOL}
-COMPARISON_ROLES = {"arena runners", "architect runners"}
+COMPARISON_ACTIONS = {
+    "arena runners": (
+        "so skip a design comparison per Spawn a role step 2, "
+        "and still run every arm of a review or second opinion, labeled same-model"
+    ),
+    "architect runners": "so skip the comparison per Spawn a role step 2",
+}
 STEP_SETTING = "trail reviewer step"
 STEP_VALUES = ("on", "off")
 REFLECT_SHORTHANDS = {"divergent", "synthesizer", "tooling", "judgment"}
@@ -507,7 +513,7 @@ def mark_comparison(runners: list[ResolvedArm], judges: list[ResolvedArm], lead:
     shown = concrete[0] if concrete else "the parent model"
     note = (
         f"every {first.role} and {JUDGE_POOL} arm resolves to the lead model ({shown}), "
-        "so skip the comparison per Spawn a role step 2"
+        + COMPARISON_ACTIONS[first.role]
     )
     return _with_notes(first, note)._replace(comparison="skip")
 
@@ -630,7 +636,7 @@ def _resolve_main(argv: list[str]) -> int:
                 for arm in arms
             ]
         arms = [_with_notes(arm, _default_leak_note(arm, written)) for arm in arms]
-        if role in COMPARISON_ROLES:
+        if role in COMPARISON_ACTIONS:
             arms[0] = mark_comparison(arms, resolve_role(JUDGE_POOL, args.harness, layers, listed), lead)
         arms[0] = _with_notes(arms[0], _panel_diversity_note(arms))
         for arm in arms:

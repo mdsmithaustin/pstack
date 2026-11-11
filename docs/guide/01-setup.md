@@ -30,7 +30,7 @@ The shipped defaults write no effort on their flat lines except `routine`, which
 
 You only override what you care about. A role with no line in the rule keeps the skill's default. To restore a default, delete that role's line. A rerun of `/setup-pstack` keeps any role you changed, whether its model, effort, panel list, alias, or harness section. A config written before the panels shrank to three entries still lists four panel entries, so delete those panel lines, including any under `## codex`, or delete the file, then run `/setup-pstack` again.
 
-You might be wondering what happens if you use Auto. Set a role to `inherit-parent` or `auto` and pstack omits the subagent `model` field, so the subagent inherits your parent chat model. Both values mean the same thing, and neither is a model slug. In the `arena cross-judge pool`, such an entry is the parent model, so arena never judges with it. For a panel role the value is a list, and one subagent runs per entry, so the list length sets the panel size, except that pstack skips a [design comparison](04-design.md) whose every arm would run on your chat's own model. Setup also configures `swarm workers`, the model for every `/swarm` worker that runs something, unless a race names a model for each arm. A swarm worker that reads and judges a diff runs on `trail reviewer` instead. Setup also configures `routine`, the model for read-only subagents that scan or parse bulk material, such as a long transcript, and return a short finding.
+You might be wondering what happens if you use Auto. Set a role to `inherit-parent` or `auto` and pstack omits the subagent `model` field, so the subagent inherits your parent chat model. Both values mean the same thing, and neither is a model slug. In the `arena cross-judge pool`, such an entry is the parent model, so arena never judges with it. For a panel role the value is a list, and one subagent runs per entry, so the list length sets the panel size, except that pstack skips a [design comparison](04-design.md) when its model resolver marks every arm as your chat's own model. Setup also configures `swarm workers`, the model for every `/swarm` worker that runs something, unless a race names a model for each arm. A swarm worker that reads and judges a diff runs on `trail reviewer` instead. Setup also configures `routine`, the model for read-only subagents that scan or parse bulk material, such as a long transcript, and return a short finding.
 
 ## Accept the verification offers, or don't
 
@@ -50,7 +50,7 @@ pstack spends extra tokens on subagents and review panels. That's the price of t
 
 - Rerun `/setup-pstack` and pick a smaller reasoning budget or cheaper models. A strong model in the main chat with cheaper, faster models in the code roles is a good split.
 - Set a role to `auto` or `inherit-parent` so it runs on the chat's own model.
-- Shorten a panel list. Each entry runs one subagent, unless pstack skips the comparison because every arm would run on your chat's own model.
+- Shorten a panel list. Each entry runs one subagent, unless the model resolver marks a design comparison as running only on your chat's own model, which pstack then skips.
 - Say `keep this lightweight` for a small change you understand. `/poteto-mode` then works directly, with no design panel and no delegate for the work. A review that a rule requires still runs.
 - Save `/poteto-mode` for work that needs rigor. A small, obvious edit doesn't.
 

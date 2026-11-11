@@ -35,16 +35,40 @@ class SameModelComparisonPromise(ResolverSandbox):
         )
         roles_md = (SKILLS / "pstack-harness/references/roles.md").read_text(encoding="utf-8")
         for rule in (
-            "On `skip`, spawn no runner and no cross-judge.",
+            "On `skip` in a design comparison, spawn no runner and no cross-judge.",
             "state in the reply `same-model, comparison skipped` with the model",
-            "that differ only in effort are one model",
+            "For this check, effort is not a model: two arms, or an arm and you, that differ only in effort are one model",
             "The skip covers the comparison only.",
-            "with its reviewer on a model at or above your tier",
-            "Run the panel despite `skip` only when the user asked for the comparison itself in this task",
+            "Run a design comparison despite `skip` only when the user asked for the comparison itself in this task",
         ):
             self.assertIn(rule, roles_md)
         for skill in ("arena", "architect"):
             self.assertIn('`"comparison": "skip"`', (SKILLS / skill / "SKILL.md").read_text(encoding="utf-8"))
+
+    def test_a_review_that_runs_through_arena_keeps_its_arms_on_a_marked_row(self):
+        review = "still run every arm of a review or second opinion, labeled same-model"
+        for harness, lead in (("grok", ("--lead-model", "grok-4.7")), ("hermes", ())):
+            with self.subTest(harness=harness):
+                arena = self.resolve(harness, *lead, "arena runners")[0]
+                architect = self.resolve(harness, *lead, "architect runners")[0]
+                self.assertEqual((arena["comparison"], architect["comparison"]), ("skip", "skip"))
+                self.assertEqual([review in note for note in arena["notes"]].count(True), 1)
+                self.assertNotIn(review, " ".join(architect["notes"]))
+        roles_md = (SKILLS / "pstack-harness/references/roles.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "ignore the field: run every runner arm, let arena's Phase C choose or skip the judge, "
+            "and label the result `same-model` in the verdict and the reply",
+            roles_md,
+        )
+        self.assertNotIn("every rule that compares models", roles_md)
+        self.assertIn(
+            "a design comparison skips Phases B through E, and a review still runs them",
+            (SKILLS / "arena/SKILL.md").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            'When the resolver prints `"comparison": "skip"`, still run every arm and label the result `same-model`.',
+            (SKILLS / "blast-radius/SKILL.md").read_text(encoding="utf-8"),
+        )
 
     def test_the_one_model_note_without_the_field_is_what_triggers_the_rerun(self):
         self.write_user("arena runners, architect runners, arena cross-judge pool: opus, opus\n")
@@ -123,6 +147,32 @@ class ArchitectOracleReadsTheResolver(ResolverSandbox):
         result = self.graded(self.resolver_call(7, "architect runners"), self.resolver_call(9, "--lead-model", "opus"))
         self.assertEqual(result["verdict"], INCONCLUSIVE, result)
         self.assertIn("the resolver marked the comparison `skip`", result["failures"][0])
+
+    def test_a_marked_resolve_stands_when_a_later_resolve_omits_the_lead_model(self):
+        for later in ((), ("architect runners",)):
+            with self.subTest(later=later):
+                result = self.graded(
+                    self.resolver_call(7, "--lead-model", "opus", "architect runners"), self.resolver_call(9, *later),
+                )
+                self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+                self.assertIn("the resolver marked the comparison `skip`", result["failures"][0])
+
+    def test_a_cut_off_resolve_with_the_lead_model_keeps_a_later_unmarked_row_inconclusive(self):
+        result = self.graded(
+            self.resolver_call(
+                7, "--lead-model", "opus", "trail reviewer", "feature", "how explorer", "arena runners",
+                "architect runners",
+            ),
+            self.resolver_call(9, "architect runners"),
+        )
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertIn("no resolver output in the trace shows", result["failures"][0])
+
+    def test_a_later_resolve_with_the_lead_model_that_drops_the_mark_fails(self):
+        marked = self.resolver_call(7, "--lead-model", "opus", "architect runners")
+        self.write_user("architect runners: opus, sonnet\narena cross-judge pool: opus\n")
+        result = self.graded(marked, self.resolver_call(9, "--lead-model", "opus", "architect runners"))
+        self.assertEqual(result["verdict"], FAIL, result)
 
     def test_an_arena_skip_does_not_excuse_an_unmarked_architect_skip(self):
         self.write_user("architect runners: sonnet, sonnet\narena runners, arena cross-judge pool: opus, opus\n")

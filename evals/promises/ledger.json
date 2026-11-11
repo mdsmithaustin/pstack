@@ -3568,13 +3568,14 @@
   },
   "same-model-design-comparison-skipped": {
    "check": "script",
-   "claim": "When every runner arm and every cross-judge arm of an arena or architect design comparison resolves to the lead's own model, at any effort, the resolver marks the comparison `skip` and the lead designs once and says so. A user request for the comparison itself still runs the panel, and delegation that protects the lead's context and required reviews are unaffected.",
+   "claim": "When the resolver marks an arena or architect design comparison `skip`, the lead spawns no runner and no judge, produces the artifact itself, and says so. The resolver marks it when every runner arm and every cross-judge arm inherits the lead's model or resolves to the model passed as `--lead-model`, at any effort. A panel that mixes a named model with inheriting arms and is resolved without `--lead-model` is not marked and runs as configured. A user request for the comparison itself still runs the panel. An arena run that reviews finished work still runs every arm, labeled `same-model`, and delegation that protects the lead's context and required reviews are unaffected.",
    "harness_sensitive": true,
    "owners": [
     "skills/setup-pstack/scripts/check-models-config.py",
     "skills/pstack-harness/references/roles.md",
     "skills/arena/SKILL.md",
-    "skills/architect/SKILL.md"
+    "skills/architect/SKILL.md",
+    "skills/blast-radius/SKILL.md"
    ]
   },
   "session-override-keeps-going": {
@@ -4686,6 +4687,15 @@
    ],
    "text": "One prompt can carry a whole program, from research through execution:"
   },
+  "026c25da5525": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "panel-list-sets-arm-count",
+   "sources": [
+    "port"
+   ],
+   "text": "For a panel role the value is a list, and one subagent runs per entry, so the list length sets the panel size, except that pstack skips a [design comparison](04-design.md) when its model resolver marks every arm as your chat's own model."
+  },
   "0277ec421b88": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -4756,7 +4766,7 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "3d15e40ea990"
+    "026c25da5525"
    ],
    "promise": "panel-list-sets-arm-count",
    "sources": [
@@ -6446,6 +6456,15 @@
    ],
    "text": "It writes a project-local skill that tells the next agent whether a change touches the verified code, how to run the check with one command, and how to tell a real bug from a modeling error."
   },
+  "31b0450d6a5c": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "The resolver marks a panel whose every arm inherits the chat model without being told that model."
+  },
   "31ba7ca1d7f0": {
    "class": "promise",
    "file": "09-make-it-yours.md",
@@ -6969,15 +6988,6 @@
    ],
    "text": "Choose the targets you use, including `hermes-agent` for Hermes."
   },
-  "3d15e40ea990": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "panel-list-sets-arm-count",
-   "sources": [
-    "port"
-   ],
-   "text": "For a panel role the value is a list, and one subagent runs per entry, so the list length sets the panel size, except that pstack skips a [design comparison](04-design.md) whose every arm would run on your chat's own model."
-  },
   "3d1cf9c0d7a8": {
    "class": "substituted",
    "file": "07-overnight.md",
@@ -7422,6 +7432,15 @@
     "port"
    ],
    "text": "```text\ni said the goal is to repro. i did not ask for a fix yet.\n```"
+  },
+  "498db69b0d90": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "When the model resolver marks the comparison as same-model, it sketches the candidates itself, as described under `/arena` below."
   },
   "49d8c3846ebb": {
    "class": "promise",
@@ -8019,15 +8038,6 @@
    ],
    "text": "The coordinator reads each candidate end to end, picks a base, grafts in the best ideas from the losers, and verifies the result."
   },
-  "5c8fe99dad27": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "same-model-design-comparison-skipped",
-   "sources": [
-    "port"
-   ],
-   "text": "When a playbook or `/architect` calls for the comparison and every runner and judge would run on the coordinator's own model, at any reasoning effort, the coordinator skips the comparison, designs once, and says so."
-  },
   "5d23421b119e": {
    "class": "context",
    "file": "03-understand.md",
@@ -8137,7 +8147,7 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "e6960638bfcd"
+    "ae578760f2c6"
    ],
    "promise": "panel-list-sets-arm-count",
    "sources": [
@@ -9103,6 +9113,15 @@
    ],
    "text": "You can set the route yourself in either direction by saying so."
   },
+  "757df0d53347": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "It marks a panel whose arms all name the coordinator's model once the coordinator passes that model, which it does when the resolver notes that the panel runs on one model."
+  },
   "75bc08340d22": {
    "class": "promise",
    "file": "04-design.md",
@@ -9999,6 +10018,15 @@
    ],
    "text": "Setup preserves existing user-managed agent files and reports payload readiness, native files, and live agent loading separately."
   },
+  "8f13d28eabbf": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "A review that runs through `/arena`, such as `/blast-radius` on a wide change, always runs its arms and is labeled `same-model`."
+  },
   "8f70771d8309": {
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
@@ -10385,6 +10413,15 @@
     "port"
    ],
    "text": "\"don't change any code yet\" pins this one to Investigation."
+  },
+  "9ab8ecdf6eea": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "When a playbook or `/architect` calls for a design comparison and the model resolver marks every runner and judge as the coordinator's own model, at any reasoning effort, the coordinator skips the comparison, produces the design itself, and says so."
   },
   "9acd67f502da": {
    "class": "context",
@@ -11181,15 +11218,6 @@
    ],
    "text": "The [Pause safely playbook](../../skills/poteto-mode/playbooks/pause-safely.md) finishes or backs out of the current step, commits a work-in-progress checkpoint, and writes a resume note."
   },
-  "ad5a1ba0e54b": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "same-model-design-comparison-skipped",
-   "sources": [
-    "port"
-   ],
-   "text": "When every runner and judge would run on the coordinator's own model, it sketches the candidates itself, as `/arena` does below."
-  },
   "ad8042391c17": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -11234,6 +11262,15 @@
     "port"
    ],
    "text": "On Codex it also checks whether native subagent spawning is available, because without it pstack runs each role through a `codex exec` subprocess or inline, and an inline review is not independent."
+  },
+  "ae578760f2c6": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "panel-list-sets-arm-count",
+   "sources": [
+    "port"
+   ],
+   "text": "Shorten a panel list. Each entry runs one subagent, unless the model resolver marks a design comparison as running only on your chat's own model, which pstack then skips."
   },
   "ae9d0c366843": {
    "class": "promise",
@@ -13050,6 +13087,15 @@
    ],
    "text": "To keep `/poteto-mode` on for the whole chat, pick it from the `/` menu with Option+Enter (Mac) or Alt+Enter (Windows) instead of Enter."
   },
+  "de22177b43c1": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "A panel that mixes a named model with inheriting arms prints no such note, so when it is resolved without the coordinator's model it runs as configured."
+  },
   "de373bcfdb7b": {
    "class": "substituted",
    "file": "07-overnight.md",
@@ -13442,15 +13488,6 @@
     "port"
    ],
    "text": "[`/create-verification-skill`](../../skills/create-verification-skill/SKILL.md) interviews the repository, not you."
-  },
-  "e6960638bfcd": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "panel-list-sets-arm-count",
-   "sources": [
-    "port"
-   ],
-   "text": "Shorten a panel list. Each entry runs one subagent, unless pstack skips the comparison because every arm would run on your chat's own model."
   },
   "e698328a6e14": {
    "class": "promise",

@@ -3600,9 +3600,11 @@ COMPARISON_SKIP = re.compile(r'"comparison": "skip"|so skip the comparison per S
 
 
 def architect_skip_marked(view):
+    verdict = None
     for _, command, ok, head in reversed(view.commands()):
         if ok is False or "check-models-config" not in command:
             continue
+        unmarked = False
         for line in head.splitlines():
             if re.match(r'\{"role": "architect runners", "arm": 1,', line) and COMPARISON_SKIP.search(line):
                 return True
@@ -3611,12 +3613,17 @@ def architect_skip_marked(view):
             except ValueError:
                 continue
             if isinstance(row, dict) and row.get("role") == "architect runners" and row.get("arm") == 1:
-                return False
+                unmarked = True
         first = re.match(r'\{"role": "([^"]+)"', head)
         names_other_roles = "architect runners" not in command and first and first.group(1) in command
-        if len(head) >= RESULT_HEAD and not names_other_roles:
+        flagged = "--lead-model" in command
+        if unmarked and flagged:
+            return False
+        if unmarked:
+            verdict = False
+        elif len(head) >= RESULT_HEAD and not names_other_roles and (flagged or verdict is None):
             return None
-    return None
+    return verdict
 
 
 @oracle("architect-runs-arena-for-sketches")
