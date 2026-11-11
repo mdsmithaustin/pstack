@@ -4748,9 +4748,29 @@ def forked_turns(value):
         return value
     if isinstance(value, bool):
         return "invalid"
-    if isinstance(value, int) or (isinstance(value, str) and value.isdigit()):
-        return int(value) if int(value) > 0 else "invalid"
-    return None if value is None else "invalid"
+    if value is None:
+        return None
+    try:
+        count = int(value) if isinstance(value, (int, str)) else 0
+    except ValueError:
+        return "invalid"
+    return count if count > 0 and str(value).strip() == str(count) else "invalid"
+
+
+REVIEW_SEAT = re.compile(r"(?<![a-z])(?:review(?:er)?s?|judges?|verdicts?|adversar(?:y|ies|ial))(?![a-z])")
+REVIEW_ORDER = re.compile(r"\A\s*(?:(?:task|role|goal)\s*:\s*)?(?:(?:adversarially|independently)\s+)?(?:review|judge)(?![a-z])")
+
+
+def assigned_review(view, spawn):
+    """Whether the spawn's assigned seat is a review. The words of the brief's body and of the child's reply are not a seat."""
+    call = next((c for c in view.tool_calls if str(c.get("seq")) == str(spawn.get("seq"))), None)
+    given = (call or {}).get("input") or {}
+    seat = [spawn.get(key) for key in ("persona", "subagent_type", "task_name", "role")]
+    seat += [given.get(key) for key in ("agent_type", "task_name", "name")] if isinstance(given, dict) else []
+    head = (spawn.get("prompt_head") or "").lower()
+    role = named_role(spawn, head) or ""
+    return (any(REVIEW_SEAT.search(str(name).lower()) for name in seat if name) or bool(REVIEW_SEAT.search(role))
+            or bool(REVIEW_ORDER.match(head)))
 
 
 @oracle("codex-spawns-state-fork-turns")
@@ -4761,7 +4781,7 @@ def codex_spawns_state_fork_turns(view):
     if not spawns:
         return inconclusive("the lead made no spawn_agent call, so no fork choice came due")
     fresh = bool((view.case.get("expect") or {}).get("fresh_delegates"))
-    reviewers = {s.get("seq") for s in reviewer_spawns(view)}
+    reviewers = {s.get("seq") for s in spawns if assigned_review(view, s)}
     failures, evidence = [], []
     for spawn in spawns:
         seq, carried = spawn.get("seq"), forked_turns(spawn.get("fork_turns"))

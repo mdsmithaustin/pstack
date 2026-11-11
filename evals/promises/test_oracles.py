@@ -5702,6 +5702,20 @@ class CodexForkTurns(unittest.TestCase):
                 self.assertIn("reviewer spawn", result["failures"][0])
         self.assertEqual(self.grade({"fork_turns": "none", "persona": "trail reviewer", "prompt_head": "review the trail"})["verdict"], PASS)
 
+    def test_review_named_only_by_the_brief_opening_or_role_must_start_fresh(self):
+        for head in ("Review the diff on branch x against main.", "You are the trail reviewer. Read decisions.tsv.",
+                     "Task: adversarially review this change."):
+            with self.subTest(head=head):
+                self.assertEqual(self.grade({"fork_turns": "all", "prompt_head": head})["verdict"], FAIL)
+
+    def test_incidental_review_words_do_not_make_a_reviewer(self):
+        helpers = ({"prompt_head": "Draft the preview note from the files I just read."},
+                   {"prompt_head": "Write the resume note. The lead reviews it later."},
+                   {"prompt_head": "Draft the changelog.", "x_child_first_reply": "Review complete: the reviewer found nothing."})
+        for helper in helpers:
+            with self.subTest(helper=helper):
+                self.assertEqual(self.grade({"fork_turns": "all", **helper})["verdict"], PASS)
+
     def test_case_that_needs_no_history_rejects_any_fork(self):
         case = load_case("delegate-fresh-context-run")
         self.assertEqual(self.grade({"fork_turns": "none"}, case=case)["verdict"], PASS)
@@ -5710,7 +5724,7 @@ class CodexForkTurns(unittest.TestCase):
                 self.assertEqual(self.grade({"fork_turns": carried}, case=case)["verdict"], FAIL)
 
     def test_invalid_values_fail(self):
-        for value in (0, "0", True, "some", ""):
+        for value in (0, "0", -1, True, "some", "", "\u00b2", "03", 1.5, ["all"]):
             with self.subTest(value=value):
                 self.assertEqual(self.grade({"fork_turns": value})["verdict"], FAIL)
 
