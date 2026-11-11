@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+"""Say whether a no-mistakes run recorded a Test exception, and whether the record carries an operator reason.
+
+Reads `no-mistakes axi status` text from a file, or from stdin. It never calls the gate.
+
+  no-mistakes axi status --run <run-id> | gate-exception.py
+
+Exit 0: no Test exception is recorded.
+Exit 1: a Test exception is recorded with no operator reason. Never report that run as passed or merge-ready.
+Exit 3: a Test exception is recorded with a reason. Any caller can write a reason, so match it to the operator's own approval.
+Exit 2: the status is empty, reports an error, or names no run. Nothing was checked.
+
+When the text holds several runs, the worst record decides the exit code.
+"""
+import re
+import sys
+from pathlib import Path
+
+RECORD = re.compile(r"^\s*test_override_reason:\s*(.+?)\s*$", re.M)
+RUN_FIELD = re.compile(r"^\s*(?:head_sha|status):\s*\S", re.M)
+GATE_ERROR = re.compile(r"^error:", re.M)
+NO_REASON = "no operator reason supplied"
+
+
+def classify(text):
+    if not text.strip():
+        return 2, ["UNREAD: the status is empty. Nothing was checked."]
+    if GATE_ERROR.search(text):
+        return 2, ["UNREAD: the status reports an error. Nothing was checked."]
+    if not RUN_FIELD.search(text):
+        return 2, ["UNREAD: the status names no run. Nothing was checked."]
+    records = RECORD.findall(text)
+    if not records:
+        return 0, ["PASS: no Test exception is recorded."]
+    unapproved = [record for record in records if NO_REASON in record]
+    if unapproved:
+        return 1, [f"BLOCKED: a Test exception is recorded with no operator reason: {record}" for record in unapproved]
+    return 3, [f"MATCH: a Test exception is recorded with this reason: {record}" for record in records] + [
+        "Match each reason to the operator's own approval of that gap. A reason with no such approval is BLOCKED."]
+
+
+def main(argv):
+    if len(argv) > 2 or (len(argv) == 2 and argv[1] in ("-h", "--help")):
+        print(__doc__.strip())
+        return 0 if len(argv) == 2 else 2
+    try:
+        text = Path(argv[1]).read_text(encoding="utf-8") if len(argv) == 2 else sys.stdin.read()
+    except (OSError, UnicodeError) as error:
+        print(f"UNREAD: {error}")
+        return 2
+    code, lines = classify(text)
+    print("\n".join(lines))
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

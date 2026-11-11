@@ -1724,6 +1724,29 @@
     "skills/create-formal-verification-skill/SKILL.md"
    ]
   },
+  "gated-run-test-exception-checked-before-ready": {
+   "check": "static",
+   "claim": "Before the agent reports a gated run's outcome or a merge-ready head, it runs the exception check on the run's status. A Test exception recorded with no operator reason is reported as blocked, never as passed or merge-ready, and a recorded reason counts only when it matches the operator's own approval of that gap.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/references/gated-publish.md",
+     "quote": "Before you report a run's outcome or a merge-ready head, run `no-mistakes axi status --run <run-id> | python3 \"${PSTACK_SKILLS_ROOT:?}/poteto-mode/scripts/gate-exception.py\"`."
+    },
+    {
+     "file": "skills/poteto-mode/references/gated-publish.md",
+     "quote": "Exit 1 means it recorded one with no operator reason. Never report that run as passed or merge-ready."
+    },
+    {
+     "file": "skills/poteto-mode/references/gated-publish.md",
+     "quote": "Any caller can write a reason, so match it to the operator's own approval of that gap, and treat a reason with no such approval as exit 1."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/references/gated-publish.md",
+    "skills/poteto-mode/scripts/gate-exception.py"
+   ]
+  },
   "guide-named-skills-exist": {
    "check": "static",
    "claim": "Every skill the guide names with a slash resolves to skills/<name>/SKILL.md in the port (how, why, poteto-teach, recall, architect, arena, swarm, interrogate, poteto-tdd, unslop, no-comments, blast-radius, create-verification-skill, maintain-verification-skill, documentation-impact, show-me-your-work, figure-it-out, automate-me, reflect, technical-writing, bro, setup-pstack, typescript-best-practices).",
@@ -2573,6 +2596,24 @@
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/playbooks/opening-a-pr.md",
+    "skills/poteto-mode/references/gated-publish.md"
+   ]
+  },
+  "opening-a-pr-gated-unattended-continues-review-coverage": {
+   "check": "static",
+   "claim": "In an unattended run, the agent answers a Review gate that parked only for incomplete coverage with the coverage continuation, without `--yes`, and reports the run as blocked only when Review stays gated on the same head afterwards.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/references/gated-publish.md",
+     "quote": "Answer it with `no-mistakes axi respond --step review --action complete-coverage` and without `--yes`, which that action refuses."
+    },
+    {
+     "file": "skills/poteto-mode/references/gated-publish.md",
+     "quote": "When Review stays gated on the same head after that answer, report the run as blocked."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
     "skills/poteto-mode/references/gated-publish.md"
    ]
   },
@@ -5882,6 +5923,15 @@
    ],
    "text": "Make the agent able to do it, and you stop being the bottleneck."
   },
+  "2410a24bf75f": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "gated-run-test-exception-checked-before-ready",
+   "sources": [
+    "port"
+   ],
+   "text": "Before the agent reports a gated run as passed or merge-ready, it checks the run's record with a script, and it reports a Test exception recorded without your reason as blocked."
+  },
   "2427878966a1": {
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
@@ -6537,15 +6587,6 @@
     "port"
    ],
    "text": "Read that section first, then the log rows it points at."
-  },
-  "35b0cf1711d0": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "opening-a-pr-gated-unattended-passes-yes",
-   "sources": [
-    "port"
-   ],
-   "text": "For decisions reserved by you or the playbook, the agent follows [Opening a PR's operator-reservation rule](../../skills/poteto-mode/playbooks/opening-a-pr.md)."
   },
   "35b68e34a990": {
    "also": [
@@ -13087,6 +13128,15 @@
    ],
    "text": "Until then, run it while you watch."
   },
+  "e22d50f784c7": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-unattended-passes-yes",
+   "sources": [
+    "port"
+   ],
+   "text": "For decisions reserved by you or the playbook, the agent follows [gated publish's operator-reservation rule](../../skills/poteto-mode/references/gated-publish.md)."
+  },
   "e2495d3d552a": {
    "class": "promise",
    "file": "09-make-it-yours.md",
@@ -13228,6 +13278,15 @@
     "port"
    ],
    "text": "Then setup offers once to generate a formal verification skill with [`/create-formal-verification-skill`](../../skills/create-formal-verification-skill/SKILL.md), unless the project already has one."
+  },
+  "e5055111f6de": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-unattended-continues-review-coverage",
+   "sources": [
+    "port"
+   ],
+   "text": "In an unattended run, the agent continues a Review step that parked only for incomplete coverage, which approves nothing, before it reports the gate as blocked."
   },
   "e54f8645ae93": {
    "class": "context",
