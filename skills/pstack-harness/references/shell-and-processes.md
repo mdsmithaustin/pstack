@@ -21,6 +21,14 @@ done
 printf '%s\n' 'opus[1m]@xhigh' '*.jsonl'
 ```
 
+## Read a diff
+
+Read a diff, a test file, or code that you will judge without a cap. Never pipe it through `head`, `tail`, or a line limit.
+
+1. List the changed files with `git diff --stat <range>`.
+2. Read `git diff <range> -- <file>` for one file at a time.
+3. Check that the files you read are the files `--stat` lists. A file whose diff came back cut off is unread, so read its missing part before you judge the change.
+
 ## Inspect running processes
 
 1. Read the runtime's native agent or task list. Report what it tracks and which children remain live or have unknown status.

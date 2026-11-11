@@ -5,6 +5,8 @@ description: Maps pstack's delegation and portable resource primitives to the cu
 
 # Harness adapters
 
+**A cut-off read is no read.** A return that is shortened, warns that it was cut, or that you capped with `head`, `tail`, or a line limit leaves the file or diff unread. Read the missing part before you act. This file too. On Codex, follow [Read files](references/codex.md#read-files).
+
 Use this skill when a pstack workflow names a delegation action, worklist, question, loop, transcript, portable resource, shell command, or process inspection.
 
 Your tool inventory and CLI help are authoritative. Never invent a tool. Report the mechanism when it affects execution or evidence. For worklists, report item state rather than the carrier.
@@ -13,7 +15,7 @@ Before executing shell commands or answering what is running, read [shell comman
 
 ## Select the action
 
-Read each selected reference in full before its action. Select only the actions the next step needs. Combine their files when a step needs several actions. Read a link inside a reference only when its described operation applies. Do not read every reference.
+Read each selected reference in full before its action. Select only the actions the next step needs. Read a link inside a reference only when its described operation applies. Do not read every reference.
 
 | Action | Required references |
 |---|---|
@@ -66,7 +68,6 @@ Every pstack spawn runs a role from the models config, such as `feature` or `how
 
 ## Universal rules
 
-- **Use named sibling skills yourself.** "Call the Skill tool with `architect`" tells you to load the pstack skill `architect` and follow it. A following "follow its" or "use its" names the part of that skill the step needs, after the whole skill loads. The name is a sibling directory under the installed skills root, the directory that holds this skill's own directory. Any other pstack mention of a skill by name, such as "the leaf skill" or "the **arena** skill", names one the same way. On Claude Code, call the Skill tool with the bare name, such as `architect`. The call works when the listing shows the name only, with no description, and a name-only listing never means the skill is missing. Codex, Grok Build, Hermes, and any other harness have no tool named Skill for these skills. There, the same phrase means read `<installed skills root>/<name>/SKILL.md` in full, then read the files it references when its steps need them. On Codex, a `$name` mention in a user prompt [injects](references/codex.md#injected-skills) that skill's `SKILL.md`, so do not read that file again unless the injected copy was cut. Read each other file as the [Codex read rule](references/codex.md#read-skill-files) says. Never ask the user to type a skill that a pstack skill names. Never edit a skill's files or the listing settings to change how it loads.
-- **Finish every cut-off read.** If a runtime or tool return is shortened or warns that it was cut, read the missing content before continuing.
+- **Use named sibling skills yourself.** "Call the Skill tool with `architect`" tells you to load the pstack skill `architect` and follow it. A following "follow its" or "use its" names the part of that skill the step needs, after the whole skill loads. The name is a sibling directory under the installed skills root, the directory that holds this skill's own directory. Any other pstack mention of a skill by name, such as "the leaf skill" or "the **arena** skill", names one the same way. On Claude Code, call the Skill tool with the bare name, such as `architect`. The call works when the listing shows the name only, with no description, and a name-only listing never means the skill is missing. Codex, Grok Build, Hermes, and any other harness have no tool named Skill for these skills. There, the same phrase means read `<installed skills root>/<name>/SKILL.md` in full, then read the files it references when its steps need them. On Codex, a `$name` mention in a user prompt [injects](references/codex.md#injected-skills) that skill's `SKILL.md`, so do not read that file again unless the injected copy was cut. Never ask the user to type a skill that a pstack skill names. Never edit a skill's files or the listing settings to change how it loads.
 - **Load only skills that someone named.** Never read or load a pstack skill that you found by listing or searching a skills directory, unless the user or a loaded skill named it. A skill that the harness lists with its description can still load from that description.
 - **Tool names in skill text describe intent, never a required tool.** `Task`, `Glob`, `Grep`, `Read`, a worklist, and Cursor-era parameters like `readonly` name capabilities: realize each with whatever your session provides (a search tool, a shell command, a read-only brief). Capability selection follows live descriptions, not recalled names. A missing optional tool never cancels the step and needs no announcement. A `subagent_type` in skill text names a persona or none, and **Spawn a role** turns it into the concrete type.
