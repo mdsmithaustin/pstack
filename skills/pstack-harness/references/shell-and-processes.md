@@ -25,25 +25,16 @@ printf '%s\n' 'opus[1m]@xhigh' '*.jsonl'
 
 Read without a cap any diff, test file, or code that you will judge. Never pipe it through `head`, `tail`, or a line limit. A cap on search or log output that you only scan is fine. Never cap the list from step 1. When a skill tells you to print one part of a file, such as one playbook step, you need only that part, and it must arrive uncut.
 
-1. Save each changed file's diff to its own file. Run this in bash or zsh as printed, with your range on the first line:
+1. Save each changed file's diff to its own file. Run this in any shell, with your range in place of `<range>`: nothing, `HEAD`, `--cached`, `main...HEAD`, or two commits. Quote a revision that holds `^`, as in `'HEAD^'`.
 
    ```sh
-   set -- <range>
-   d=$(mktemp -d); r=$(git rev-parse --show-toplevel); n=0
-   git diff -z --name-status "$@" | while IFS= read -r -d '' s && IFS= read -r -d '' a; do
-   	b=$a; case $s in [RC]*) IFS= read -r -d '' b ;; esac
-   	n=$((n + 1)); git -C "$r" --literal-pathspecs diff "$@" -- "$a" "$b" > "$d/$n.diff"
-   	printf '%s\n' "$(wc -c < "$d/$n.diff") $d/$n.diff $s $b"
-   done
-   git -C "$r" ls-files -z --others --exclude-standard | while IFS= read -r -d '' a; do
-   	n=$((n + 1)); git -C "$r" diff --no-index -- /dev/null "$a" > "$d/new-$n.diff"
-   	printf '%s\n' "$(wc -c < "$d/new-$n.diff") $d/new-$n.diff ?? $a"
-   done
+   python3 "<installed skills root>/pstack-harness/scripts/save-diff.py" <range>
    ```
 
-   Each printed line gives a byte count, the saved file, the status, and the changed file's name. The second loop saves each untracked file whole, because `git diff` never shows one. When `<range>` compares two commits, leave that loop out. Let the loop pass every path. A path you copy from a git listing can match no file and print nothing, because git prints some names quoted and `--stat` shortens them. A renamed file needs both of its paths. The new path alone shows the whole file as added, and the old path alone shows it as deleted.
+   Each printed line gives a byte count, the saved file, the status, and the changed file's name. The last line gives the number of files and the new directory that holds them, which is outside the repository. When the range includes the working tree, the script also saves each untracked file whole, because `git diff` never shows one. It leaves ignored files out, and it saves a submodule as its commit change only. It cannot save an untracked directory that holds its own repository, so it prints that directory with a byte count of 0. Let the script pass every path. A path you copy from a git listing can match no file and print nothing, because git prints some names quoted and `--stat` shortens them. The script refuses a path limit and every git option other than `--cached`, `--staged`, and `--merge-base`, because either one leaves part of the change unread.
 2. Read every saved file, one at a time. On Codex, read each as [Read files](codex.md#read-files) says.
-3. Check that you read each file that step 1 printed, to its end. A byte count of 0 means git returned nothing for that file, so report the file as unread and stop. A file that came back cut off is unread, so read its missing part before you judge the change.
+3. Check the last line that step 1 printed. It must give one number twice, as in `7 files changed or untracked, 7 saved in <directory>`, and that number must equal the count of lines above it and the count of files you read to the end. If the command exits with an error, the last line starts with `FAILED`, or a line has a byte count of 0, the change is unread. Report that and stop. A file that came back cut off is unread, so read its missing part before you judge the change.
+4. Remove the directory that the last line names once you have judged the change.
 
 ## Inspect running processes
 
