@@ -4742,6 +4742,44 @@ def worklist_follows_plan(view):
     return inconclusive("the run did not finish with a project change, so a missing or idle worklist proves nothing", *evidence)
 
 
+def forked_turns(value):
+    """How much lead history a Codex spawn carries: None for an omitted field, which Codex forks in full."""
+    if value in ("none", "all"):
+        return value
+    if isinstance(value, bool):
+        return "invalid"
+    if isinstance(value, int) or (isinstance(value, str) and value.isdigit()):
+        return int(value) if int(value) > 0 else "invalid"
+    return None if value is None else "invalid"
+
+
+@oracle("codex-spawns-state-fork-turns")
+def codex_spawns_state_fork_turns(view):
+    if view.harness != "codex":
+        return inconclusive(f"applies to codex only; this run is {view.harness}", not_applicable=True)
+    spawns = [s for s in view.spawns if s.get("tool") == "spawn_agent"]
+    if not spawns:
+        return inconclusive("the lead made no spawn_agent call, so no fork choice came due")
+    fresh = bool((view.case.get("expect") or {}).get("fresh_delegates"))
+    reviewers = {s.get("seq") for s in reviewer_spawns(view)}
+    failures, evidence = [], []
+    for spawn in spawns:
+        seq, carried = spawn.get("seq"), forked_turns(spawn.get("fork_turns"))
+        pinned = [key for key in ("model", "effort") if spawn.get(key)]
+        evidence.append(f"spawn at seq {seq}: fork_turns={spawn.get('fork_turns')!r}, pinned={pinned}, reviewer={seq in reviewers}")
+        if carried is None:
+            failures.append(f"spawn at seq {seq} omits fork_turns, so Codex forks the lead's full history into it")
+        elif carried == "invalid":
+            failures.append(f"spawn at seq {seq} passes fork_turns={spawn.get('fork_turns')!r}, which is not \"none\", \"all\", or a positive count")
+        elif carried == "all" and pinned:
+            failures.append(f"spawn at seq {seq} forks the full history while passing {' and '.join(pinned)}, which a full fork ignores")
+        elif carried != "none" and seq in reviewers:
+            failures.append(f"reviewer spawn at seq {seq} carries lead history (fork_turns={spawn.get('fork_turns')!r})")
+        elif carried != "none" and fresh:
+            failures.append(f"spawn at seq {seq} carries lead history (fork_turns={spawn.get('fork_turns')!r}) on a task whose brief needs none")
+    return failed(failures, *evidence) if failures else passed(*evidence)
+
+
 @oracle("default-endpoint-local-branch-without-remote")
 def default_endpoint_local_branch(view):
     paths = (view.case.get("expect") or {}).get("implementation_paths")

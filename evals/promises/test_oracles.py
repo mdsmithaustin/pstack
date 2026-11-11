@@ -5662,6 +5662,73 @@ class ReviewVerdictGuard(unittest.TestCase):
             self.assertEqual(review_line(line)["verdict"], PASS, line)
 
 
+class CodexForkTurns(unittest.TestCase):
+    PID = "codex-spawns-state-fork-turns"
+
+    def grade(self, *spawns, case=None, harness="codex"):
+        listed = [{"seq": seq, "tool": "spawn_agent", **fields} for seq, fields in enumerate(spawns, 1)]
+        return grade(self.PID, minimal(spawns=listed, harness=harness), case or {"entry": "poteto-mode"})
+
+    def test_omitted_field_fails_as_a_full_fork(self):
+        result = self.grade({"fork_turns": "none"}, {"prompt_head": "count the TODO comments"})
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertEqual(len(result["failures"]), 1)
+        self.assertIn("seq 2 omits fork_turns", result["failures"][0])
+
+    def test_fresh_spawns_pass(self):
+        result = self.grade({"fork_turns": "none", "model": "gpt-6-sol", "effort": "high"}, {"fork_turns": "none"})
+        self.assertEqual(result["verdict"], PASS)
+
+    def test_bounded_history_passes_with_a_model(self):
+        for carried in (3, "3"):
+            with self.subTest(carried=carried):
+                self.assertEqual(self.grade({"fork_turns": carried, "model": "gpt-6-sol"})["verdict"], PASS)
+
+    def test_full_fork_with_a_model_or_effort_fails(self):
+        for pinned in ({"model": "gpt-6-sol"}, {"effort": "high"}):
+            with self.subTest(pinned=pinned):
+                result = self.grade({"fork_turns": "all", **pinned})
+                self.assertEqual(result["verdict"], FAIL)
+                self.assertIn("a full fork ignores", result["failures"][0])
+
+    def test_stated_full_fork_passes_for_an_unpinned_helper(self):
+        self.assertEqual(self.grade({"fork_turns": "all", "prompt_head": "draft the resume note"})["verdict"], PASS)
+
+    def test_reviewer_must_start_fresh(self):
+        for carried in ("all", 2):
+            with self.subTest(carried=carried):
+                result = self.grade({"fork_turns": carried, "persona": "trail reviewer", "prompt_head": "review the trail"})
+                self.assertEqual(result["verdict"], FAIL)
+                self.assertIn("reviewer spawn", result["failures"][0])
+        self.assertEqual(self.grade({"fork_turns": "none", "persona": "trail reviewer", "prompt_head": "review the trail"})["verdict"], PASS)
+
+    def test_case_that_needs_no_history_rejects_any_fork(self):
+        case = load_case("delegate-fresh-context-run")
+        self.assertEqual(self.grade({"fork_turns": "none"}, case=case)["verdict"], PASS)
+        for carried in ("all", 2):
+            with self.subTest(carried=carried):
+                self.assertEqual(self.grade({"fork_turns": carried}, case=case)["verdict"], FAIL)
+
+    def test_invalid_values_fail(self):
+        for value in (0, "0", True, "some", ""):
+            with self.subTest(value=value):
+                self.assertEqual(self.grade({"fork_turns": value})["verdict"], FAIL)
+
+    def test_no_spawn_is_inconclusive(self):
+        result = self.grade()
+        self.assertEqual(result["verdict"], INCONCLUSIVE)
+        self.assertFalse(result.get("not_applicable"))
+
+    def test_other_tools_are_not_graded(self):
+        trace = minimal(spawns=[{"seq": 1, "tool": "followup_task"}], harness="codex")
+        self.assertEqual(grade(self.PID, trace, {"entry": "poteto-mode"})["verdict"], INCONCLUSIVE)
+
+    def test_not_applicable_off_codex(self):
+        for harness in ("claude-code", "grok", "hermes"):
+            with self.subTest(harness=harness):
+                self.assertTrue(self.grade({"fork_turns": "none"}, harness=harness).get("not_applicable"))
+
+
 if __name__ == "__main__":
     unittest.main()
 
