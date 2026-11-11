@@ -1,30 +1,10 @@
 {
   "version": 1,
-  "routes": [
-    "lightweight",
-    "standard",
-    "intensive"
-  ],
-  "facts": [
-    "consequence",
-    "reach",
-    "uncertainty",
-    "complexity",
-    "reversibility"
-  ],
-  "panels": [
-    "architect",
-    "arena",
-    "interrogate",
-    "swarm"
-  ],
-  "lightweight_keeps": [
-    "spec-probes",
-    "principle-prove-it-works",
-    "principle-test-behavior-not-implementation",
-    "poteto-tdd",
-    "benchmark-checklist"
-  ],
+  "routes": ["lightweight", "standard", "intensive"],
+  "facts": ["consequence", "reach", "uncertainty", "complexity", "reversibility"],
+  "panels": ["architect", "arena", "interrogate", "swarm"],
+  "outcome_first": ["feature", "bug-fix", "refactoring", "investigation", "research", "code-review", "prototype", "perf-issue", "hillclimb", "runtime-forensics", "trace-forensics"],
+  "lightweight_keeps": ["spec-probes", "principle-prove-it-works", "principle-test-behavior-not-implementation", "poteto-tdd", "benchmark-checklist"],
   "gates": [
     {
       "id": "preserve",
@@ -96,47 +76,25 @@
     }
   ],
   "playbooks": {
-    "investigation": {
-      "file": "playbooks/investigation.md",
-      "daily": true
-    },
-    "code-review": {
-      "file": "playbooks/code-review.md",
-      "daily": true
-    },
     "bug-fix": {
-      "file": "playbooks/bug-fix.md",
-      "daily": true,
       "changes_code": true,
       "tiered": true
     },
     "feature": {
-      "file": "playbooks/feature.md",
-      "daily": true,
       "changes_code": true,
       "tiered": true,
       "lightweight_worklist": [
         {
           "item": "Risk and acceptance",
-          "covers": [
-            "Preserved",
-            "Shaped",
-            "Specified"
-          ]
+          "covers": ["Preserved", "Shaped", "Specified"]
         },
         {
           "item": "Build and prove",
-          "covers": [
-            "Built",
-            "Proven"
-          ]
+          "covers": ["Built", "Proven"]
         },
         {
           "item": "Deliver with review status",
-          "covers": [
-            "Landed",
-            "Published"
-          ]
+          "covers": ["Landed", "Published"]
         }
       ],
       "lightweight_skips": {
@@ -145,79 +103,21 @@
       }
     },
     "refactoring": {
-      "file": "playbooks/refactoring.md",
-      "daily": true,
       "changes_code": true,
       "tiered": true
     },
     "perf-issue": {
-      "file": "playbooks/perf-issue.md",
-      "daily": true,
       "changes_code": true,
       "tiered": true
     },
-    "prototype": {
-      "file": "playbooks/prototype.md",
-      "daily": true
-    },
-    "babysit": {
-      "file": "playbooks/babysit.md",
-      "daily": true
-    },
-    "shipping": {
-      "file": "playbooks/shipping.md",
-      "daily": true
-    },
-    "research": {
-      "file": "playbooks/research.md"
-    },
     "hillclimb": {
-      "file": "playbooks/hillclimb.md",
       "changes_code": true
     },
-    "runtime-forensics": {
-      "file": "playbooks/runtime-forensics.md"
-    },
-    "trace-forensics": {
-      "file": "playbooks/trace-forensics.md"
-    },
     "visual-parity": {
-      "file": "playbooks/visual-parity.md",
       "changes_code": true
     },
     "authoring-a-skill": {
-      "file": "playbooks/authoring-a-skill.md",
       "changes_code": true
-    },
-    "eval": {
-      "file": "playbooks/eval.md"
-    },
-    "autonomous-run": {
-      "file": "playbooks/autonomous-run.md"
-    },
-    "orchestrate": {
-      "file": "playbooks/orchestrate.md"
-    },
-    "autopilot-full": {
-      "file": "playbooks/autopilot-full.md"
-    },
-    "autopilot-stack": {
-      "file": "playbooks/autopilot-stack.md"
-    },
-    "session-pickup": {
-      "file": "playbooks/session-pickup.md"
-    },
-    "pause-safely": {
-      "file": "playbooks/pause-safely.md"
-    },
-    "multi-phase-plan": {
-      "file": "playbooks/multi-phase-plan.md"
-    },
-    "worktree-cleanup": {
-      "file": "playbooks/worktree-cleanup.md"
-    },
-    "opening-a-pr": {
-      "file": "playbooks/opening-a-pr.md"
     }
   }
 }

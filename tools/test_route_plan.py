@@ -214,6 +214,76 @@ class Worklist(unittest.TestCase):
         self.assertEqual(run("nope").returncode, 2)
 
 
+class OneStep(unittest.TestCase):
+    def test_step_prints_that_step_and_no_other(self):
+        done = run("bug-fix", "--step", "2", "--route", "standard")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("2. **Root-caused.** One mechanism explains the symptom", done.stdout)
+        self.assertIn("rule them out until one survives", done.stdout)
+        self.assertNotIn("**Reproduced.**", done.stdout)
+        self.assertNotIn("**Repaired.**", done.stdout)
+
+    def test_step_keeps_indented_sub_items(self):
+        text = run("feature", "--step", "5").stdout
+        for label in ("Blocking first steps", "Independent workstreams", "Shared mutable state", "Smallest safe decomposition"):
+            self.assertIn(label, text)
+        self.assertNotIn("**Built.**", text)
+
+    def test_step_text_is_the_playbook_text(self):
+        source = (MODE / "playbooks/perf-issue.md").read_text(encoding="utf-8")
+        line = next(line for line in source.split("\n") if line.startswith("4. "))
+        self.assertIn(line, run("perf-issue", "--step", "4").stdout)
+
+    def test_lightweight_step_says_what_to_skip(self):
+        self.assertIn("Lightweight route: do this step's work yourself.", run("bug-fix", "--step", "3", "--route", "lightweight").stdout)
+        self.assertNotIn("Lightweight route", run("bug-fix", "--step", "3", "--route", "intensive").stdout)
+
+    def test_the_lightweight_banner_keeps_the_independent_scrutiny_step(self):
+        banner = run("feature", "--step", "7", "--route", "lightweight")
+        self.assertEqual(banner.returncode, 0, banner.stderr)
+        self.assertIn("the independent scrutiny the plan lists", banner.stdout)
+        self.assertNotIn("spawn a subagent", banner.stdout)
+
+    def test_a_route_banner_never_appears_on_a_fixed_playbook(self):
+        for name, step in (("hillclimb", "5"), ("research", "1"), ("babysit", "1")):
+            lightweight = run(name, "--step", step, "--route", "lightweight")
+            standard = run(name, "--step", step, "--route", "standard")
+            self.assertEqual((lightweight.returncode, standard.returncode), (0, 0), name)
+            self.assertNotIn("Lightweight route", lightweight.stdout, name)
+            self.assertNotIn("stay unloaded", standard.stdout, name)
+
+    def test_missing_step_and_unknown_playbook_are_usage_errors(self):
+        self.assertEqual(run("bug-fix", "--step", "9").returncode, 2)
+        self.assertEqual(run("nope", "--step", "1").returncode, 2)
+
+    def test_the_plan_names_the_step_command_with_its_route(self):
+        self.assertIn("`bug-fix --step <number> --route standard`", run("bug-fix", *facts(reach="material:x")).stdout)
+        self.assertIn("(steps 1, 2, 4)", run("feature", *LOW).stdout)
+        self.assertNotIn("--step", run("opening-a-pr").stdout)
+
+
+class BindingRegime(unittest.TestCase):
+    def test_outcome_first_playbooks_allow_another_route_but_keep_limits(self):
+        for text in (run("code-review").stdout, run("code-review", "--step", "10").stdout):
+            self.assertIn("Outcome-first playbook: each step's bold outcome and its defining sentence bind.", text)
+            self.assertIn("Every prohibition, authorization limit, and confidentiality rule in a step binds.", text)
+
+    def test_other_playbooks_are_followed_as_written(self):
+        for name in ("babysit", "visual-parity", "autonomous-run", "shipping"):
+            for text in (run(name).stdout,):
+                self.assertIn("Follow each step of this playbook as written.", text, name)
+                self.assertNotIn("default route", text, name)
+                self.assertIn("Every prohibition, authorization limit, and confidentiality rule", text, name)
+        self.assertIn("Follow each step of this playbook as written.", run("babysit", "--step", "1").stdout)
+
+    def test_every_outcome_first_step_opens_with_a_bold_outcome_and_a_sentence(self):
+        self.assertEqual(len(MANIFEST["outcome_first"]), 11)
+        for name in MANIFEST["outcome_first"]:
+            for line in (MODE / "playbooks" / f"{name}.md").read_text(encoding="utf-8").split("\n"):
+                if re.match(r"\d+\. ", line):
+                    self.assertRegex(line, r"^\d+\. \*\*[A-Z][^*`(]*\.\*\* \S", f"{name}: {line[:60]}")
+
+
 class GatesAndEndpoint(unittest.TestCase):
     def test_cleanup_runs_per_published_head_except_on_intensive(self):
         light = {gate["id"]: gate["when"] for gate in plan("feature", *LOW)["gates"]}
@@ -251,11 +321,22 @@ class GatesAndEndpoint(unittest.TestCase):
 
 
 class Manifest(unittest.TestCase):
-    def test_every_playbook_file_is_registered_once(self):
-        on_disk = sorted(path.stem for path in (MODE / "playbooks").glob("*.md"))
-        self.assertEqual(sorted(MANIFEST["playbooks"]), on_disk)
+    def test_manifest_lists_only_playbooks_that_exist_and_need_a_flag(self):
+        on_disk = {path.stem for path in (MODE / "playbooks").glob("*.md")}
+        self.assertLessEqual(set(MANIFEST["playbooks"]), on_disk)
         for name, entry in MANIFEST["playbooks"].items():
-            self.assertEqual(entry["file"], f"playbooks/{name}.md")
+            self.assertTrue(entry, f"{name} has no flag, so it needs no manifest entry")
+            self.assertNotIn("file", entry)
+
+    def test_a_playbook_without_a_manifest_entry_still_plans(self):
+        self.assertNotIn("babysit", MANIFEST["playbooks"])
+        self.assertEqual(plan("babysit")["route"], "standard")
+
+    def test_the_manifest_holds_no_outcome_text(self):
+        outcomes = [step["outcome"] for name in ("feature", "bug-fix") for step in plan(name, *facts(reach="material:x"))["steps"]]
+        raw = (MODE / "routes.json").read_text(encoding="utf-8")
+        for sentence in outcomes:
+            self.assertNotIn(sentence.split("** ", 1)[1][:40], raw)
 
     def test_every_named_skill_exists(self):
         named = set(MANIFEST["panels"]) | set(MANIFEST["lightweight_keeps"]) | {gate["skill"] for gate in MANIFEST["gates"] if gate.get("skill")}
@@ -288,7 +369,7 @@ class Manifest(unittest.TestCase):
     def test_tiered_playbooks_cite_routes_and_scrutiny(self):
         for name, entry in MANIFEST["playbooks"].items():
             if entry.get("tiered"):
-                text = (MODE / entry["file"]).read_text(encoding="utf-8")
+                text = (MODE / "playbooks" / f"{name}.md").read_text(encoding="utf-8")
                 self.assertIn("../references/routes.md", text, name)
                 self.assertIn("../references/review-lens.md#independent-scrutiny", text, name)
 
@@ -305,11 +386,16 @@ class Manifest(unittest.TestCase):
         listed = set()
         for doc in (MODE / "SKILL.md", MODE / "references/playbooks.md"):
             listed |= set(re.findall(r"`playbooks/([a-z-]+)\.md`", doc.read_text(encoding="utf-8")))
-        self.assertEqual(listed, set(MANIFEST["playbooks"]))
-        daily = {name for name, entry in MANIFEST["playbooks"].items() if entry.get("daily")} | {"opening-a-pr"}
-        entry_listed = set(re.findall(r"`playbooks/([a-z-]+)\.md`", (MODE / "SKILL.md").read_text(encoding="utf-8")))
-        self.assertEqual(entry_listed, daily)
+        self.assertEqual(listed, {path.stem for path in (MODE / "playbooks").glob("*.md")})
+        self.assertLess(len(re.findall(r"`playbooks/([a-z-]+)\.md`", (MODE / "SKILL.md").read_text(encoding="utf-8"))), len(listed))
 
+    def test_step_titles_name_outcomes_not_skills(self):
+        for name in ("feature", "bug-fix", "refactoring", "perf-issue"):
+            for line in (MODE / "playbooks" / f"{name}.md").read_text(encoding="utf-8").split("\n"):
+                title = re.match(r"\d+\. \*\*([^*]+)\*\*", line)
+                if title:
+                    self.assertNotIn("`", title.group(1), f"{name}: {title.group(1)}")
+                    self.assertNotIn("(", title.group(1), f"{name}: {title.group(1)}")
 
 if __name__ == "__main__":
     unittest.main()

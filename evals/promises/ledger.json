@@ -1044,7 +1044,7 @@
     },
     {
      "file": "skills/poteto-mode/references/task-triggers.md",
-     "quote": "Feature chooses compact execution from risk evidence, not module count."
+     "quote": "Feature chooses its route from risk evidence, not module count."
     }
    ],
    "harness_sensitive": true,
@@ -1444,7 +1444,7 @@
   },
   "feature-recovery-obligations": {
    "check": "live",
-   "claim": "Feature uses the full route for consequential recovery work, preserves conditional design comparison, and delivers a restart-safe implementation with independent scrutiny of the committed change.",
+   "claim": "Feature uses the standard or intensive route for consequential recovery work, preserves conditional design comparison, and delivers a restart-safe implementation with independent scrutiny of the committed change.",
    "harness_sensitive": true,
    "live_case": "Relay delivery journal on Codex. The grader checks the pinned CLI and uses authenticated native review and adjudication to close the Feature obligations.",
    "owners": [
@@ -1454,7 +1454,7 @@
   },
   "feature-risk-route-instructions": {
    "check": "static",
-   "claim": "Feature instructs an understood low-risk change to use a compact plan and direct implementation while retaining preservation, real-surface proof and independent scrutiny. Material uncertainty, consequential failures or contested design require the full route. These citations establish instructions only; route choice and retained obligations need separate runtime evidence.",
+   "claim": "Feature instructs an understood low-risk change to use the lightweight route's short plan and direct implementation while retaining preservation, real-surface proof and independent scrutiny. Material uncertainty, consequential failures or contested design require the full route. These citations establish instructions only; route choice and retained obligations need separate runtime evidence.",
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
@@ -1462,7 +1462,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "Use the compact route only when those facts support an understood, low-risk change. Material uncertainty, consequential failures, or contested design require the full route."
+     "quote": "Use the lightweight route only when those facts support an understood, low-risk change. Material uncertainty, consequential failures, or contested design require the standard or intensive route."
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
@@ -2411,7 +2411,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
-     "quote": "Stage the commits so the failing repro lands before the fix in git history."
+     "quote": "Git history shows the failing repro in a commit before the fix."
     }
    ],
    "harness_sensitive": false,
@@ -2979,7 +2979,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/references/task-triggers.md",
-     "quote": "Code that crosses two or more source files and admits several plausible shapes → call the Skill tool with `architect` for parallel design exploration before implementing. In Bug fix, Feature, Refactoring, and Perf issue this applies on the intensive route only. On their standard route, compare the shapes yourself in a table and raise the route when you cannot choose. Feature chooses compact execution from risk evidence, not module count. For a bug fix, skip architect when runtime evidence confirms the root cause and identifies one localized repair, even across a function boundary. Go straight to the failing reproducer, then repair it. Keep architect when design choices or repair scope remain unresolved."
+     "quote": "Code that crosses two or more source files and admits several plausible shapes → call the Skill tool with `architect` for parallel design exploration before implementing. In Bug fix, Feature, Refactoring, and Perf issue this applies on the intensive route only. On their standard route, compare the shapes yourself in a table and raise the route when you cannot choose. Feature chooses its route from risk evidence, not module count. For a bug fix, skip architect when runtime evidence confirms the root cause and identifies one localized repair, even across a function boundary. Go straight to the failing reproducer, then repair it. Keep architect when design choices or repair scope remain unresolved."
     },
     {
      "file": "skills/poteto-mode/playbooks/bug-fix.md",
@@ -3162,7 +3162,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/playbooks/prototype.md",
-     "quote": "Build throwaway in an isolated scratch dir, separate from production source."
+     "quote": "The variants exist in an isolated scratch directory, separate from production source."
     },
     {
      "file": "skills/poteto-mode/playbooks/prototype.md",
@@ -5272,19 +5272,6 @@
    ],
    "text": "[Separate Before Serializing Shared State](../../skills/principle-separate-before-serializing-shared-state/SKILL.md) removes the sharing before adding coordination."
   },
-  "177ea31b6daa": {
-   "also": [
-    "architect-runs-arena-for-sketches",
-    "design-ladder-spares-small-changes"
-   ],
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
-   "sources": [
-    "port"
-   ],
-   "text": "In Bug fix, Feature, Refactoring, and Perf issue, `/architect` runs on the intensive route only. A change that crosses two or more source files and admits several plausible shapes earns `/architect`, which brings `/arena` with it. On the standard route the lead compares the shapes itself. Every other playbook keeps `/architect` as written. Feature chooses compact execution from risk evidence, not module count. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary."
-  },
   "1805bb3a16b0": {
    "class": "promise",
    "file": "05-build-and-clean.md",
@@ -5294,18 +5281,6 @@
     "port"
    ],
    "text": "```text\n/poteto-mode move parsing into one module, zero behavior change. record the current output first and prove it's unchanged after.\n```"
-  },
-  "181b3f032f44": {
-   "also": [
-    "feature-recovery-obligations"
-   ],
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "feature-risk-route-instructions",
-   "sources": [
-    "port"
-   ],
-   "text": "For understood, low-risk work, [Feature](../../skills/poteto-mode/playbooks/feature.md) uses a compact plan and direct implementation while retaining preservation, verification, and independent scrutiny."
   },
   "1841b9684cfc": {
    "class": "promise",
@@ -6153,7 +6128,7 @@
    "class": "substituted",
    "file": "01-setup.md",
    "ported_as": [
-    "7e40a2a913e2"
+    "c357d0814dff"
    ],
    "promise": "skipped-step-stays-in-worklist",
    "sources": [
@@ -6191,7 +6166,7 @@
    "class": "substituted",
    "file": "04-design.md",
    "ported_as": [
-    "177ea31b6daa"
+    "83a892e198bc"
    ],
    "sources": [
     "upstream"
@@ -9221,15 +9196,6 @@
    ],
    "text": "That's the price of the rigor."
   },
-  "7e40a2a913e2": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "skipped-step-stays-in-worklist",
-   "sources": [
-    "port"
-   ],
-   "text": "The [Feature playbook](../../skills/poteto-mode/playbooks/feature.md) defines the compact and full routes and how each records omitted work."
-  },
   "7e4232cd580b": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -9442,6 +9408,19 @@
     "port"
    ],
    "text": "[Minimize Reader Load](../../skills/principle-minimize-reader-load/SKILL.md) collapses layers and hidden state a reader must hold in their head."
+  },
+  "83a892e198bc": {
+   "also": [
+    "architect-runs-arena-for-sketches",
+    "design-ladder-spares-small-changes"
+   ],
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "poteto-mode-triggers-architect-on-boundary-crossing",
+   "sources": [
+    "port"
+   ],
+   "text": "In Bug fix, Feature, Refactoring, and Perf issue, `/architect` runs on the intensive route only. A change that crosses two or more source files and admits several plausible shapes earns `/architect`, which brings `/arena` with it. On the standard route the lead compares the shapes itself. Every other playbook keeps `/architect` as written. Feature chooses its route from risk evidence, not module count. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary."
   },
   "8453603b45b4": {
    "class": "promise",
@@ -10560,15 +10539,6 @@
     "port"
    ],
    "text": "Each of these routes to its playbook ([Bug fix](../../skills/poteto-mode/playbooks/bug-fix.md), [Feature](../../skills/poteto-mode/playbooks/feature.md), [Refactoring](../../skills/poteto-mode/playbooks/refactoring.md), [Perf issue](../../skills/poteto-mode/playbooks/perf-issue.md)), and the playbook supplies the steps you didn't type: reproduce before fixing, name the data shape before implementing, pin behavior before restructuring, profile before optimizing."
-  },
-  "a544f132a172": {
-   "class": "promise",
-   "file": "05-build-and-clean.md",
-   "promise": "feature-risk-route-instructions",
-   "sources": [
-    "port"
-   ],
-   "text": "Material uncertainty or consequential changes use the full route, even for a tiny diff."
   },
   "a57f2f03f455": {
    "also": [
@@ -11853,6 +11823,15 @@
    ],
    "text": "Start your prompts to the coordinator with `/poteto-mode`, and the subagents it spawns follow the playbooks."
   },
+  "c357d0814dff": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "skipped-step-stays-in-worklist",
+   "sources": [
+    "port"
+   ],
+   "text": "The [Feature playbook](../../skills/poteto-mode/playbooks/feature.md) defines what each route keeps and how it records omitted work."
+  },
   "c374ce62b8ae": {
    "class": "promise",
    "file": "10-recipes-and-pitfalls.md",
@@ -13018,6 +12997,18 @@
    ],
    "text": "The coordinator doesn't write code."
   },
+  "e1fed99b4f2d": {
+   "also": [
+    "feature-recovery-obligations"
+   ],
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "feature-risk-route-instructions",
+   "sources": [
+    "port"
+   ],
+   "text": "For understood, low-risk work, [Feature](../../skills/poteto-mode/playbooks/feature.md) uses the lightweight route: a short plan and direct implementation that keep preservation, verification, and independent scrutiny."
+  },
   "e2140cf33f68": {
    "class": "context",
    "file": "07-overnight.md",
@@ -14177,6 +14168,15 @@
     "port"
    ],
    "text": "```text\n/no-comments the diff\n```"
+  },
+  "ffdd47fee359": {
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "feature-risk-route-instructions",
+   "sources": [
+    "port"
+   ],
+   "text": "Material uncertainty or consequential changes use the standard or intensive route, even for a tiny diff."
   }
  }
 }
