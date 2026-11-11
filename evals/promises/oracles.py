@@ -3608,6 +3608,8 @@ def architect_arena(view):
     if len(runners) < 2:
         if len(runners) + len(sealed) >= 2:
             return inconclusive("sealed briefs hide which spawns were the runners; two sketches cannot be ruled out", *evidence)
+        if not runners and affirmed(r"same-model, comparison skipped", view.final_reply.lower()):
+            return inconclusive("the reply reports a same-model comparison skip, so no sketch fan-out was due", *evidence)
         return inconclusive("run killed before the sketch fan-out", *evidence) if view.killed else failed("fewer than two runner sketches", *evidence)
     if len(wave) < 2:
         return failed("runners spawned sequentially", *evidence)

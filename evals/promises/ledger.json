@@ -40,7 +40,7 @@
   },
   "architect-runs-arena-for-sketches": {
    "check": "live",
-   "claim": "/architect runs arena to produce competing design sketches with the caller's usage written first, then types, signatures, and a module map.",
+   "claim": "/architect runs arena to produce competing design sketches with the caller's usage written first, then types, signatures, and a module map, unless the resolver marks the comparison a same-model `skip`, when the lead sketches the candidates itself.",
    "harness_sensitive": true,
    "live_case": "tally fixture; prompts `/architect design the import pipeline before writing any code.` and `/architect with checkpoint. stop and show me before implementing.`; pass when how runs first, arena produces sketches with caller usage first, the default run proceeds to code, and the checkpoint run pauses.",
    "owners": [
@@ -2841,13 +2841,14 @@
   },
   "panel-list-sets-arm-count": {
    "check": "script",
-   "claim": "A panel role's list value resolves to one arm per entry, and the panel skill spawns one subagent per arm.",
+   "claim": "A panel role's list value resolves to one arm per entry, and the panel skill spawns one subagent per arm, except an arena or architect design comparison the resolver marks a same-model `skip`.",
    "harness_sensitive": true,
    "owners": [
     "skills/setup-pstack/scripts/check-models-config.py",
     "skills/pstack-harness/SKILL.md",
     "skills/arena/SKILL.md",
-    "skills/interrogate/SKILL.md"
+    "skills/interrogate/SKILL.md",
+    "skills/pstack-harness/references/roles.md"
    ]
   },
   "pause-safely-checkpoints-and-resume-note": {
@@ -3561,6 +3562,17 @@
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/SKILL.md"
+   ]
+  },
+  "same-model-design-comparison-skipped": {
+   "check": "script",
+   "claim": "When every runner arm and every cross-judge arm of an arena or architect design comparison resolves to the lead's own model, at any effort, the resolver marks the comparison `skip` and the lead designs once and says so. A user request for the comparison itself still runs the panel, and delegation that protects the lead's context and required reviews are unaffected.",
+   "harness_sensitive": false,
+   "owners": [
+    "skills/setup-pstack/scripts/check-models-config.py",
+    "skills/pstack-harness/references/roles.md",
+    "skills/arena/SKILL.md",
+    "skills/architect/SKILL.md"
    ]
   },
   "session-override-keeps-going": {
@@ -7994,6 +8006,15 @@
    ],
    "text": "The coordinator reads each candidate end to end, picks a base, grafts in the best ideas from the losers, and verifies the result."
   },
+  "5c8fe99dad27": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "When a playbook or `/architect` calls for the comparison and every runner and judge would run on the coordinator's own model, at any reasoning effort, the coordinator skips the comparison, designs once, and says so."
+  },
   "5d23421b119e": {
    "class": "context",
    "file": "03-understand.md",
@@ -10934,6 +10955,15 @@
     "port"
    ],
    "text": "Prompt plainly, watch where agents fail, and add a skill or a check when the same failure shows up twice."
+  },
+  "a9d8fa2c2b61": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "Ask for `/arena` or for candidates yourself and the panel still runs."
   },
   "a9e537532361": {
    "class": "cursor-only",
