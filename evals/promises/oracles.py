@@ -4526,7 +4526,7 @@ REPLY_DIFF_COMMAND = re.compile(r"\bgit\s+(?:diff|log|show|range-diff)\b")
 
 def plan_invocation(argv):
     """(playbook, step) when argv runs the plan script, else None. Every flag but --json takes a value."""
-    at = next((i for i, word in enumerate(argv) if word.endswith("poteto-mode/scripts/plan.py")), None)
+    at = next((i for i, word in enumerate(argv) if os.path.basename(word) == "plan.py"), None)
     if at is None:
         return None
     playbook, step, words = None, None, iter(argv[at + 1:])
@@ -4714,10 +4714,11 @@ def worklist_follows_plan(view):
     compact = manifest["playbooks"].get(playbook, {}).get("lightweight_worklist") if route == "lightweight" else None
     names = [item["item"] for item in compact] if compact else [f"step {step['n']}" for step in shape["steps"]]
     after = [snap for snap in view.worklist if (snap.get("seq") or 0) > routed[0]["returned"]]
-    follows = any(plan_items_in(snap.get("items") or [], names) if compact else not steps_in_order(snap.get("items") or [], shape, 0)[1]
-                  for snap in after)
+    first = next((i for i, snap in enumerate(after)
+                  if (plan_items_in(snap.get("items") or [], names) if compact else not steps_in_order(snap.get("items") or [], shape, 0)[1])), None)
+    follows = first is not None
     states = {}
-    for snap in after:
+    for snap in after[first or 0:]:
         for item in snap.get("items") or []:
             states.setdefault(title(item), set()).add(item.get("state") or "pending")
     moved = sorted(name for name, seen in states.items() if len(seen) > 1)
@@ -4731,7 +4732,8 @@ def worklist_follows_plan(view):
         if not after:
             return failed("the finished run has no worklist snapshot after the routed plan returned", *evidence)
         if not moved:
-            return failed("no worklist item changed state after the routed plan returned", *evidence)
+            return failed("no item changed state once the worklist followed the plan" if follows
+                          else "no worklist item changed state after the routed plan returned", *evidence)
     if after and moved:
         return inconclusive("a worklist is kept, but its items do not match the plan's items by name; a reader decides whether it paraphrases them",
                             *evidence)
@@ -4759,7 +4761,7 @@ def default_endpoint_local_branch(view):
     dirty = [line for tree in view.worktrees() or [view.project]
              for line in (view.git_in(tree, "status", "--porcelain", "--", *paths) or "").splitlines()]
     delivered = [branch for branch in carrying if branch not in TRUNK_BRANCHES]
-    named = [branch for branch in delivered if branch in view.final_reply]
+    named = [branch for branch in delivered if re.search(rf"(?<![\w/-]){re.escape(branch)}(?![\w/-])", view.final_reply)]
     evidence = [f"branches with commits after the baseline: {new_commits}", f"branches whose commits change {paths}: {carrying}",
                 f"uncommitted changes in those paths: {dirty}", f"delivering branches named in the reply: {named}"]
     measures = {"reply_has_diff_command": bool(REPLY_DIFF_COMMAND.search(view.final_reply))}

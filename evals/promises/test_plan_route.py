@@ -147,6 +147,11 @@ class LeadPrintsPlan(unittest.TestCase):
                 events = bash(plan_seq, f"{RUN} {LOW} > /tmp/plan.txt", head="") + [edit(write_seq, SOURCE)]
                 self.assertEqual(grade(self.PID, trace(events), CASE)["verdict"], expected)
 
+    def test_a_plan_run_by_relative_path_from_the_skill_directory_counts(self):
+        relative = f"cd .claude/skills/poteto-mode && python3 scripts/plan.py feature --harness claude-code {LOW}"
+        events = bash(1, relative, head=plan_head("lightweight")) + [edit(4, SOURCE)]
+        self.assertEqual(grade(self.PID, trace(events), CASE)["verdict"], PASS)
+
 
 class PlanStepLoads(unittest.TestCase):
     PID = "plan-step-loads-arrive-with-step"
@@ -208,7 +213,18 @@ class WorklistFollowsPlan(unittest.TestCase):
     def test_a_worklist_that_is_never_updated_fails(self):
         idle = [snapshot(5, ["pending"] * 5), snapshot(9, ["pending"] * 5)]
         result = grade(self.PID, trace(good_events(), idle), CASE)
-        self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["no worklist item changed state after the routed plan returned"]))
+        self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["no item changed state once the worklist followed the plan"]))
+        names = ("Set up", "Write the flag", "Check output", "Commit", "Report")
+        other = [snapshot(5, ["pending"] * 5, names), snapshot(9, ["pending"] * 5, names)]
+        self.assertEqual(grade(self.PID, trace(good_events(), other), CASE)["failures"],
+                         ["no worklist item changed state after the routed plan returned"])
+
+    def test_a_state_change_before_the_plan_worklist_appears_does_not_keep_it(self):
+        names = ("Set up environment",)
+        earlier = [snapshot(5, ["pending"], names), snapshot(7, ["completed"], names)]
+        idle = [snapshot(9, ["pending"] * 5), snapshot(11, ["pending"] * 5)]
+        result = grade(self.PID, trace(good_events(), earlier + idle), CASE)
+        self.assertEqual((result["verdict"], result["failures"]), (FAIL, ["no item changed state once the worklist followed the plan"]))
 
     def test_a_kept_worklist_with_other_item_names_needs_a_reader(self):
         names = ("Set up", "Write the flag", "Check output", "Commit", "Report")
@@ -271,6 +287,15 @@ class DefaultEndpoint(unittest.TestCase):
             git_in(project, "checkout", "-qb", "feat/json-flag")
             result = self.grade(project, reply="Added the flag and committed it.")
             self.assertEqual(result["failures"], ["the final reply names none of the delivering branches ['feat/json-flag']"])
+
+    def test_a_branch_name_inside_another_word_of_the_reply_does_not_name_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = self.repo(tmp)
+            git_in(project, "checkout", "-qb", "json")
+            self.change(project)
+            self.assertEqual(self.grade(project, reply="Added --json output.")["failures"],
+                             ["the final reply names none of the delivering branches ['json']"])
+            self.assertEqual(self.grade(project, reply="Committed on branch `json`.")["verdict"], PASS)
 
     def test_a_branch_with_leftover_edits_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
