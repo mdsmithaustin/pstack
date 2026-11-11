@@ -8,7 +8,7 @@ Keep the existing execution tools. Use skill-ci for portable lint and dispatch, 
 
 The ledger assigns 137 promises to static checks, 18 to script checks, 10 to installation checks, and 113 to live cases. Static and script checks already avoid model calls. Installation checks need native tools but no paid answer. Live promise counts are claims, not independent tasks or required calls.
 
-The four maintained manifests contain 54 cases: 26 answer cases and 28 trigger cases. Trigger and answer populations remain separate. All are public development material. They do not become held-out evidence by changing the split label.
+The four maintained manifests contain 57 cases: 29 answer cases and 28 trigger cases. Trigger and answer populations remain separate. All are public development material. They do not become held-out evidence by changing the split label.
 
 | Family | Cheapest reliable owner | Decision and disposition |
 | --- | --- | --- |
@@ -55,6 +55,9 @@ The table below inventories every maintained answer case. Trigger rows are count
 | `spec-probes/pos-new-field-unrequested-rejection` | judge | skill_invoked | Fresh behavior; calibrated semantic review |
 | `spec-probes/pos-extension-keeps-accepted-input` | judge | skill_invoked | Fresh behavior; calibrated semantic review |
 | `spec-probes/pos-look-alike-terms` | judge | skill_invoked | Fresh behavior; calibrated semantic review |
+| `spec-probes/pos-unit-cardinality` | judge | skill_invoked | Fresh behavior; calibrated semantic review |
+| `spec-probes/pos-example-output-exact` | judge | skill_invoked | Fresh behavior; calibrated semantic review |
+| `spec-probes/pos-fixed-spec-quoted-criteria` | judge | skill_invoked | Fresh behavior; calibrated semantic review |
 | `spec-probes/neg-deployed-incident-restraint` | judge | skill_invoked | Fresh behavior; calibrated semantic review |
 | `unslop/readme-paragraph-tells` | judge, script | skill_invoked | Fresh behavior; calibrated semantic review |
 | `unslop/docs-section-protected-constructs` | script | skill_invoked | Fresh behavior; executable grading |

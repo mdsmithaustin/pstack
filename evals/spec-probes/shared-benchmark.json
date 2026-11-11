@@ -564,6 +564,174 @@
       "tags": ["population:headline-behavior", "source-grounding", "look-alike-terms"]
     },
     {
+      "id": "pos-unit-cardinality",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "capability",
+      "domain": "requirements",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "We're about to build the import command that pantry-spec.md describes. Write the acceptance tests it should pass before implementation starts. A test name plus a line on its input and expected result is enough for each.",
+      "files": ["fixtures/pantry-spec.md"],
+      "expected_behavior": [
+        "Numbers a skipped crate by its line in the delivery sheet, header counted, so the first crate is `line 2`, as PN-603's \"line number in the delivery sheet\" says.",
+        "Gives a crate with both faults one report line that holds both reasons, and counts it once in `skipped`, as PN-603's \"For each skipped crate the report has one line\" says.",
+        "Counts crates, not `units`, in `shelved`, as PN-604 says, with a shelved crate whose `units` is above 1.",
+        "Treats the example, which has one crate of one unit and no skipped crate, as passing under every reading, so it settles none of the three."
+      ],
+      "assertions": [
+        {
+          "name": "units-settled-by-spec-wording",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "unit-settled-by-spec-noun",
+              "scale": "1-5",
+              "rubric": "5 = Three tests have expected results that differ between the plausible units, each with the unit the spec's wording names. (a) A skipped crate is reported with its line number in the sheet, header counted, so the first crate is `line 2`. (b) One crate with both faults gives one report line that holds both reasons and adds 1 to `skipped`. (c) A shelved crate whose `units` is above 1 adds 1 to `shelved`. 4 = Two of the three are present with the right expected result, and no test expects the other unit. 3 = One of the three is present with the right expected result, and no test expects the other unit. Or the inputs are present but a test leaves the line number or count unstated. 2 = No test can tell the units apart: every line number or count a test states would be the same under both readings. Or the answer leaves open a unit that the spec's wording settles (PN-603's \"line number in the delivery sheet\" and \"For each skipped crate the report has one line\", PN-604's \"count crates\"). 1 = A test expects the other unit: `line 1` for the first crate, two report lines or `skipped: 2` for one crate with two faults, or a `shelved` figure that sums `units`."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "source-grounding", "unit-cardinality"]
+    },
+    {
+      "id": "pos-example-output-exact",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "capability",
+      "domain": "requirements",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "We're about to build the trails command that trail-spec.md describes. Write the acceptance tests it should pass before implementation starts. A test name plus a line on its input and expected result is enough for each.",
+      "files": ["fixtures/trail-spec.md"],
+      "expected_behavior": [
+        "Turns both examples into tests whose expected output is the example's lines verbatim, compared as whole text.",
+        "Expects `km` in every output line, the spelling every example shows, though TR-702 also allows `kilometres`. No test accepts either spelling or compares through a parser, pattern, or normalizer.",
+        "Expects no rejection for an input because it differs from the example inputs, such as metres that are not whole, zero, or negative, a one-word name, or a name added twice. These are accepted where the spec gives a result, or left open."
+      ],
+      "assertions": [
+        {
+          "name": "example-output-compared-exactly",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "example-output-exact",
+              "scale": "1-5",
+              "rubric": "5 = Both examples are tests whose expected output is the example's lines verbatim, compared as whole text. Every other expected output line the tests write uses the examples' form: name, colon, one space, one decimal place, a space, `km`. The answer may note that TR-702 also allows `kilometres`. It still expects `km`. 4 = Both examples are verbatim tests, but another test states its expected output loosely: a pattern, either spelling, or \"ends with a unit\". 3 = The example tests compare through a loosened check: a parsed number, a regular expression, either spelling accepted, ignored whitespace, or \"contains\". Or the choice between `km` and `kilometres` is left as an open question and no test fixes the examples' text. 2 = Only one example is tested, or the examples are paraphrased instead of reproduced. 1 = A test expects `kilometres` or another form no example shows, or no example is tested."
+            }
+          ]
+        },
+        {
+          "name": "example-inputs-restrict-nothing",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "example-inputs-unrestricted",
+              "scale": "1-5",
+              "rubric": "5 = No test expects a rejection or error for an input because it differs from the example inputs: metres that are not whole, zero, or negative, a one-word or unquoted name, a name that holds a colon, or a name added twice. Each such input is absent, or expected accepted where TR-701 to TR-703 give its result, or listed as open with no test. A rejection of a `<metres>` that is not a number is not counted either way. 4 = As 5, but one such input gets a test for an accepted result the spec does not give, labeled as an assumption. 3 = One test expects a rejection the spec does not state, labeled as an assumption or a proposal. 2 = One test expects such a rejection with no label. 1 = Two or more tests expect such rejections, or a test contradicts an example."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "source-grounding", "example-values"]
+    },
+    {
+      "id": "pos-fixed-spec-quoted-criteria",
+      "split": "tune",
+      "kind": "adversarial",
+      "eval_intent": "capability",
+      "domain": "requirements",
+      "difficulty": "extended",
+      "trigger_type": "implicit",
+      "success_goals": ["outcome", "process"],
+      "prompt": "Another team owns locker-spec.md and we can't change it. We're implementing the pickup endpoint it describes. Write the acceptance tests the implementation must pass. A test name plus a line on its input and expected result is enough for each.",
+      "files": ["fixtures/locker-spec.md"],
+      "expected_behavior": [
+        "Ties every test to the spec sentence or example that gives its expected result.",
+        "Writes no test for an answer the spec does not give: the response for an unknown or empty locker, a `pin` sent as a JSON number, whether a 422 counts toward LK-403's three wrong pins, the status once a parcel has been returned, and the exact 72-hour instant. Lists these apart as assumptions or open gaps, and says the implementation takes the permissive behavior.",
+        "Pairs LK-402's rejection with accepted pins at both bounds and with a leading-zero pin such as the example's `0417`, and pairs LK-403's lockout with a right pin after two wrong ones."
+      ],
+      "assertions": [
+        {
+          "name": "only-quoted-criteria-tested",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "only-stated-results-tested",
+              "scale": "1-5",
+              "rubric": "5 = Every test's expected result is given by a spec sentence or the example, which the test names or quotes. Each answer the spec does not give is kept out of the tests and listed apart as an assumption or open gap, with at least three of these five: an unknown or empty locker, a `pin` sent as a JSON number, whether a 422 counts toward LK-403's three wrong pins, the status once a parcel has been returned, the exact 72-hour instant. For at least one, the answer says the implementation takes the permissive or least restrictive behavior and that no test asserts it. 4 = No test asserts an answer the spec does not give, and such answers are listed apart, but the answer does not say what the implementation does about them, or it lists fewer than three. 3 = One or two tests assert an answer the spec does not give. A test labeled as an assumption, a proposal, or \"to confirm\" counts. 2 = Three or more tests assert such answers. 1 = A test contradicts a stated rule, or most tests decide unstated answers with no label."
+            }
+          ]
+        },
+        {
+          "name": "named-rejections-paired",
+          "type": "judge",
+          "severity": "gate",
+          "threshold": 4,
+          "graded_dimensions": [
+            {
+              "name": "rejections-paired",
+              "scale": "1-5",
+              "rubric": "5 = LK-402's rejection is tested on both sides of each bound: three and seven digits return 422, and four and six digits do not. A pin with a leading zero, such as the example's `0417`, is expected accepted as written. LK-403's lockout has its accepted neighbor too: after two wrong pins the right pin still returns 200. 4 = Both bounds are paired and the leading-zero pin is accepted, but the lockout has no accepted neighbor. 3 = The rejections are tested with one accepted neighbor only, such as the example alone. 2 = The rejections are tested with no accepted pin beside them. 1 = A test rejects a valid pin, such as one with a leading zero, or LK-402's rejection is not tested."
+            }
+          ]
+        },
+        {
+          "name": "with-skill-loaded",
+          "type": "skill_invoked",
+          "expected": true,
+          "variants": ["with_skill"],
+          "severity": "gate"
+        },
+        {
+          "name": "without-skill-clean",
+          "type": "skill_invoked",
+          "expected": false,
+          "variants": ["without_skill"],
+          "severity": "gate"
+        }
+      ],
+      "tags": ["population:headline-behavior", "source-grounding", "fixed-spec", "rejection-pair"]
+    },
+    {
       "id": "neg-deployed-incident-restraint",
       "split": "tune",
       "kind": "adversarial",

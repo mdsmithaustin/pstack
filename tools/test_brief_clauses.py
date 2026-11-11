@@ -17,6 +17,7 @@ class BriefClauses(unittest.TestCase):
         code, text = clauses("--source", "/work/task.md", "--start-commit", "abc123", "--branch", "feat/x")
         self.assertEqual(code, 0)
         self.assertIn("Read the original task in full before any work: /work/task.md.", text)
+        self.assertIn("Before you build, report any rule or test you cannot trace to the source.", text)
         self.assertIn("This run is attended.", text)
         self.assertIn("Commit on branch feat/x, off trunk", text)
         self.assertIn("credential files such as `.env`", text)
