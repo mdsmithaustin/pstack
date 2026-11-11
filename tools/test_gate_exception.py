@@ -67,6 +67,24 @@ outcome: passed-with-override
         done = check(RUN.format(record='ci_override_reason: "operator approved"\n', outcome="passed-with-override"))
         self.assertEqual(done.returncode, 0, done.stdout)
 
+    def test_exception_words_in_another_field_value_are_not_a_record(self):
+        for value in (
+            "  branch: fix/test-exception\n",
+            "current_branch: fix/test-override\n",
+            "  summary: The Test exception path was exercised.\n",
+            '  findings[1]{id,severity,file,action,description}:\n    review-1,warning,a.py,ask-user,"keys on a `test_override_reason:` line"\n',
+        ):
+            with self.subTest(value=value):
+                done = check(RUN.format(record=value, outcome="passed"))
+                self.assertEqual(done.returncode, 0, done.stdout)
+
+    def test_a_help_line_that_repeats_a_parsed_exception_keeps_its_verdict(self):
+        repeat = 'help[1]: "Report the approved Test exception, not a clean Test pass: Test exception approved: {reason}"\n'
+        for record, reason, code in ((REASONED, "The operator approved the pending live scenario.", 3), (UNAPPROVED, "no operator reason supplied", 1)):
+            with self.subTest(code=code):
+                done = check(RUN.format(record=record, outcome="checks-passed") + repeat.format(reason=reason))
+                self.assertEqual(done.returncode, code, done.stdout)
+
     def test_a_run_with_no_exception_passes(self):
         done = check(RUN.format(record="", outcome="passed"))
         self.assertEqual((done.returncode, done.stdout.strip()), (0, "PASS: no Test exception is recorded."))

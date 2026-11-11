@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 RECORD = re.compile(r"^[ \t]*test_override_reason:[ \t]*(\S[^\r\n]*)$", re.M)
-TEST_EXCEPTION = re.compile(r"\btest[\s_-]+(?:override|exception)", re.I)
+TEST_EXCEPTION = re.compile(r"^[ \t]*[\w -]*\btest[ _-]+(?:override|exception)[\w -]*:", re.I | re.M)
 RUN_FIELD = re.compile(r"^\s*(?:head_sha|status):\s*\S", re.M)
 GATE_ERROR = re.compile(r"^error:", re.M)
 NO_REASON = "no operator reason supplied"
