@@ -3568,7 +3568,7 @@
   },
   "same-model-design-comparison-skipped": {
    "check": "script",
-   "claim": "When the resolver marks an arena or architect design comparison `skip`, the lead spawns no runner and no judge, produces the artifact itself, and says so. The resolver marks it when every runner arm and every cross-judge arm inherits the lead's model or resolves to the model passed as `--lead-model`, at any effort. A panel that mixes a named model with inheriting arms and is resolved without `--lead-model` is not marked and runs as configured. A user request for the comparison itself still runs the panel. An arena run that reviews finished work still runs every arm, labeled `same-model`, and delegation that protects the lead's context and required reviews are unaffected.",
+   "claim": "When the resolver marks an arena or architect design comparison `skip`, the lead spawns no runner and no judge, produces the artifact itself, and says so. The resolver marks it when every runner arm and every cross-judge arm inherits the lead's model or resolves to the model passed as `--lead-model`, at any effort. A panel that mixes a named model with inheriting arms and is resolved without `--lead-model` is not marked and runs as configured. A user request for the comparison itself still runs the panel. An arena run that reviews finished work still runs every arm on a marked row, labeled `same-model`, and delegation that protects the lead's context and required reviews are unaffected.",
    "harness_sensitive": true,
    "owners": [
     "skills/setup-pstack/scripts/check-models-config.py",
@@ -5522,6 +5522,15 @@
     "port"
    ],
    "text": "The PM or designer who owns the behavior needs to see it in their terms."
+  },
+  "18f5168bd28d": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "A review that runs through `/arena`, such as `/blast-radius` on a wide change, always runs its arms, and is labeled `same-model` when the resolver marks them as the coordinator's own model."
   },
   "19069e6c9e15": {
    "class": "context",
@@ -10017,15 +10026,6 @@
     "port"
    ],
    "text": "Setup preserves existing user-managed agent files and reports payload readiness, native files, and live agent loading separately."
-  },
-  "8f13d28eabbf": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "same-model-design-comparison-skipped",
-   "sources": [
-    "port"
-   ],
-   "text": "A review that runs through `/arena`, such as `/blast-radius` on a wide change, always runs its arms and is labeled `same-model`."
   },
   "8f70771d8309": {
    "class": "context",
