@@ -4563,7 +4563,7 @@ def plan_calls(view, playbook):
 
 
 def routed_plans(view, playbook):
-    return [call for call in plan_calls(view, playbook) if call["prints_plan"] and call["ok"] is not False
+    return [call for call in plan_calls(view, playbook) if call["prints_plan"]
             and call["returned"] is not None and call["route"] not in (None, "pending")]
 
 

@@ -147,6 +147,10 @@ class LeadPrintsPlan(unittest.TestCase):
                 events = bash(plan_seq, f"{RUN} {LOW} > /tmp/plan.txt", head="") + [edit(write_seq, SOURCE)]
                 self.assertEqual(grade(self.PID, trace(events), CASE)["verdict"], expected)
 
+    def test_a_routed_plan_counts_when_a_later_command_in_the_same_call_fails(self):
+        events = bash(1, f"{RUN} {LOW}; git checkout -b feat/json-flag", ok=False, head=plan_head("lightweight")) + [edit(4, SOURCE)]
+        self.assertEqual(grade(self.PID, trace(events), CASE)["verdict"], PASS)
+
     def test_a_plan_run_by_relative_path_from_the_skill_directory_counts(self):
         relative = f"cd .claude/skills/poteto-mode && python3 scripts/plan.py feature --harness claude-code {LOW}"
         events = bash(1, relative, head=plan_head("lightweight")) + [edit(4, SOURCE)]
