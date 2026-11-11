@@ -146,7 +146,7 @@ new subjects or confirmation calls.
   | --- | --- | --- |
   | "Call the Skill tool with `x`" at every sibling load | A lead skipped a named sibling skill under softer wording. | Claude Code lead, 2026-11-01, per [the phrasing study](docs/skill-cross-reference-phrasing.md). |
   | "Start every task a playbook matches with that worklist" | Leads kept no worklist in the structured tool. | Claude Sonnet 5 and gpt-6-sol, 2026-10, per the worklist screen above. |
-  | `plan.py` states "This output is not the worklist" | An earlier generated checklist block was read as the worklist itself. The one 2026-11-11 run that printed this wording opened no worklist, per the plan-route record. | Claude and Codex, 2026-10, per the not-adopted list above. |
+  | `plan.py` states "This output is not the worklist" | An earlier generated checklist block was read as the worklist itself. The one 2026-11-11 run that printed this wording opened no worklist, per the [plan-route record](evals/promises/results/2026-11-11-floor-lead-plan-route.md). | Claude and Codex, 2026-10, per the not-adopted list above. |
 
 ## Harvested instruction rules
 

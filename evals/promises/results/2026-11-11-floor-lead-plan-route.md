@@ -78,12 +78,13 @@ This branch changes no skill text. These are proposals for separate changes, eac
 
 ## Oracle changes after this run
 
-Review of this change tightened five verdict rules after the run. None came from reading these traces.
+Review of this change altered six verdict rules after the run. None came from reading these traces.
 
-- A plan call with no route line that returned before the first project write grades INCONCLUSIVE for the plan promise.
+- A plan call with no recorded failure and no route line, which returned before the first project write, grades INCONCLUSIVE for the plan promise.
+- A call that prints the plan more than once and shows only a pending route in its output head grades INCONCLUSIVE for the plan promise.
 - A plan script run by a relative path is a plan call.
 - A routed plan counts when a later command in the same shell call fails. The route line must sit in the output block for the case's playbook.
-- Worklist state changes count from the first snapshot that follows the plan.
+- Worklist state changes count from the first snapshot whose items match the plan's.
 - The reply must name the delivering branch as a word of its own.
 
-The three runs were not regraded. A read of the saved traces shows that no run has a changed shape. `tally-4mufg78h` and `tally-cwex8hti` hold no plan call and no worklist snapshot. In `tally-v_6uk6dp` the routed plan ran alone by its full path, its recorded output head opens with the `playbook: feature` line and the lightweight route, and the reply names `json-flag` in backticks. No trace holds a worklist snapshot.
+The three runs were not regraded. A read of the saved traces shows that no run has a changed shape. `tally-4mufg78h` and `tally-cwex8hti` hold no plan call and no worklist snapshot. In `tally-v_6uk6dp` the routed plan ran alone by its full path, its recorded output head opens with the `playbook: feature` line and the lightweight route, and the reply names `json-flag` in backticks. No trace holds a worklist snapshot. The traces are outside the repository, so a reader cannot check this from it.
