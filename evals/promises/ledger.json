@@ -2623,7 +2623,7 @@
   },
   "opening-a-pr-gated-unattended-continues-review-coverage": {
    "check": "static",
-   "claim": "In an unattended run, the agent answers a Review gate that parked only for incomplete coverage with the coverage continuation, without `--yes`, and reports the run as blocked only when Review stays gated on the same head afterwards.",
+   "claim": "In an unattended run, the agent answers a Review gate that parked only for incomplete coverage with the coverage continuation, without `--yes`, and reports the run as blocked only when Review parks again for incomplete coverage alone on the same head. Findings the continuation returns follow the ordinary gate rules.",
    "evidence": [
     {
      "file": "skills/poteto-mode/references/gated-publish.md",
@@ -2631,7 +2631,7 @@
     },
     {
      "file": "skills/poteto-mode/references/gated-publish.md",
-     "quote": "When Review stays gated on the same head after that answer, report the run as blocked."
+     "quote": "When Review parks again for incomplete coverage only, on the same head, report the run as blocked."
     }
    ],
    "harness_sensitive": false,
