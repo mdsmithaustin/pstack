@@ -789,7 +789,8 @@ def run_record(run, turns):
     return {"harness": run.harness, "case": run.case["id"], "skills_at": run.skills_at,
             "project": str(run.project), "timeout_s": run.timeout_s, "turns": turns, "baseline": run.baseline,
             "lead_model": getattr(run, "model", None) or "harness default",
-            "lead_effort": getattr(run, "effort", None) or "harness default"}
+            "lead_effort": getattr(run, "effort", None) or "harness default",
+            **({"inputs": run.inputs} if getattr(run, "inputs", None) else {})}
 
 
 def _before_turns(run, scratch=()):

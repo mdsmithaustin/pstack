@@ -84,6 +84,10 @@ grading, and reporting changes belong in `skill-eval-harness`. This repository
 owns its promises, task fixtures, and promotion decisions. Adopt shared changes
 through published dependency pins rather than copying their implementations here.
 
+Live promise verdicts are bound to the files they tested. [`promises/freshness.py`](promises/README.md#keep-live-evidence-aligned-with-changes)
+reports the promises a change left without current evidence and plans the cheapest
+cases that would settle them. It runs no model.
+
 The [coverage audit](coverage-audit.md) records the current routing and migration
 decisions. The [structured signoff pilot](results/2026-11-08-eval-efficiency.md)
 closed after four answers tied on task acceptance; it authorizes no follow-on calls. Each maintained manifest has an `evaluation_policy` with its decision,

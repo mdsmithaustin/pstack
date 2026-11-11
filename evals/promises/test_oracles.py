@@ -103,7 +103,8 @@ class ProbeTraces(unittest.TestCase):
         self.assertEqual(v["worklist-opens-with-playbook-steps"], FAIL)
         self.assertEqual(v["worklist-in-native-task-tool"], FAIL)
         self.assertEqual(v["skipped-step-stays-in-worklist"], INCONCLUSIVE)
-        self.assertEqual(v["design-ladder-spares-small-changes"], PASS)
+        # The reduced trace keeps one shell call and no source edit, so it cannot show the change was built.
+        self.assertEqual(v["design-ladder-spares-small-changes"], INCONCLUSIVE)
 
     def test_claude_high_with_task_tools_passes_worklist_promises(self):
         v = self.verdicts("claude-code-feature-2.json")
@@ -308,9 +309,11 @@ class BoundaryGuard(unittest.TestCase):
         skipped = minimal(events=[read(0, "poteto-mode/playbooks/feature.md")] + bash(1, "python3 -m relay import feeds/sample.json"),
                           final_reply="done")
         self.assertEqual(grade(pid, skipped, case)["verdict"], FAIL)
-        read_then_skipped = minimal(events=[read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/SKILL.md")],
-                                    final_reply="architect skipped: one module")
+        reads = [read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/SKILL.md")]
+        read_then_skipped = minimal(events=reads + [edit(2, "/w/tally/tally/__main__.py")], final_reply="architect skipped: one module")
         self.assertEqual(grade("design-ladder-spares-small-changes", read_then_skipped, load_case("feature-run"))["verdict"], PASS)
+        no_change = minimal(events=reads, final_reply="architect skipped: one module")
+        self.assertEqual(grade("design-ladder-spares-small-changes", no_change, load_case("feature-run"))["verdict"], INCONCLUSIVE)
 
 
 class WorklistOracle(unittest.TestCase):
@@ -1109,8 +1112,11 @@ class BugFixOracles(unittest.TestCase):
         self.assertEqual(grade("steering-prompt-redirects-run", unmarked, case)["verdict"], INCONCLUSIVE)
         marked = minimal(events=[dict(edit(0, "/w/rollup/export.py"), turn=1), dict(text(1, "Reproduced only."), turn=1)])
         self.assertEqual(grade("steering-prompt-redirects-run", marked, case)["verdict"], FAIL)
-        stopped = minimal(events=[dict(text(1, "Reproduced. Stopping before any fix."), turn=1)])
+        reply = dict(text(3, "Reproduced. Stopping before any fix."), turn=1)
+        stopped = minimal(events=in_turn(0, bash(0, "python3 -m unittest discover -s tests", ok=False, head="FAIL: test_retry")) + [reply])
         self.assertEqual(grade("steering-prompt-redirects-run", stopped, case)["verdict"], PASS)
+        idle = minimal(events=[reply])
+        self.assertEqual(grade("steering-prompt-redirects-run", idle, case)["verdict"], INCONCLUSIVE)
 
 
 class HowWhyOracles(unittest.TestCase):
@@ -1118,7 +1124,9 @@ class HowWhyOracles(unittest.TestCase):
         case = load_case("how-run")
         explorer = {"seq": 1, "tool": "Agent", "persona": "how explorer", "prompt_head": "You are exploring a codebase"}
         self.assertEqual(grade("how-narrow-question-no-explorers", minimal(spawns=[explorer], final_reply="x"), case)["verdict"], FAIL)
-        self.assertEqual(grade("how-narrow-question-no-explorers", minimal(final_reply="x"), case)["verdict"], PASS)
+        looked = minimal(events=bash(0, "grep -n lower tally/__main__.py"), final_reply="x")
+        self.assertEqual(grade("how-narrow-question-no-explorers", looked, case)["verdict"], PASS)
+        self.assertEqual(grade("how-narrow-question-no-explorers", minimal(final_reply="x"), case)["verdict"], INCONCLUSIVE)
 
     def test_wide_how_wants_two_to_four_explorers_in_one_message(self):
         case = load_case("how-wide-run")
@@ -1159,10 +1167,15 @@ class InterrogateSwarmArena(unittest.TestCase):
                   + bash(5, "pytest -k dedupe", ok=False, head="2 != 1"))
         reply = "## Verdict\n### Intent\n- dedupe\n### Findings\n- bug: `pytest -k dedupe` printed 2, intent needs 1\n### Dropped\n- Reviewer A: 1, no run"
         trace = minimal(events=events, spawns=reviewers, final_reply=reply)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        project = make_repo(tmp.name, 1)
         for pid in ("interrogate-multi-reviewer-adversarial", "interrogate-reviewers-on-different-models",
                     "interrogate-keeps-run-proven-findings", "interrogate-read-only-when-asked"):
             with self.subTest(pid=pid):
-                self.assertEqual(grade(pid, trace, case)["verdict"], PASS)
+                self.assertEqual(grade(pid, trace, case, project)["verdict"], PASS)
+        self.assertEqual(grade("interrogate-read-only-when-asked", trace, case)["verdict"], INCONCLUSIVE)
+        self.assertEqual(grade("interrogate-read-only-when-asked", minimal(final_reply=reply), case, project)["verdict"], INCONCLUSIVE)
         same = minimal(events=events, spawns=[dict(r, model="opus", prompt_head="You are an adversarial code reviewer.") for r in reviewers], final_reply=reply)
         self.assertEqual(grade("interrogate-reviewers-on-different-models", same, case)["verdict"], FAIL)
         labeled = minimal(events=events, spawns=[dict(r, model="opus", prompt_head=f"Break this change. Adversary {l}") for r, l in zip(reviewers, "AB")], final_reply=reply)
@@ -1713,7 +1726,7 @@ class LiveFalseFails(unittest.TestCase):
                   "python3 -m unittest 2>&1 | tail -3 >&2\ngit status 2>/dev/null > /dev/null\nls 2>&1\n")
         self.assertEqual(oracles.shell_writes(script), [])
         trace = minimal(events=bash(0, script), spawns=[], final_reply="Act on\nConsider\nNoted\nDismissed\n")
-        self.assertEqual(grade("interrogate-read-only-when-asked", trace, case)["verdict"], PASS)
+        self.assertEqual(grade("interrogate-read-only-when-asked", trace, case, self.repo(1))["verdict"], PASS)
         self.assertEqual(oracles.shell_writes("cat > notes.txt <<'EOF'\nbody > 1\nEOF"), ["notes.txt"])
         self.assertEqual(oracles.shell_writes("echo hi >> out.log"), ["out.log"])
 
@@ -3294,7 +3307,7 @@ class DesignJudgeSignal(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL, result)
 
     def test_a_lone_review_judge_does_not_break_the_design_ladder(self):
-        result = grade("design-ladder-spares-small-changes", self.lone_judge("judge: design quality"), load_case("feature-run"))
+        result = grade("design-ladder-spares-small-changes", self.lone_judge("judge: design quality", [edit(1, "/w/tally/tally/__main__.py")]), load_case("feature-run"))
         self.assertEqual(result["verdict"], PASS, result)
 
     def test_a_lone_judge_after_an_arena_load_is_not_the_fan_out(self):
@@ -3307,7 +3320,8 @@ class DesignJudgeSignal(unittest.TestCase):
                      "You are a judge. Judge whether the two designs in the doc still match the rubric."):
             result = grade("poteto-mode-triggers-architect-on-boundary-crossing", self.lone_judge(head), load_case("feature-boundary-run"))
             self.assertEqual(result["verdict"], FAIL, (head, result))
-            self.assertEqual(grade("design-ladder-spares-small-changes", self.lone_judge(head), load_case("feature-run"))["verdict"], PASS)
+            built = self.lone_judge(head, [edit(1, "/w/tally/tally/__main__.py")])
+            self.assertEqual(grade("design-ladder-spares-small-changes", built, load_case("feature-run"))["verdict"], PASS)
 
     def test_two_design_sketches_then_a_judge_are_the_fan_out(self):
         spawns = [{"seq": s, "tool": "Agent", "prompt_head": f"Design sketch {s} for the --json output."} for s in (2, 3)]

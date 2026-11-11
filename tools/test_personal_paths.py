@@ -363,9 +363,10 @@ class GateInterpreter(unittest.TestCase):
                                       cwd=root, env=current, capture_output=True, text=True, timeout=10)
                 self.assertEqual(done.returncode, 0, done.stderr)
                 lines = log.read_text().splitlines()
-                self.assertEqual(len(lines), 9)
+                self.assertEqual(len(lines), 10)
                 self.assertTrue(all(line.startswith(expected + " ") for line in lines), lines)
                 self.assertIn("tools/check-personal-paths.py", "\n".join(lines))
+                self.assertIn("evals/promises/freshness.py", "\n".join(lines))
 
 
 if __name__ == "__main__":

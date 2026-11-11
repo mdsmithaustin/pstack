@@ -1,0 +1,7 @@
+{
+ "blocking": [],
+ "harnesses": [
+  "claude-code",
+  "codex"
+ ]
+}
