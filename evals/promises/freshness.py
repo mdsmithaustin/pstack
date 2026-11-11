@@ -185,8 +185,10 @@ def entry_state(entry, inputs):
         return DISPUTED, "a reader disagreed with the recorded verdict"
     runs = sum(entry["verdicts"].values())
     verdict = unanimous(entry["verdicts"])
-    if verdict == UNDECIDED and not audit:
-        return UNRESOLVED, f"graded {UNDECIDED} in {runs} run(s); a reader or a rerun must decide"
+    if verdict == UNDECIDED:
+        if not audit:
+            return UNRESOLVED, f"graded {UNDECIDED} in {runs} run(s); a reader or a rerun must decide"
+        return FRESH, summary(entry["verdicts"])
     flipped = entry.get("previous") not in (None, verdict)
     if runs < SETTLING_RUNS and (verdict == "MIXED" or flipped):
         why = f"changed from {entry['previous']} to {verdict}" if flipped else "runs disagree"
@@ -236,7 +238,7 @@ def cells(receipts, promises, cases, harnesses, *, read=None, applies=None, here
 def changed_files(base, root=ROOT):
     """Paths that differ between the merge base with `base` and the working tree, committed or not."""
     fork = subprocess.run(["git", "-C", str(root), "merge-base", base, "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
-    names = subprocess.run(["git", "-C", str(root), "diff", "--name-only", fork], check=True, capture_output=True, text=True).stdout
+    names = subprocess.run(["git", "-C", str(root), "diff", "--name-only", "--no-renames", fork], check=True, capture_output=True, text=True).stdout
     return sorted(filter(None, names.splitlines()))
 
 

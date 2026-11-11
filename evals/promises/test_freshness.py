@@ -301,11 +301,36 @@ class Touched(Tree):
         self.assertEqual(self.state("builds"), ("stale", "case, fixture, or history changed"))
 
 
+class ChangedFiles(unittest.TestCase):
+    def test_a_moved_file_reports_both_its_old_and_new_path(self):
+        import subprocess
+        with tempfile.TemporaryDirectory(prefix="pstack-freshness-git-") as tmp:
+            root = Path(tmp)
+            git = lambda *args: subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *args], cwd=root, check=True, capture_output=True)
+            git("init", "-q")
+            (root / "a").mkdir()
+            (root / "a" / "f").write_text("".join(f"{n}\n" for n in range(50)))
+            git("add", ".")
+            git("commit", "-qm", "one")
+            (root / "b").mkdir()
+            git("mv", "a/f", "b/f")
+            self.assertEqual(freshness.changed_files("HEAD", root), ["a/f", "b/f"])
+
+
 class Audit(Tree):
     def setUp(self):
         super().setUp()
         self.run_dir("build-case", "claude-code", {"routes": "PASS", "builds": "FAIL"})
         self.record()
+
+    def test_an_agreed_inconclusive_receipt_is_fresh_even_after_a_flip(self):
+        self.run_dir("route-case", "claude-code", {"routes": "PASS"})
+        self.record()
+        self.write(self.root / "skills/a/SKILL.md", "route elsewhere\n")
+        self.run_dir("route-case", "claude-code", {"routes": "INCONCLUSIVE"})
+        self.record()
+        freshness.record_audit(self.receipts, "routes", "claude-code", "route-case", True, None, "2026-11-10")
+        self.assertEqual(self.state("routes"), ("fresh", "INCONCLUSIVE 1"))
 
     def test_the_sample_names_only_unread_fresh_passes(self):
         sample = freshness.audit_sample(self.receipts, self.rows(), 5)
