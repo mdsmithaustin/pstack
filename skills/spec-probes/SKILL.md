@@ -54,6 +54,6 @@ Each item ends in exactly one state:
 
 **In fixed-spec mode, only what the spec states gets a test.** You are in it whenever you derive tests or criteria from a spec you cannot change. `explicit` then needs a spec sentence or example you quote, or current behavior you name, and each criterion cites it. Text you add to the spec during the task is not a source. An answer you supply yourself, to an edge or a pass 2 prohibition, is an `assumption`: write no criterion or test for it, keep the item `unresolved`, and have the code take the most permissive behavior.
 
-Write the `backstop` and `judgment` tags into the spec itself. A reviewer later abstains on those instead of passing them by inspection; without the tag it cannot see its own blind spot.
+Write the `backstop` and `judgment` tags into the spec, or into the reply in fixed-spec mode. A reviewer later abstains on those; without the tag it cannot see its own blind spot.
 
 **Reply:** per requirement, the items raised and their states; then each `assumption`; then the coverage count: applicable, resolved, unresolved, and how many are `backstop` or `judgment`.
