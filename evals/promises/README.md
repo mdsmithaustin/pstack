@@ -122,6 +122,25 @@ Read `promises.feature-delivers-spec-edges.measures` in each run's `verdict.json
 
 The [2026-11-01 comparison](results/2026-11-01-feature-edge-pass.md) owns the skills pin, harness options, results, and limits for reproducing that comparison. Use its skills pin for both arms, since the committed overlays require the exact resulting files. The implied spec's case-folding interpretation is contested, as that record explains.
 
+### Plan route
+
+`feature-plan-route-run` checks whether a lead follows the plan script on a routed playbook. It reuses the `tally` fixture and the `feature-run` turn, and its repository has no remote. Four oracles grade it from the trace and the delivered repository, with no judge.
+
+| Promise | PASS | FAIL |
+| --- | --- | --- |
+| `lead-prints-plan-before-edits` | A plan call for the playbook returned a lightweight, standard, or intensive route before the first project write. | A project write has no routed plan before it. |
+| `plan-step-loads-arrive-with-step` | The lead loaded every step load the plan prints for that route, and each skill in the case's `expect.loads_before_code` returned before the first code or test write. | A finished run that changed the project lacks a printed load, or a pre-code load had not returned at the first code or test write. |
+| `worklist-follows-plan-and-is-kept` | A worklist snapshot after the routed plan holds the plan's items in order, and an item later changes state. | A finished run that changed the project has no worklist snapshot after the routed plan, or no item ever changes state. |
+| `default-endpoint-local-branch-without-remote` | A branch other than `main` or `master` holds a commit that changes `expect.implementation_paths`, those paths are clean, and the final reply names the branch. | A finished run left the change uncommitted, committed it only on trunk, or names no delivering branch. |
+
+A trace keeps the first 400 characters of a command's output. That holds the plan's `route:` line and not its load lines. The oracles read the route there and derive the route's step loads from the installed playbook and `routes.json`. `test_plan_route.py` pins that derivation to `plan.py` for every routed playbook and route. A plan call whose output was redirected shows no route line and grades `INCONCLUSIVE`. The grader copies `poteto-mode/routes.json` into its skills input beside the entry and the playbooks, so these oracles can read it inside the sealed grader.
+
+Only the unconditional loads printed under a worklist item are graded. Conditional loads, gate loads, and delegate loads are not. A Skill tool call or a read of the whole `SKILL.md` counts as a load, and the verdict records which. A kept worklist whose item names differ from the plan's grades `INCONCLUSIVE`, since the name match cannot tell a paraphrase from a different list.
+
+The step-load verdict carries `measures` that never change it: the route, each load's mechanism and order, `entry_rereads` (lead reads of the `poteto-mode` entry after it was in context, null after a compaction), `step_text_calls`, and `unlisted_skill_loads` (sibling skills the lead loaded that the plan printed as neither a step load nor a gate). The endpoint verdict records whether the reply gives a diff command.
+
+The [2026-11-11 run](results/2026-11-11-floor-lead-plan-route.md) owns the first results, the counting rule, and the limits.
+
 ## Keep live evidence aligned with changes
 
 A live verdict is evidence about the bytes it ran against. `freshness.py` records those bytes with each verdict and reports the promises a change left without current evidence. It runs no model and authorizes no paid call.
