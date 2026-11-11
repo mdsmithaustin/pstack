@@ -144,11 +144,11 @@ python3 evals/promises/freshness.py record "$RUN_OUT"
 | --- | --- |
 | `fresh` | A bound case has a receipt whose owner and case digests match the tree. |
 | `missing` | No receipt exists for this harness. |
-| `stale` | An owner file, or the case, fixture, or history, changed after the receipt. The reason names the owner. |
+| `stale` | An owner file, or the case, fixture, or history, changed after the receipt. The reason names changed owners or reports changed case inputs. |
 | `unsettled` | The verdict differs from the one it replaced, or runs disagree, with fewer than three runs on the same bytes. |
 | `unresolved` | Every run graded `INCONCLUSIVE` and no reader has recorded a decision. An unread transcript or a run that never started is not evidence about the skill. |
 | `disputed` | A reader recorded disagreement with the verdict. |
-| `deferred` | Every bound case is deferred, so nothing can run. |
+| `deferred` | No bound case can supply evidence: cases are absent, deferred, not live, or use `skill_overlays`. |
 
 ```sh
 python3 evals/promises/freshness.py check --base origin/main
