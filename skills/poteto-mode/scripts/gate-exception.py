@@ -19,7 +19,7 @@ from pathlib import Path
 
 RECORD = re.compile(r"^[ \t]*test_override_reason:[ \t]*(\S[^\r\n]*)$", re.M)
 TEST_EXCEPTION = re.compile(r"^[ \t]*[\w -]*\btest[ _-]+(?:override|exception)[\w -]*:", re.I | re.M)
-RUN_FIELD = re.compile(r"^\s*(?:head_sha|status):\s*\S", re.M)
+RUN_FIELDS = [re.compile(rf"^\s*{name}:\s*\S", re.M) for name in ("id", "status", "head_sha")]
 GATE_ERROR = re.compile(r"^error:", re.M)
 NO_REASON = "no operator reason supplied"
 
@@ -29,7 +29,7 @@ def classify(text):
         return 2, ["UNREAD: the status is empty. Nothing was checked."]
     if GATE_ERROR.search(text):
         return 2, ["UNREAD: the status reports an error. Nothing was checked."]
-    if not RUN_FIELD.search(text):
+    if not all(field.search(text) for field in RUN_FIELDS):
         return 2, ["UNREAD: the status names no run. Nothing was checked."]
     records = RECORD.findall(text)
     if TEST_EXCEPTION.search(RECORD.sub("", text)):

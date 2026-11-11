@@ -114,6 +114,18 @@ outcome: passed-with-override
                 self.assertEqual(done.returncode, 2, done.stdout)
                 self.assertIn("Nothing was checked", done.stdout)
 
+    def test_a_status_missing_a_run_field_is_never_a_pass(self):
+        for text in (
+            "status: completed\n",
+            "head_sha: 8e2574377defd7701ab644ccb11e7a155bd00d75\n",
+            'id: "01EXAMPLE"\nstatus: completed\n',
+            "status: completed\nhead_sha: 8e2574377defd7701ab644ccb11e7a155bd00d75\n",
+        ):
+            with self.subTest(text=text):
+                done = check(text)
+                self.assertEqual(done.returncode, 2, done.stdout)
+                self.assertIn("names no run", done.stdout)
+
     def test_an_error_beside_run_fields_is_still_unread(self):
         self.assertEqual(check("error: daemon unavailable\n" + RUN.format(record="", outcome="passed")).returncode, 2)
 
