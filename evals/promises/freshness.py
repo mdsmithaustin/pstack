@@ -97,7 +97,7 @@ def record(out, receipts, promises, cases, *, today, reader_at=commit_reader, re
     A run already folded in is skipped and a regraded one replaces its verdict. So is a run that an earlier, replaced
     receipt held, and a run on bytes other than the tree's when the receipt on record already matches the tree: an old
     output directory cannot displace current evidence. The case and grader digests
-    come from the run's own record, written before its first turn, so a run is never credited with bytes it did not
+    come from the run's own `run.json`, which carries digests computed before its first turn, so a run is never credited with bytes it did not
     use; a run without them is skipped. An arm case and a run a dead login ended carry no verdict about the committed
     skill and are skipped too.
     """
@@ -113,7 +113,7 @@ def record(out, receipts, promises, cases, *, today, reader_at=commit_reader, re
         started = path.parent / "run.json"
         record_bytes = started.read_bytes() if started.is_file() else b"{}"
         stored = json.loads(record_bytes).get("inputs")
-        # Names the run by what it started with, not by its verdict, so a regrade of the same run replaces its verdict.
+        # Names the run by its directory and `run.json`, not by its verdict, so a regrade of the same run replaces its verdict.
         run_id = sha(path.parent.name.encode() + b"\0" + record_bytes)[:16]
         if not stored:
             lines.append(f"skipped {path.parent.name}: its record carries no input digests, so its verdicts cannot be bound to bytes")
@@ -270,7 +270,7 @@ def render_check(rows, blocking, regrade, quiet=False):
             mark = " [blocking]" if row["promise"] in blocking else ""
             lines.append(f"{row['state']:<9} {row['harness']:<11} {row['promise']}{mark}: {row['reason']}")
     if regrade:
-        lines.append(f"{regrade} receipt(s) were graded by an earlier grader; regrade their saved traces, without new answers")
+        lines.append(f"{regrade} receipt(s) were graded by an earlier grader; only a newly recorded run replaces them (#500)")
     return lines
 
 

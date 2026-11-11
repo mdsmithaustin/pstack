@@ -126,7 +126,7 @@ The [2026-11-01 comparison](results/2026-11-01-feature-edge-pass.md) owns the sk
 
 A live verdict is evidence about the bytes it ran against. `freshness.py` records those bytes with each verdict and reports the promises a change left without current evidence. It runs no model and authorizes no paid call.
 
-`receipts.json` holds one receipt per promise, harness, and case. A receipt carries the verdict counts, the skills commit, and SHA-256 digests of the promise's owner files at that commit, of the case inputs, and of the grader (`oracles.py` and `grade_boundary.py`). The case inputs are the case directory, the case directory named by `references`, the fixture, and the history. `live.py run` writes the case and grader digests into the run's `run.json` before the first turn, when the controller freezes the same files for grading, so a receipt names the bytes the run used and not the bytes present when it was recorded. It holds no model answer, trace, or run path. The file stays in the ledger's canonical form.
+`receipts.json` holds one receipt per promise, harness, and case. A receipt carries the verdict counts, the skills commit, and SHA-256 digests of the promise's owner files at that commit, of the case inputs, and of the grader (`oracles.py` and `grade_boundary.py`). The case inputs are the case directory, the case directory named by `references`, the fixture, and the history. `live.py run` computes the case and grader digests before the first turn, when the controller freezes the same files for grading, and the run's `run.json` carries them once it is written after the first turn starts. A receipt therefore names the bytes the run used and not the bytes present when it was recorded. It holds no model answer, trace, or run path. The file stays in the ledger's canonical form.
 
 After a live wave, fold its verdicts in and commit the result with the change that was tested:
 
@@ -134,7 +134,7 @@ After a live wave, fold its verdicts in and commit the result with the change th
 python3 evals/promises/freshness.py record "$RUN_OUT"
 ```
 
-`record` identifies a run by its directory name and the bytes of its starting `run.json`. Recording the same verdict again leaves the receipt unchanged. Regrading a counted run replaces its verdict rather than adding a repetition. Receipts retain replaced runs' IDs, so replaying those saved runs cannot replace newer evidence or clear a dispute. Keep run directory names and starting records unchanged when recording saved evidence.
+`record` identifies a run by its directory name and the bytes of the `run.json` it reads, which holds every turn. Recording the same verdict again leaves the receipt unchanged. Regrading a counted run replaces its verdict rather than adding a repetition. Receipts retain replaced runs' IDs, so replaying those saved runs cannot replace newer evidence or clear a dispute. Keep run directory names and `run.json` files unchanged when recording saved evidence.
 
 `record` skips a run a dead login ended and an arm case with `skill_overlays`, since that case runs rewritten skill text. It skips a run whose `run.json` carries no input digests, which includes every run made before this tool. It also refuses to replace a receipt that tested the current tree with a run that did not.
 
@@ -161,7 +161,7 @@ When changed inputs or a different recorded grader replace a receipt, the settli
 
 `freshness.json` is the policy. `harnesses` lists the harnesses a change must carry evidence for; Hermes and Grok stay out of it until their adapters return graded evidence, and `--harness` reports them on request. `blocking` lists promises whose debt fails `check --strict`. CI runs `check --strict` with `--base` set to the pull request's base branch. On pushes, it reports every live promise. `--quiet` prints only the counts and the blocking debt, which is what `tools/gate-check.sh lint` shows. The list starts empty because no receipt predates this file, so the first reports show runnable live promises as `missing` and those without runnable cases as `deferred`. Add a promise to `blocking` once it has a receipt and a reason to gate on it.
 
-A grader change does not stale a receipt. `check` counts the receipts an earlier grader produced so their saved traces can be regraded without new answers.
+A grader change does not stale a receipt. `check` counts the receipts an earlier grader produced. Only a newly recorded run replaces such a receipt. Regrading saved traces cannot refresh one yet, because a retained regrade writes its verdict to a separate directory that `record` skips (issue #500).
 
 Freshness is self-reported and does not test the oracle. A receipt shows that a verdict was recorded for these bytes, not that the verdict is right. To put a person's reading behind PASS verdicts, take a sample and record the result:
 
@@ -171,7 +171,7 @@ python3 evals/promises/freshness.py audit "$PROMISE" "$HARNESS" "$CASE" --agrees
 python3 evals/promises/freshness.py audit "$PROMISE" "$HARNESS" "$CASE" --disputes --note "passed on a keyword"
 ```
 
-The sample is ordered by a digest of each receipt's identity, so it cannot favor verdicts that look easy to confirm. The sample draws from every bound case with a fresh receipt, not only the one that represents its promise in `check`. A disputed receipt is debt until a new run or a grader fix replaces it. `audit --agrees` on an `unresolved` receipt records that a reader accepts the run could not decide, and clears the debt even if the previous verdict differed and fewer than three runs exist. The owner and case digests must still match the tree. An audit lasts until `record` adds a run or changes a counted verdict, which starts the receipt unread. Replaying an unchanged verdict or a superseded run preserves the audit.
+The sample is ordered by a digest of each receipt's identity, so it cannot favor verdicts that look easy to confirm. The sample draws from every bound case with a fresh receipt, not only the one that represents its promise in `check`. A disputed receipt is debt until a newly recorded run replaces it or adds to it. A grader change alone does not clear it. `audit --agrees` on an `unresolved` receipt records that a reader accepts the run could not decide, and clears the debt even if the previous verdict differed and fewer than three runs exist. The owner and case digests must still match the tree. An audit lasts until `record` adds a run or changes a counted verdict, which starts the receipt unread. Replaying an unchanged verdict or a superseded run preserves the audit.
 
 ## Known oracle gaps
 
@@ -215,7 +215,7 @@ Six oracles used to pass them, because each read the absence of a bad action as 
 | `poteto-mode-sticky`, `short-prompt-continues-in-context` | A tool call or worklist update in at least one follow-up turn. |
 | `steering-prompt-redirects-run` | A tool call somewhere in the run, so there was work to redirect. |
 
-A correct run can now grade `INCONCLUSIVE` where it graded PASS, for example a follow-up turn answered in text alone. Those go to a reader. Verdicts recorded before this change were graded by the lenient oracles; regrade their saved traces before citing a PASS on these six promises.
+A correct run can now grade `INCONCLUSIVE` where it graded PASS, for example a follow-up turn answered in text alone. Those go to a reader. Verdicts recorded before this change were graded by the lenient oracles; record a new run before citing a PASS on these six promises. Regrading saved traces cannot refresh a receipt yet (issue #500). Regrading saved runs kept without their project also turns real PASS verdicts into `INCONCLUSIVE` on `design-ladder-spares-small-changes` and `interrogate-read-only-when-asked`, because the trace alone cannot show the edit or the git state.
 
 These traces are the cheapest false-pass probe, not a complete one. They do not cover oracles that pass on a keyword in the reply or on a command that names a file without reading it.
 

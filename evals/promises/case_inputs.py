@@ -35,6 +35,6 @@ def grader_digest(here=HERE):
 
 
 def run_inputs(case, here=HERE):
-    """What live.py stores in a run's record before its first turn. The grader is frozen for the run at the same moment."""
+    """What live.py computes before a run's first turn and carries in the run's record. The grader is frozen for the run at the same moment."""
     spec = {k: v for k, v in case.items() if k != "id"}
     return {"case": case_digest(case["id"], spec, here), "grader": grader_digest(here)}
