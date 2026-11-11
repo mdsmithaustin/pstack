@@ -159,6 +159,11 @@ class LeadPrintsPlan(unittest.TestCase):
             with self.subTest(name):
                 self.assertEqual(grade(self.PID, trace(call + [edit(4, SOURCE)]), CASE)["verdict"], INCONCLUSIVE)
 
+    def test_a_route_inside_a_json_wrapped_output_head_counts(self):
+        wrapped = '{"output": "' + plan_head("lightweight").replace("\n", "\\n")
+        events = bash(1, f"{RUN} {LOW}", head=wrapped) + [edit(4, SOURCE)]
+        self.assertEqual(grade(self.PID, trace(events), CASE)["verdict"], PASS)
+
     def test_a_plan_run_by_relative_path_from_the_skill_directory_counts(self):
         relative = f"cd .claude/skills/poteto-mode && python3 scripts/plan.py feature --harness claude-code {LOW}"
         events = bash(1, relative, head=plan_head("lightweight")) + [edit(4, SOURCE)]

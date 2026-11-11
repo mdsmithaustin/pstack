@@ -4555,7 +4555,7 @@ def plan_calls(view, playbook):
             continue
         result = view.results_for(call)
         head = ((result or {}).get("output_head") or "").replace("\\n", "\n")
-        routes = [route for block in re.split(r"^playbook: ", head, flags=re.M)[1:] if block.startswith(playbook + " ")
+        routes = [route for block in re.split(r"\bplaybook: (?=[a-z-]+ \()", head)[1:] if block.startswith(playbook + " ")
                   for route in PLAN_ROUTE.findall(block)]
         prints = sum(step is None for _, step in found)
         out.append({"seq": call.get("seq"), "returned": (result or {}).get("seq"), "ok": (result or {}).get("ok"),
