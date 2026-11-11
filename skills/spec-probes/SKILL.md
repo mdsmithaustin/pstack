@@ -28,7 +28,7 @@ Classify each requirement's data shape: `numeric-range`, `collection`, `text`, `
 
 A requirement with prose but no matching shape gets one soft "unclassified, review by hand" item, not silence.
 
-The defects this catches: "one reminder per overdue loan", tested with a member who has one loan of one book, passes whether reminders go out per member, per loan, or per book. "Merge overlapping intervals" says nothing about `[1,2]` and `[2,3]`, which only touch. For a handler that accepts a JSON or form-encoded body, checking the empty-field edge only in JSON misses that a form field has no null.
+The defect this catches: "one reminder per overdue loan", tested with a member who has one loan of one book, passes whether reminders go out per member, per loan, or per book.
 
 ## Pass 2: prohibition probe
 
@@ -46,13 +46,15 @@ Two or three bespoke items per feature is the normal yield. A pure utility yield
 
 Each item ends in exactly one state:
 
-- **resolved**: the spec states the answer (`explicit`, checked by an ordinary test); or a held-out or property-based test will stand in for an edge you know but cannot fully write down (`backstop`); or, for a prohibition that needs human judgment rather than a test, `judgment`.
+- **resolved**: the spec or today's behavior states the answer (`explicit`, checked by an ordinary test); or a held-out or property-based test will stand in for an edge you know but cannot fully write down (`backstop`); or, for a prohibition that needs human judgment rather than a test, `judgment`.
 - **dismissed**, with a reason. "N/A, input is a bounded enum, no boundary exists" is valid; silence is not. The reason is the audit trail.
 - **unresolved**: carried forward as an explicit gap the plan must surface, never dropped silently.
 
-**A new rejection needs a requirement that states the restriction.** A rejection is an expected result that rejects, errors on, or reinterprets an input. Expect one only where a requirement states the restriction, and name that requirement in the criterion. A stated type, range, or format is such a requirement, so expect an input that breaks it to be rejected. The rule holds on a new field and on input the program accepts today, even when a worked example shows only one form of the value or a sibling field has the rejection. Without such a requirement, expect the result the spec text gives the input, or the result the program gives it today. Pair each rejection you test with the nearest valid input its definition allows, such as a leading zero or a single column, and expect it accepted. A validator that fails the pair is wider than its definition.
+**A new rejection needs a requirement that states the restriction.** A rejection is an expected result that rejects, errors on, or reinterprets an input. Expect one only where a requirement states the restriction, and name that requirement in the criterion. A stated type, range, or format is such a requirement, so expect an input that breaks it to be rejected. The rule holds on a new field and on input the program accepts today, even when a worked example shows only one form of the value or a sibling field has the rejection. Without such a requirement, expect the result the spec text gives the input, or the result the program gives it today. A new field has no result today, so where the spec text gives none, write no criterion for the input and carry the edge as `unresolved`. Pair each rejection you test with the nearest valid input its definition allows, such as a leading zero or a single column, and expect it accepted. A validator that fails the pair is wider than its definition.
 
-**In fixed-spec mode, only what the spec states gets a test.** You are in it whenever you derive tests or criteria from a spec you cannot change. `explicit` then needs a spec sentence or example you quote, or current behavior you name, and each criterion cites it. Text you add to the spec during the task is not a source. An answer you supply yourself, to an edge or a pass 2 prohibition, is an `assumption`: write no criterion or test for it, keep the item `unresolved`, and have the code take the most permissive behavior.
+Text you add to the spec during the task is not a source. Tag a criterion that answers an unstated pass 2 prohibition `assumption`.
+
+**In fixed-spec mode, only what the spec states gets a test.** You are in it whenever you derive tests or criteria from a spec you cannot change. `explicit` then needs a spec sentence or example you quote, or current behavior you name, and each criterion cites it. An answer you supply yourself, to an edge or a prohibition, is an `assumption`: write no criterion or test for it, keep the item `unresolved`, and have the code take the most permissive behavior.
 
 Write the `backstop` and `judgment` tags into the spec, or into the reply in fixed-spec mode. A reviewer later abstains on those; without the tag it cannot see its own blind spot.
 

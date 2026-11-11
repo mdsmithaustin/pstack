@@ -513,7 +513,7 @@
       "difficulty": "extended",
       "trigger_type": "implicit",
       "success_goals": ["outcome", "process"],
-      "prompt": "We're about to build the signup handler that signup-spec.md describes. Write the acceptance tests it should pass before implementation starts. A test name plus a line on its input and expected result is enough for each.",
+      "prompt": "Another team owns signup-spec.md and we can't change it. We're about to build the signup handler it describes. Write the acceptance tests it should pass before implementation starts. A test name plus a line on its input and expected result is enough for each.",
       "files": ["fixtures/signup-spec.md"],
       "expected_behavior": [
         "Separates SU-302's trimming from SU-304's stripping with whitespace inside a value: an `invite_code` with inner whitespace that matches an open invite once all whitespace is removed returns 201, and a `display_name` with inner whitespace is saved with it.",
@@ -624,8 +624,8 @@
       "files": ["fixtures/trail-spec.md"],
       "expected_behavior": [
         "Turns both examples into tests whose expected output is the example's lines verbatim, compared as whole text.",
-        "Expects `km` in every output line, the spelling every example shows, though TR-702 also allows `kilometres`. No test accepts either spelling or compares through a parser, pattern, or normalizer.",
-        "Expects no rejection for an input because it differs from the example inputs, such as metres that are not whole, zero, or negative, a one-word name, or a name added twice. These are accepted where the spec gives a result, or left open."
+        "Expects `km` in every output line, the spelling every example shows, though TR-702 also allows `kilometres`. No test of an example accepts either spelling or compares through a parser, pattern, or normalizer. A loose check on a line no example shows still passes the gate.",
+        "Expects no rejection for an input because it differs from the example inputs, such as metres that are not whole, zero, or negative, a one-word name, a name that holds a colon, or a name added twice. These are accepted where the spec gives a result, or left open."
       ],
       "assertions": [
         {
@@ -637,7 +637,7 @@
             {
               "name": "example-output-exact",
               "scale": "1-5",
-              "rubric": "5 = Both examples are tests whose expected output is the example's lines verbatim, compared as whole text. Every other expected output line the tests write uses the examples' form: name, colon, one space, one decimal place, a space, `km`. The answer may note that TR-702 also allows `kilometres`. It still expects `km`. 4 = Both examples are verbatim tests, but another test states its expected output loosely: a pattern, either spelling, or \"ends with a unit\". 3 = The example tests compare through a loosened check: a parsed number, a regular expression, either spelling accepted, ignored whitespace, or \"contains\". Or the choice between `km` and `kilometres` is left as an open question and no test fixes the examples' text. 2 = Only one example is tested, or the examples are paraphrased instead of reproduced. 1 = A test expects `kilometres` or another form no example shows, or no example is tested."
+              "rubric": "5 = Both examples are tests whose expected output is the example's lines verbatim, compared as whole text. Every other expected output line the tests write uses the examples' form: name, colon, one space, one decimal place, a space, `km`. The answer may note that TR-702 also allows `kilometres`. It still expects `km`. 4 = Both examples are verbatim tests, but another test states its expected output loosely: a pattern, either spelling, or \"ends with a unit\". 3 = A test of an example compares through a loosened check: a parsed number, a regular expression, either spelling accepted, ignored whitespace, or \"contains\". TR-702 allows both spellings on a line no example shows. An example fixes its own lines. Or the choice between `km` and `kilometres` is left as an open question and no test fixes the examples' text. 2 = Only one example is tested, or the examples are paraphrased instead of reproduced. 1 = A test expects `kilometres` or another form no example shows, or no example is tested."
             }
           ]
         },
@@ -650,7 +650,7 @@
             {
               "name": "example-inputs-unrestricted",
               "scale": "1-5",
-              "rubric": "5 = No test expects a rejection or error for an input because it differs from the example inputs: metres that are not whole, zero, or negative, a one-word or unquoted name, a name that holds a colon, or a name added twice. Each such input is absent, or expected accepted where TR-701 to TR-703 give its result, or listed as open with no test. A rejection of a `<metres>` that is not a number is not counted either way. 4 = As 5, but one such input gets a test for an accepted result the spec does not give, labeled as an assumption. 3 = One test expects a rejection the spec does not state, labeled as an assumption or a proposal. 2 = One test expects such a rejection with no label. 1 = Two or more tests expect such rejections, or a test contradicts an example."
+              "rubric": "5 = No test expects a rejection or error for an input because it differs from the example inputs: metres that are not whole, zero, or negative, a one-word name, a name that holds a colon, or a name added twice. Each such input is absent, or expected accepted where TR-701 to TR-703 give its result, or listed as open with no test. A rejection of a `<metres>` that is not a number is not counted either way. 4 = As 5, but one such input gets a test for an accepted result the spec does not give, labeled as an assumption. 3 = One test expects a rejection the spec does not state, labeled as an assumption or a proposal. 2 = One test expects such a rejection with no label. 1 = Two or more tests expect such rejections, or a test contradicts an example."
             }
           ]
         },
@@ -684,7 +684,7 @@
       "files": ["fixtures/locker-spec.md"],
       "expected_behavior": [
         "Ties every test to the spec sentence or example that gives its expected result.",
-        "Writes no test for an answer the spec does not give: the response for an unknown or empty locker, a `pin` sent as a JSON number, whether a 422 counts toward LK-403's three wrong pins, the status once a parcel has been returned, and the exact 72-hour instant. Lists these apart as assumptions or open gaps, and says the implementation takes the permissive behavior.",
+        "Writes no test for an answer the spec does not give: the response for a `locker` that names no locker, whether a 422 counts toward or breaks LK-403's run of three wrong pins, and the exact 72-hour instant. Lists these apart as assumptions or open gaps, and says the implementation takes the permissive behavior. A test may expect 422 for a `pin` sent as a JSON number, from LK-402, or 403 for the pin of a returned parcel, from LK-404 with LK-403.",
         "Pairs LK-402's rejection with accepted pins at both bounds and with a leading-zero pin such as the example's `0417`, and pairs LK-403's lockout with a right pin after two wrong ones."
       ],
       "assertions": [
@@ -697,7 +697,7 @@
             {
               "name": "only-stated-results-tested",
               "scale": "1-5",
-              "rubric": "5 = Every test's expected result is given by a spec sentence or the example, which the test names or quotes. Each answer the spec does not give is kept out of the tests and listed apart as an assumption or open gap, with at least three of these five: an unknown or empty locker, a `pin` sent as a JSON number, whether a 422 counts toward LK-403's three wrong pins, the status once a parcel has been returned, the exact 72-hour instant. For at least one, the answer says the implementation takes the permissive or least restrictive behavior and that no test asserts it. 4 = No test asserts an answer the spec does not give, and such answers are listed apart, but the answer does not say what the implementation does about them, or it lists fewer than three. 3 = One or two tests assert an answer the spec does not give. A test labeled as an assumption, a proposal, or \"to confirm\" counts. 2 = Three or more tests assert such answers. 1 = A test contradicts a stated rule, or most tests decide unstated answers with no label."
+              "rubric": "5 = Every test's expected result is given by a spec sentence or the example, which the test names or quotes. Each answer the spec does not give is kept out of the tests and listed apart as an assumption or open gap, with at least two of these three: a `locker` that names no locker, whether a 422 counts toward or breaks LK-403's run of three wrong pins, the exact 72-hour instant. For at least one, the answer says the implementation takes the permissive or least restrictive behavior and that no test asserts it. The spec gives two results that look open, so a test for either is not counted against the answer, and neither is leaving it out: 422 for a `pin` that is not a string of four to six digits, such as a JSON number (LK-402's \"Any other `pin` returns 422\"), and 403 for a pin where no parcel waits, such as after LK-404's return (LK-404's \"its pin stops working\" with LK-403). 4 = No test asserts an answer the spec does not give, and such answers are listed apart, but the answer does not say what the implementation does about them, or it lists fewer than two. 3 = One or two tests assert an answer the spec does not give. A test labeled as an assumption, a proposal, or \"to confirm\" counts. 2 = Three or more tests assert such answers. 1 = A test contradicts a stated rule, or most tests decide unstated answers with no label."
             }
           ]
         },
