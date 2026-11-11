@@ -486,6 +486,28 @@
     "skills/poteto-mode/playbooks/babysit.md"
    ]
   },
+  "babysit-conflict-holds-pushes-not-triage": {
+   "check": "static",
+   "claim": "Babysit reports a conflict instead of resolving it and pushes nothing to that PR until its owner rebases. It skips CI work for that PR, still reads status and triages review comments, and holds each real fix for the owner's rebase wave.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/babysit.md",
+     "quote": "A conflict is the one blocker you report rather than resolve. Say which branch needs the rebase, and push nothing to that PR until its owner rebases. Steps 6, 8, and 9 still run for it."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/babysit.md",
+     "quote": "In `check` and `threads-only` modes, skip this step. Skip it too for a PR whose conflict step 5 reported."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/babysit.md",
+     "quote": "For a PR whose conflict step 5 reported, triage and dismiss as usual, hold each real fix for the owner's rebase wave, and report it as pending."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/babysit.md"
+   ]
+  },
   "babysit-dismisses-noise-with-disproof": {
    "check": "static",
    "claim": "A real finding gets a fix; a noise thread is dismissed with the disproof posted on that thread.",
@@ -6817,6 +6839,15 @@
    ],
    "text": "The doc also becomes a concrete target the agent checks its own work against."
   },
+  "3b3c440565b1": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "babysit-conflict-holds-pushes-not-triage",
+   "sources": [
+    "port"
+   ],
+   "text": "It still reads the PR's status and triages its comments, and holds each real fix for the owner's rebase."
+  },
   "3b46a2cd3a8d": {
    "also": [
     "slash-skills-invocable"
@@ -8394,6 +8425,15 @@
     "port"
    ],
    "text": "The skill also records which code each check covers and the commit where the check last matched it."
+  },
+  "665a67ea87de": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "babysit-conflict-holds-pushes-not-triage",
+   "sources": [
+    "port"
+   ],
+   "text": "Babysit reports a conflict instead of resolving it, and pushes nothing to that PR until its owner rebases."
   },
   "668f09989d76": {
    "class": "promise",
