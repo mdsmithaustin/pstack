@@ -25,9 +25,25 @@ printf '%s\n' 'opus[1m]@xhigh' '*.jsonl'
 
 Read without a cap any diff, test file, or code that you will judge. Never pipe it through `head`, `tail`, or a line limit. A cap on search or log output that you only scan is fine. Never cap the list from step 1. When a skill tells you to print one part of a file, such as one playbook step, you need only that part, and it must arrive uncut.
 
-1. List the changed files with `git diff --name-status <range>`. A renamed file shows both of its paths. Do not list the files with `--stat`, which shortens a long path to one that matches no file.
-2. Read `git diff <range> -- <file>` for one file at a time. For a renamed file, pass both paths, because one path alone shows the whole file as added. On Codex, read each file's diff as [Read files](codex.md#read-files) says.
-3. Check that the files you read are the files that step 1 lists. A file whose diff came back cut off is unread, so read its missing part before you judge the change.
+1. Save each changed file's diff to its own file. Run this in bash or zsh as printed, with your range on the first line:
+
+   ```sh
+   set -- <range>
+   d=$(mktemp -d); r=$(git rev-parse --show-toplevel); n=0
+   git diff -z --name-status "$@" | while IFS= read -r -d '' s && IFS= read -r -d '' a; do
+   	b=$a; case $s in [RC]*) IFS= read -r -d '' b ;; esac
+   	n=$((n + 1)); git -C "$r" --literal-pathspecs diff "$@" -- "$a" "$b" > "$d/$n.diff"
+   	printf '%s\n' "$(wc -c < "$d/$n.diff") $d/$n.diff $s $b"
+   done
+   git -C "$r" ls-files -z --others --exclude-standard | while IFS= read -r -d '' a; do
+   	n=$((n + 1)); git -C "$r" diff --no-index -- /dev/null "$a" > "$d/new-$n.diff"
+   	printf '%s\n' "$(wc -c < "$d/new-$n.diff") $d/new-$n.diff ?? $a"
+   done
+   ```
+
+   Each printed line gives a byte count, the saved file, the status, and the changed file's name. The second loop saves each untracked file whole, because `git diff` never shows one. When `<range>` compares two commits, leave that loop out. Let the loop pass every path. A path you copy from a git listing can match no file and print nothing, because git prints some names quoted and `--stat` shortens them. A renamed file needs both of its paths. The new path alone shows the whole file as added, and the old path alone shows it as deleted.
+2. Read every saved file, one at a time. On Codex, read each as [Read files](codex.md#read-files) says.
+3. Check that you read each file that step 1 printed, to its end. A byte count of 0 means git returned nothing for that file, so report the file as unread and stop. A file that came back cut off is unread, so read its missing part before you judge the change.
 
 ## Inspect running processes
 

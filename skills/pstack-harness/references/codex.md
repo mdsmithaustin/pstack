@@ -40,6 +40,6 @@ python3 "<installed skills root>/pstack-harness/scripts/read-plan.py" "<file>" -
 
 Each line that the script prints is a command whose output fits `<n>`. Run each command in its own outer call, with the caps you chose. Never batch two commands, or two files, in one outer `exec` call. Run every command in order before you act on the file. If the last line runs `read-plan.py` again, run it after the other lines. It prints the rest of the plan. If an output still warns that it was cut, keep your caps and print a new plan with half of `<n>`. Then run the new plan from its first command. If the script rejects `<n>` as too small, stop and report that you cannot read the file in full.
 
-To read a diff or other command output that can pass the cap, write it to a file in a new `mktemp -d` directory and read that file the same way. Split the diff per file, as [Read a diff](shell-and-processes.md#read-a-diff) says, and save each file's diff to its own file.
+To read command output that can pass the cap, write it to a file in a new `mktemp -d` directory and read that file the same way. For a diff, [Read a diff](shell-and-processes.md#read-a-diff) saves each file's diff to its own file.
 
 When a skill tells you to print part of a file, such as one playbook step, you need only that part, and it must arrive uncut.
