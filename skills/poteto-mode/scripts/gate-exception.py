@@ -19,7 +19,7 @@ from pathlib import Path
 
 RECORD = re.compile(r"^[ \t]*test_override_reason:[ \t]*(\S[^\r\n]*)$", re.M)
 TEST_EXCEPTION = re.compile(r"^[ \t]*[\w -]*\btest[ _-]+(?:override|exception)[\w -]*:", re.I | re.M)
-RUN_FIELDS = [re.compile(rf"^\s*{name}:\s*\S", re.M) for name in ("id", "status", "head_sha")]
+RUN_FIELDS = [re.compile(rf"^[ \t]*{name}:[ \t]*\S", re.M) for name in ("id", "status", "head_sha")]
 GATE_ERROR = re.compile(r"^error:", re.M)
 NO_REASON = "no operator reason supplied"
 

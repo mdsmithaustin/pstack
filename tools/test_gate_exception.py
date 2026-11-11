@@ -129,6 +129,16 @@ outcome: passed-with-override
     def test_an_error_beside_run_fields_is_still_unread(self):
         self.assertEqual(check("error: daemon unavailable\n" + RUN.format(record="", outcome="passed")).returncode, 2)
 
+    def test_empty_run_fields_cannot_borrow_the_next_lines_value(self):
+        for field in ("id", "status", "head_sha"):
+            for whitespace in ("", " ", "\t"):
+                with self.subTest(field=field, whitespace=whitespace):
+                    lines = [f"{name}: {value}" if name != field else f"{name}:{whitespace}"
+                             for name, value in (("id", "01EXAMPLE"), ("status", "completed"), ("head_sha", "abcdef"))]
+                    done = check("\n".join(lines) + "\noutcome: passed\n")
+                    self.assertEqual(done.returncode, 2, done.stdout)
+                    self.assertIn("UNREAD", done.stdout)
+
     def test_it_reads_a_file_and_reports_a_missing_one_as_unread(self):
         with tempfile.TemporaryDirectory() as directory:
             saved = Path(directory) / "status.toon"
