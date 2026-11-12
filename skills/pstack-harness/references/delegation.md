@@ -4,7 +4,7 @@
 
 1. Your harness's native subagent or delegation tool, whatever it is called.
 2. No such tool → invoke your own CLI non-interactively as a subprocess (its help names the command and flags), one invocation per arm, run concurrently in background shells, each arm's report collected from stdout or a file path named in its brief.
-3. No subprocesses either → run the arms sequentially inline, one at a time, each writing its report to a file before the next starts, then synthesize. Keep the panel rule's arm count. A verdict or review that runs inline is not independent. Label it `self-review` in the verdict and in the reply.
+3. No subprocesses either → run the arms sequentially inline, one at a time, each writing its report to a file before the next starts, then synthesize. A verdict or review that runs inline is not independent. Label it `self-review` in the verdict and in the reply.
 
 Each writer gets its own git worktree, whichever mechanism spawns it. When the brief names no commit and `git -C <project> rev-parse --verify -q 'HEAD^{commit}'` prints nothing, make no worktree and use the fallback below. Keep the location a native isolation option picks when the option makes a git worktree, that is, when `git -C <its path> rev-parse --path-format=absolute --git-common-dir` prints the project's. When you run `git worktree add` yourself, make one worktree at a time, and never place the worktree beside the repository:
 
@@ -33,6 +33,6 @@ Bind the clone to the exact reviewed input, including authorized relevant uncomm
 
 For dirty reviewed inputs, record the original `HEAD`, `git status --porcelain=v1 --untracked-files=all`, and the bytes of the explicitly named relevant files. Capture the authorized tracked changes with `git diff --binary HEAD -- <authorized tracked paths>`, saving the patch outside the original checkout. Seed the disposable checkout at that recorded `HEAD`, then apply the patch there with `git -C <throwaway> apply <patch>`. Copy only the explicitly named relevant untracked files into the same relative paths there. Before executing verification commands, compare the disposable tracked diff and relevant file bytes with the reviewed snapshot, including deletions and untracked files. Confirm that the original file bytes and Git status still match the recorded snapshot. If inputs changed during transfer, capture the reviewed snapshot again before running commands. Do not run cleanup restores in the original checkout.
 
-- **Panels keep their configured arm count.** Run every arm even on one model, except a design comparison that [role resolution step 2](roles.md#spawn-a-role) marks `"comparison": "skip"`. For exact model requests, apply step 5 there and its linked required-arm rule.
+- **Panels keep their configured arm count.** Run each arm even on one model, except a design comparison that [step 2](roles.md#spawn-a-role) marks `"comparison": "skip"`. For exact model requests, apply step 5 there and its linked required-arm rule.
 
 - **Honesty**: never report parallel arms that actually ran sequentially; name the mechanism used.
