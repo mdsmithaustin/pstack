@@ -1728,15 +1728,16 @@ def claude_effort(view):
     for spawn in written:
         kind, effort = spawn.get("subagent_type") or "", spawn["effort"]
         observed = (spawn.get("observed") or {}).get("efforts") or []
-        evidence.append(f"seq {spawn.get('seq')}: type {kind!r} effort {effort!r} observed {observed}")
-        if kind != f"pstack-effort-{effort}":
-            failures.append(f"seq {spawn.get('seq')} wrote effort {effort} without the pstack-effort-{effort} agent")
+        carrier = spawn.get("x_effort_carrier")
+        evidence.append(f"seq {spawn.get('seq')}: type {kind!r} effort {effort!r} carrier {carrier!r} observed {observed}")
+        if carrier != "parameter" and kind != f"pstack-effort-{effort}":
+            failures.append(f"seq {spawn.get('seq')} wrote effort {effort} without the effort parameter or the pstack-effort-{effort} agent")
         elif observed and effort not in observed:
             failures.append(f"seq {spawn.get('seq')} ran at {observed}, not {effort}")
     if failures:
         return failed(failures, *evidence)
     if not any((s.get("observed") or {}).get("efforts") for s in written):
-        return inconclusive("effort agents used but the child's observed effort is not in the trace", *evidence)
+        return inconclusive("an effort carrier was used but the child's observed effort is not in the trace", *evidence)
     return passed(*evidence)
 
 

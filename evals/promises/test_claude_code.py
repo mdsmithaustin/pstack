@@ -196,7 +196,7 @@ class Harvest(unittest.TestCase):
                     self.assertEqual(trace["events"][7]["text"], fallback)
                     self.assertEqual(trace["spawns"], [{
                         "seq": 5, "turn": 0, "tool": "Agent", "subagent_type": "poteto-agent", "persona": "poteto-agent",
-                        "model": "sonnet", "effort": None, "prompt_head": prompt, "transcript": str(child_path),
+                        "model": "sonnet", "effort": None, "x_effort_carrier": None, "prompt_head": prompt, "transcript": str(child_path),
                         "observed": {"models": ["child-model"], "efforts": ["high"]},
                         "x_child_first_reply": child_reply, "x_persona_line": "poteto-agent",
                     }])

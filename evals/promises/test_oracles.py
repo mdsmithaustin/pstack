@@ -992,6 +992,14 @@ class HarnessDelivery(unittest.TestCase):
         trace["spawns"][0]["observed"] = {"efforts": ["high"]}
         self.assertEqual(grade("claude-effort-applies-via-effort-agents", trace, feature_case())["verdict"], PASS)
 
+    def test_effort_parameter_carries_the_effort_without_an_effort_agent(self):
+        spawn = {"seq": 1, "tool": "Agent", "subagent_type": "poteto-agent", "model": "sonnet", "effort": "high",
+                 "x_effort_carrier": "parameter", "persona": "poteto-agent", "observed": {"efforts": ["high"]}}
+        trace = minimal(spawns=[spawn])
+        self.assertEqual(grade("claude-effort-applies-via-effort-agents", trace, feature_case())["verdict"], PASS)
+        spawn["observed"] = {"efforts": ["medium"]}
+        self.assertEqual(grade("claude-effort-applies-via-effort-agents", trace, feature_case())["verdict"], FAIL)
+
     def test_effort_promise_not_applicable_elsewhere(self):
         result = grade("claude-effort-applies-via-effort-agents", minimal(harness="codex"), feature_case())
         self.assertEqual(result["verdict"], INCONCLUSIVE)

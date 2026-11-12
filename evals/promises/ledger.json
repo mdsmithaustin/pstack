@@ -715,7 +715,7 @@
   },
   "budget-labels-set-effort": {
    "check": "static",
-   "claim": "The shipped flat lines write no effort except `routine`, which writes `medium`, so roles run at the session effort on Claude Code and Grok Build and the `## codex` section pins its own. `default` keeps them. `unlimited`, `large`, `medium`, and `small` write max, xhigh, high, or medium on every entry that names a model, which overrides the session effort in either direction on Claude Code and Codex. Grok Build's spawn takes no effort, so every role there runs at the session effort.",
+   "claim": "The shipped flat lines write no effort except `routine`, which writes `medium`, so the resolver fills no effort on Claude Code and Grok Build and the `## codex` section pins its own. Such a role runs at the session effort on Grok Build, and on Claude Code when it uses the session's model; on another model Claude Code runs it at that model's own level. `default` keeps them. `unlimited`, `large`, `medium`, and `small` write max, xhigh, high, or medium on every entry that names a model, which overrides the session effort in either direction on Claude Code and Codex. Grok Build's spawn takes no effort, so every role there runs at the session effort.",
    "evidence": [
     {
      "file": "skills/setup-pstack/examples/pstack-models.md",
@@ -723,7 +723,7 @@
     },
     {
      "file": "skills/setup-pstack/references/models-config.md",
-     "quote": "A line without a usable effort runs at the session effort on Claude Code and Grok Build."
+     "quote": "A line without a usable effort gets no fill on Claude Code and Grok Build."
     },
     {
      "file": "skills/setup-pstack/SKILL.md",
@@ -735,7 +735,7 @@
     },
     {
      "file": "skills/setup-pstack/SKILL.md",
-     "quote": "say at the ask that a budget's suffix overrides the session effort in both directions once the effort agents are loaded."
+     "quote": "say at the ask that a budget's suffix overrides the session effort in both directions when the spawn tool takes `effort` or the effort agents are loaded."
     },
     {
      "file": "skills/pstack-harness/references/grok.md",
@@ -813,7 +813,7 @@
   },
   "claude-effort-applies-via-effort-agents": {
    "check": "live",
-   "claim": "On Claude Code a written @effort applies to a subagent only once the pstack-effort-<level> agents are in the live catalog; before that subagents run at the session effort.",
+   "claim": "On Claude Code a written @effort applies to a subagent through the spawn tool's effort parameter, or through a pstack-effort-<level> agent in the live catalog when the tool has no such parameter; with neither carrier the subagent runs without it.",
    "harness_sensitive": true,
    "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; Grade the observed effort of applicable Claude delegates. A Feature record may be compact or full.",
    "owners": [
@@ -5572,15 +5572,6 @@
    ],
    "text": "[`/benchmark-checklist`](../../skills/benchmark-checklist/SKILL.md) asks seven questions and wants evidence from a run for each:"
   },
-  "1a04dbcf5c79": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "claude-effort-applies-via-effort-agents",
-   "sources": [
-    "port"
-   ],
-   "text": "On Claude Code a written effort applies once setup has registered pstack's effort agents."
-  },
   "1a1b38db32ed": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -7775,15 +7766,6 @@
    ],
    "text": "It works out what a user touches, how the app launches locally, what can drive it (an existing harness first, otherwise browser and CDP, a PTY, or plain HTTP), what evidence proves behavior, and whether two instances can run side by side."
   },
-  "543719949e7d": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "port"
-   ],
-   "text": "On Claude Code and Grok Build a role with no written effort runs at your session effort, and on Codex the `## codex` section pins its own."
-  },
   "5453f5abe591": {
    "class": "substituted",
    "file": "02-poteto-mode.md",
@@ -8626,7 +8608,9 @@
    "file": "01-setup.md",
    "ported_as": [
     "eead1319fd44",
-    "543719949e7d"
+    "f13df52c09ea",
+    "dd1ae5257a2a",
+    "7368fe56929d"
    ],
    "promise": "budget-labels-set-effort",
    "sources": [
@@ -9079,6 +9063,15 @@
    ],
    "text": "The [Research playbook](../../skills/poteto-mode/playbooks/research.md) checks primary sources, versions, and conflicting evidence."
   },
+  "7368fe56929d": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "On Codex the `## codex` section pins its own."
+  },
   "7376b1468875": {
    "class": "context",
    "file": "05-build-and-clean.md",
@@ -9508,6 +9501,15 @@
     "port"
    ],
    "text": "The escape hatch lets it stop at a genuine dead end and write up why, which beats eight hours of creative goal reinterpretation."
+  },
+  "7f53f9189404": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "claude-effort-applies-via-effort-agents",
+   "sources": [
+    "port"
+   ],
+   "text": "On an older Claude Code it applies once setup has registered pstack's effort agents."
   },
   "7f5cef2d7c27": {
    "class": "cursor-only",
@@ -10517,15 +10519,6 @@
     "port"
    ],
    "text": "[`/setup-pstack`](../../skills/setup-pstack/SKILL.md) checks the bundled personas and offers optional native registration for Claude Code or Codex."
-  },
-  "9d40f211b151": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "claude-effort-applies-via-effort-agents",
-   "sources": [
-    "port"
-   ],
-   "text": "Until then subagents run at your session effort."
   },
   "9d93f253961f": {
    "also": [
@@ -11738,6 +11731,15 @@
     "port"
    ],
    "text": "```text\n/poteto-mode babysit this pr. get it green.\n```"
+  },
+  "b7d980a90648": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "claude-effort-applies-via-effort-agents",
+   "sources": [
+    "port"
+   ],
+   "text": "On Claude Code 2.1.292 or later a written effort applies through the spawn tool's own effort parameter."
   },
   "b7de69594a25": {
    "class": "context",
@@ -13051,6 +13053,15 @@
    ],
    "text": "```text\n/poteto-mode we need rate limiting for external webhooks. /architect it first, and answer open questions with prototypes. let me review before proceeding.\n```"
   },
+  "dd1ae5257a2a": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "On Claude Code it does so only when the role uses your session's model, and a role on another model runs at the level Claude Code keeps for that model."
+  },
   "dd2ad473b5ec": {
    "also": [
     "benchmark-checklist-seven-questions-verdict"
@@ -14036,6 +14047,15 @@
     "port"
    ],
    "text": "```text\n/interrogate the whole branch, but skeptically. don't change anything yet. no nitpicks unless it's an actual bug or regression in behavior.\n```"
+  },
+  "f13df52c09ea": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "On Grok Build a role with no written effort runs at your session effort."
   },
   "f15e296b50d6": {
    "class": "promise",

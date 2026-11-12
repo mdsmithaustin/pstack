@@ -174,14 +174,14 @@ class ClaudeCodeSectionEfforts(unittest.TestCase):
         text = "default: auto@none\n"
         sections, findings = cmc.parse(text)
         self.assertEqual(errors_of(findings), [])
-        self.assertTrue(any(n[2] == "Claude Code cannot use none or ultra, so it runs `default` at the session effort" for n in notices_of(findings)))
+        self.assertTrue(any(n[2] == "Claude Code cannot use none or ultra, so it runs `default` with no effort set" for n in notices_of(findings)))
         self.assertEqual(sections[""]["default"], [("auto", "none")])
 
     def test_flat_none_overridden_by_claude_code_section_is_not_a_notice(self):
         text = "default: auto@none\n\n## claude-code\ndefault: auto@high\n"
         sections, findings = cmc.parse(text)
         self.assertEqual(errors_of(findings), [])
-        self.assertFalse(any(n[2] == "Claude Code cannot use none or ultra, so it runs `default` at the session effort" for n in notices_of(findings)))
+        self.assertFalse(any(n[2] == "Claude Code cannot use none or ultra, so it runs `default` with no effort set" for n in notices_of(findings)))
         self.assertEqual(sections[""]["default"], [("auto", "none")])
         self.assertEqual(sections["claude-code"]["default"], [("auto", "high")])
 
@@ -191,8 +191,8 @@ class ClaudeCodeSectionEfforts(unittest.TestCase):
         self.assertEqual(errors_of(findings), [])
         notices = [n[2] for n in notices_of(findings)]
         self.assertEqual(len(notices), 2)
-        self.assertIn("Claude Code cannot use none or ultra, so it runs `default` at the session effort", notices)
-        self.assertIn("Claude Code cannot use none or ultra, so it runs `trail reviewer` at the session effort", notices)
+        self.assertIn("Claude Code cannot use none or ultra, so it runs `default` with no effort set", notices)
+        self.assertIn("Claude Code cannot use none or ultra, so it runs `trail reviewer` with no effort set", notices)
 
     def test_grok_section_rejects_ultra(self):
         text = "## grok\ntrail reviewer: grok-4.6@ultra\n"

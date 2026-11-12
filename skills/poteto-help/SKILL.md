@@ -139,7 +139,7 @@ Principles are one-rule skills that `/poteto-mode` reads and cites in its replie
 |---|---|
 | The mode stopped applying | Read the [README's continuation guidance](https://github.com/mdsmithaustin/pstack/blob/main/README.md#usage). |
 | A question got treated as the next step of the last task | Say "new task", or say the turn doesn't need the mode. |
-| A new model choice had no effect | A workspace `.agents/pstack-models.md` overrides the home file, and a harness section such as `## codex` beats a flat line. On Claude Code, a written effort applies only once `/setup-pstack` has registered pstack's effort agents. |
+| A new model choice had no effect | A workspace `.agents/pstack-models.md` overrides the home file, and a harness section such as `## codex` beats a flat line. On Claude Code before 2.1.292, a written effort applies only once `/setup-pstack` has registered pstack's effort agents. |
 | Runs cost more than expected | See the cost paragraph under Get set up. |
 | A skill didn't load on its own | On Codex, and on Claude Code once `/setup-pstack` sets the skill listing, only `/setup-pstack`, `/how`, `/why`, `/unslop`, `/deslop`, `/pr-recap`, `/documentation-impact`, `/verify-commands`, `/spec-probes`, and `/runtime-probes` load from the user's words. The others load when the user types them or when another pstack skill, such as `/poteto-mode`, tells the agent to use them. `/poteto-mode` doesn't run every skill. |
 | Parallel agents overwrote each other | Give each agent its own worktree. |
