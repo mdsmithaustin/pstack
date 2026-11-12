@@ -10,7 +10,7 @@ Pass `model`. The spawn tool has no effort field, so the agent type carries the 
 | a level, but that agent is not in the catalog | `general-purpose` | the persona per the [persona contract](named-roles.md) |
 | `inherit-parent` | `general-purpose` | the persona per the persona contract |
 
-Always name an agent type from this table. Fork mode is on by default from Claude Code 2.1.302, and a spawn under any named type other than `fork` starts fresh. Use `fork` only as the [fork restrictions](roles.md#fork-restrictions) allow.
+Always name an agent type from this table. A spawn under any named type other than `fork` starts fresh. Use `fork` only as the [fork restrictions](roles.md#fork-restrictions) allow.
 
 Only the live catalog proves an agent is loaded. A file on disk does not. A delegate's own spawns inherit the delegate's effort, so a nested spawn with an `inherit-parent` effort runs at the delegate's level, not the top session's.
 

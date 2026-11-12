@@ -4742,36 +4742,52 @@ def worklist_follows_plan(view):
     return inconclusive("the run did not finish with a project change, so a missing or idle worklist proves nothing", *evidence)
 
 
-def forked_turns(value):
-    """How much lead history a Codex spawn carries: None for an omitted field, which Codex forks in full."""
-    if value in ("none", "all"):
-        return value
-    if isinstance(value, bool):
-        return "invalid"
-    if value is None:
+COUNTS_FORK_IN_FULL_FROM = (0, 162, 0)
+
+
+def codex_release(view):
+    """The Codex release the trace names, as a tuple, or None when it names none or a pre-release."""
+    named = re.search(r"(?<![\d.])(\d+)\.(\d+)\.(\d+)(-)?", str(view.trace.get("cli_version") or ""))
+    return tuple(int(part) for part in named.groups()[:3]) if named and not named.group(4) else None
+
+
+def spawn_fork(given):
+    """The fork a recorded spawn_agent call asks for, as Codex parses it. None when the call does not show which spawn tool ran."""
+    if not isinstance(given, dict) or ("task_name" not in given and "fork_context" not in given):
         return None
-    try:
-        count = int(value) if isinstance(value, (int, str)) else 0
-    except ValueError:
-        return "invalid"
-    return count if count > 0 and str(value).strip() == str(count) else "invalid"
+    context, turns = given.get("fork_context"), given.get("fork_turns")
+    if "task_name" not in given:
+        return {True: "all", False: "none"}[context] if isinstance(context, bool) else "rejected"
+    if context is not None or not isinstance(turns, (str, type(None))):
+        return "rejected"
+    turns = (turns or "").strip().lower()
+    if turns in ("none", "all"):
+        return turns
+    if not turns:
+        return "omitted"
+    return "count" if re.fullmatch(r"\+?[0-9]+", turns) and int(turns) else "rejected"
 
 
 REVIEW_SEAT = re.compile(r"(?<![a-z])(?:review(?:er)?s?|judges?|verdicts?|adversar(?:y|ies|ial))(?![a-z])")
 REVIEW_ORDER = re.compile(r"\A\s*(?:(?:task|role|goal)\s*:\s*)?(?:(?:adversarially|independently)\s+)?(?:review|judge)(?![a-z])"
                           r"|\A\s*(?:you are|act as) (?:the |an? )?(?:[a-z-]+ ){0,2}(?:reviewer|judge)(?![a-z])")
+REVIEWER_WORDS = {"reviewer", "reviewers", "adversary", "adversarial"}
+REPAIR_WORDS = {"address", "apply", "comments", "feedback", "findings", "fix", "fixes", "notes", "repair", "resolve"}
 
 
-def assigned_review(view, spawn):
-    """Whether the spawn's assigned seat is a review. The words of the brief's body and of the child's reply are not a seat."""
-    call = next((c for c in view.tool_calls if str(c.get("seq")) == str(spawn.get("seq"))), None)
-    given = (call or {}).get("input") or {}
-    seat = [spawn.get(key) for key in ("persona", "subagent_type", "task_name", "role")]
-    seat += [given.get(key) for key in ("agent_type", "task_name", "name")] if isinstance(given, dict) else []
+def assigned_review(view, spawn, given):
+    """Whether the spawn's assigned seat is a review, or None when its task name leaves that open."""
+    seat = [spawn.get("persona"), given.get("agent_type")]
     head = (spawn.get("prompt_head") or "").lower()
     role = named_role(spawn, view.spawn_brief(spawn).replace("\\n", "\n").lower()) or ""
-    return (any(REVIEW_SEAT.search(str(name).lower()) for name in seat if name) or bool(REVIEW_SEAT.search(role))
-            or bool(REVIEW_ORDER.match(head)))
+    if (any(REVIEW_SEAT.search(str(name).lower()) for name in seat if name) or REVIEW_SEAT.search(role)
+            or REVIEW_ORDER.match(head)):
+        return True
+    words = re.findall(r"[a-z]+", str(given.get("task_name") or "").lower())
+    if not any(REVIEW_SEAT.fullmatch(word) for word in words):
+        return False
+    named = words[0] in ("review", "judge") or words[-1] in ("review", "judge") or REVIEWER_WORDS & set(words)
+    return True if named and not REPAIR_WORDS & set(words) else None
 
 
 @oracle("codex-spawns-state-fork-turns")
@@ -4782,23 +4798,46 @@ def codex_spawns_state_fork_turns(view):
     if not spawns:
         return inconclusive("the lead made no spawn_agent call, so no fork choice came due")
     fresh = bool((view.case.get("expect") or {}).get("fresh_delegates"))
-    reviewers = {s.get("seq") for s in spawns if assigned_review(view, s)}
-    failures, evidence = [], []
+    release = codex_release(view)
+    failures, unknown, evidence, graded = [], [], [], 0
     for spawn in spawns:
-        seq, carried = spawn.get("seq"), forked_turns(spawn.get("fork_turns"))
+        seq = spawn.get("seq")
+        call = next((c for c in view.tool_calls if str(c.get("seq")) == str(seq)), None)
+        given = (call or {}).get("input")
+        fork = spawn_fork(given)
+        if fork is None:
+            unknown.append(f"spawn at seq {seq} shows neither task_name nor fork_context, so the trace does not say which spawn tool ran")
+            continue
+        stated = {key: given[key] for key in ("fork_turns", "fork_context") if key in given}
+        if fork == "rejected":
+            evidence.append(f"spawn at seq {seq}: {stated}, which Codex refuses, so the call created no child")
+            continue
+        graded += 1
+        reviewer = assigned_review(view, spawn, given)
         pinned = [key for key in ("model", "effort") if spawn.get(key)]
-        evidence.append(f"spawn at seq {seq}: fork_turns={spawn.get('fork_turns')!r}, pinned={pinned}, reviewer={seq in reviewers}")
-        if carried is None:
+        evidence.append(f"spawn at seq {seq}: {stated}, read as {fork}, pinned={pinned}, reviewer={reviewer}")
+        if fork == "none":
+            continue
+        if fork == "omitted":
             failures.append(f"spawn at seq {seq} omits fork_turns, so Codex forks the lead's full history into it")
-        elif carried == "invalid":
-            failures.append(f"spawn at seq {seq} passes fork_turns={spawn.get('fork_turns')!r}, which is not \"none\", \"all\", or a positive count")
-        elif carried == "all" and pinned:
-            failures.append(f"spawn at seq {seq} forks the full history while passing {' and '.join(pinned)}, which a full fork ignores")
-        elif carried != "none" and seq in reviewers:
-            failures.append(f"reviewer spawn at seq {seq} carries lead history (fork_turns={spawn.get('fork_turns')!r})")
-        elif carried != "none" and fresh:
-            failures.append(f"spawn at seq {seq} carries lead history (fork_turns={spawn.get('fork_turns')!r}) on a task whose brief needs none")
-    return failed(failures, *evidence) if failures else passed(*evidence)
+        elif reviewer:
+            failures.append(f"reviewer spawn at seq {seq} carries lead history ({stated})")
+        elif fresh:
+            failures.append(f"spawn at seq {seq} carries lead history ({stated}) on a task whose brief needs none")
+        elif pinned and fork == "count" and (release is None or release < COUNTS_FORK_IN_FULL_FROM):
+            unknown.append(f"spawn at seq {seq} passes a turn count with {' and '.join(pinned)}: Codex from 0.162.0 forks the full history "
+                           f"for a count and earlier releases carried only that many turns, and the trace names "
+                           f"{'no release' if release is None else 'release ' + '.'.join(map(str, release))}")
+        elif pinned:
+            failures.append(f"spawn at seq {seq} forks the full history while passing {' and '.join(pinned)} ({stated})")
+        elif reviewer is None:
+            unknown.append(f"spawn at seq {seq} carries lead history ({stated}) and its task name {given.get('task_name')!r} "
+                           "may or may not name a review seat")
+    if failures:
+        return failed(failures, *evidence)
+    if unknown:
+        return inconclusive(unknown, *evidence)
+    return passed(*evidence) if graded else inconclusive("Codex refuses every recorded spawn_agent call, so no fork choice took effect", *evidence)
 
 
 @oracle("default-endpoint-local-branch-without-remote")
