@@ -513,11 +513,11 @@
       "difficulty": "extended",
       "trigger_type": "implicit",
       "success_goals": ["outcome", "process"],
-      "prompt": "Another team owns signup-spec.md and we can't change it. We're about to build the signup handler it describes. Write the acceptance tests it should pass before implementation starts. A test name plus a line on its input and expected result is enough for each.",
+      "prompt": "We're about to build the signup handler that signup-spec.md describes. Write the acceptance tests it should pass before implementation starts. A test name plus a line on its input and expected result is enough for each.",
       "files": ["fixtures/signup-spec.md"],
       "expected_behavior": [
         "Separates SU-302's trimming from SU-304's stripping with whitespace inside a value: an `invite_code` with inner whitespace that matches an open invite once all whitespace is removed returns 201, and a `display_name` with inner whitespace is saved with it.",
-        "Ties each test to a quoted spec sentence that gives its expected result, and writes no test whose result no requirement gives. Such an answer is listed apart as an assumption or open question."
+        "Ties each test to the requirement or spec sentence that gives its expected result, and labels any test whose result no requirement gives as an assumption."
       ],
       "assertions": [
         {
@@ -542,7 +542,7 @@
             {
               "name": "spec-citations",
               "scale": "1-5",
-              "rubric": "5 = Every proposed test is tied, and the response proposes no test whose result no requirement gives. A test is tied when it quotes the spec sentence or example that gives its expected result, or names one the response quotes elsewhere. An open question kept out of the tests is not a test. 4 = No test expects a result that no requirement gives, but exactly one test is not tied and more than half are. 3 = More than half of the tests are tied but two or more are not, or one test expects a result that no requirement gives. A test labeled as an assumption counts. 2 = Half or fewer of the tests are tied, or two or more tests expect results that no requirement gives. 1 = No test quotes or names any spec text. When two levels fit, give the lower."
+              "rubric": "5 = Every proposed test names the requirement or quotes the spec sentence that gives its expected result, by ID, quote, or a heading it sits under, and any test whose result no requirement gives is labeled an assumption, or the response proposes no such test. An open question kept out of the tests is not a test. 4 = Every test is tied to a requirement, but one test whose result no requirement gives is not labeled an assumption. 3 = Most tests are tied to a requirement but some are not, or two or more tests expect results that no requirement gives without labeling them. 2 = Few tests are tied to a requirement. 1 = No test is tied to the spec text."
             }
           ]
         },
@@ -562,187 +562,6 @@
         }
       ],
       "tags": ["population:headline-behavior", "source-grounding", "look-alike-terms"]
-    },
-    {
-      "id": "pos-unit-cardinality",
-      "split": "tune",
-      "kind": "adversarial",
-      "eval_intent": "capability",
-      "domain": "requirements",
-      "difficulty": "extended",
-      "trigger_type": "implicit",
-      "success_goals": ["outcome", "process"],
-      "prompt": "We're about to build the import command that pantry-spec.md describes. Write the acceptance tests it should pass before implementation starts. A test name plus a line on its input and expected result is enough for each.",
-      "files": ["fixtures/pantry-spec.md"],
-      "expected_behavior": [
-        "Numbers a skipped crate by its line in the delivery sheet, header counted, so the first crate is `line 2`, as PN-603's \"line number in the delivery sheet\" says.",
-        "Gives a crate with both faults one report line that holds both reasons, and counts it once in `skipped`, as PN-603's \"For each skipped crate the report has one line\" says.",
-        "Counts crates, not `units`, in `shelved`, as PN-604 says, with a shelved crate whose `units` is above 1.",
-        "Treats the example, which has one crate of one unit and no skipped crate, as passing under every reading, so it settles none of the three."
-      ],
-      "assertions": [
-        {
-          "name": "units-settled-by-spec-wording",
-          "type": "judge",
-          "severity": "gate",
-          "threshold": 4,
-          "graded_dimensions": [
-            {
-              "name": "unit-settled-by-spec-noun",
-              "scale": "1-5",
-              "rubric": "5 = No test is wrong and all three units are settled. The units: (a) A skipped crate is reported with its line number in the sheet, header counted, so the first crate is `line 2`. (b) One crate with both faults gives one report line that holds both reasons and adds 1 to `skipped`. (c) A shelved crate whose `units` is above 1 adds 1 to `shelved`. A unit is settled when a test's input makes the plausible units differ and the test states the result the spec's wording gives, as in (a) to (c). One test can settle more than one unit. A test that states no line number or count, a test whose stated result would be the same under both readings, and a unit left as an open question settle nothing and are not wrong. A test is wrong when it expects the other unit: `line 1` for the first crate, two report lines or `skipped: 2` for one crate with two faults, or a `shelved` figure that sums `units`. 4 = No test is wrong and exactly two units are settled. 3 = No test is wrong and exactly one unit is settled. 2 = No test is wrong and no unit is settled. An answer with no test is here. 1 = At least one test is wrong."
-            }
-          ]
-        },
-        {
-          "name": "with-skill-loaded",
-          "type": "skill_invoked",
-          "expected": true,
-          "variants": ["with_skill"],
-          "severity": "gate"
-        },
-        {
-          "name": "without-skill-clean",
-          "type": "skill_invoked",
-          "expected": false,
-          "variants": ["without_skill"],
-          "severity": "gate"
-        }
-      ],
-      "tags": ["population:headline-behavior", "source-grounding", "unit-cardinality"]
-    },
-    {
-      "id": "pos-example-output-exact",
-      "split": "tune",
-      "kind": "adversarial",
-      "eval_intent": "capability",
-      "domain": "requirements",
-      "difficulty": "extended",
-      "trigger_type": "implicit",
-      "success_goals": ["outcome", "process"],
-      "prompt": "We're about to build the trails command that trail-spec.md describes. Write the acceptance tests it should pass before implementation starts. A test name plus a line on its input and expected result is enough for each.",
-      "files": ["fixtures/trail-spec.md"],
-      "expected_behavior": [
-        "Turns both examples into tests whose expected output is the example's lines verbatim, compared as whole text.",
-        "Expects `km` in every output line, the spelling every example shows, though TR-702 also allows `kilometres`. No test of an example accepts either spelling or compares through a parser, pattern, or normalizer. A loose check on a line no example shows still passes the gate.",
-        "Expects no rejection for an input because it differs from the example inputs, such as metres that are not whole, zero, or negative, a one-word name, a name that holds a colon, or a name added twice. These are accepted where the spec gives a result, or left open."
-      ],
-      "assertions": [
-        {
-          "name": "example-output-compared-exactly",
-          "type": "judge",
-          "severity": "gate",
-          "threshold": 4,
-          "graded_dimensions": [
-            {
-              "name": "example-output-exact",
-              "scale": "1-5",
-              "rubric": "5 = No test expects a wrong form, both examples are exact, and no line outside the examples is checked loosely. The answer may note that TR-702 also allows `kilometres`. It still expects `km`. Give each example one state, from every test that checks its lines. A test checks an example's lines when it runs exactly that example's commands and checks the output, or when it states one check for every `trails list` line. The example is loosened when any such test checks through a parsed number, a regular expression, either spelling accepted, ignored whitespace, or \"contains\". Otherwise it is exact when such a test's expected output is the example's lines verbatim, compared as whole text. Otherwise it is paraphrased when such tests only describe its output in words. Otherwise it is untested. So a test in words beside a verbatim test of the same example, such as \"`--min 5000` does not list Mill path\", leaves that example exact. A wrong form is an expected output of `kilometres` or of another form no example shows. The examples' form is name, colon, one space, one decimal place, a space, `km`. Accepting either spelling is a loose check, not a wrong form. A line outside the examples is any other expected output line. It is checked loosely when a test checks it through one of those five ways, or describes it in words, such as \"ends with a unit\", without writing it out. TR-702 allows both spellings, so a test may accept either on such a line, but a test that expects `kilometres` on any line expects a wrong form. An example fixes its own lines. 4 = No test expects a wrong form, both examples are exact, and at least one line outside the examples is checked loosely. 3 = No test expects a wrong form, each example is exact or loosened, and at least one is loosened. 2 = No test expects a wrong form, at least one example is paraphrased or untested, and the two are not both untested. 1 = A test expects a wrong form, or both examples are untested."
-            }
-          ]
-        },
-        {
-          "name": "example-inputs-restrict-nothing",
-          "type": "judge",
-          "severity": "gate",
-          "threshold": 4,
-          "graded_dimensions": [
-            {
-              "name": "example-inputs-unrestricted",
-              "scale": "1-5",
-              "rubric": "5 = No test is counted, no test contradicts an example, and no test is unbacked. A test is counted when it expects a rejection, an error, or a reinterpretation for an input because it differs from the example inputs. A reinterpretation gives the input a meaning other than the one typed, such as expecting one line after a name is added twice. Inputs that differ include metres that are not whole, zero, or negative, a one-word name, a name that holds a colon, and a name added twice. These are examples of such inputs, not the whole list. A rejection of a `<metres>` that is not a number is not counted either way. A test is unbacked when it is not counted and it expects, for an input that differs from the example inputs, an accepted result that TR-701 to TR-703 do not give. An input that is absent, expected accepted with the result TR-701 to TR-703 give, or listed as open with no test makes no test counted or unbacked. 4 = No test is counted and no test contradicts an example, but at least one test is unbacked. 3 = Exactly one test is counted, it is labeled as an assumption or a proposal, and no test contradicts an example. 2 = Exactly one test is counted, it has no label, and no test contradicts an example. 1 = Two or more tests are counted, or a test contradicts an example."
-            }
-          ]
-        },
-        {
-          "name": "with-skill-loaded",
-          "type": "skill_invoked",
-          "expected": true,
-          "variants": ["with_skill"],
-          "severity": "gate"
-        },
-        {
-          "name": "without-skill-clean",
-          "type": "skill_invoked",
-          "expected": false,
-          "variants": ["without_skill"],
-          "severity": "gate"
-        }
-      ],
-      "tags": ["population:headline-behavior", "source-grounding", "example-values"]
-    },
-    {
-      "id": "pos-fixed-spec-quoted-criteria",
-      "split": "tune",
-      "kind": "adversarial",
-      "eval_intent": "capability",
-      "domain": "requirements",
-      "difficulty": "extended",
-      "trigger_type": "implicit",
-      "success_goals": ["outcome", "process"],
-      "prompt": "Another team owns locker-spec.md and we can't change it. We're implementing the pickup endpoint it describes. Write the acceptance tests the implementation must pass. A test name plus a line on its input and expected result is enough for each.",
-      "files": ["fixtures/locker-spec.md"],
-      "expected_behavior": [
-        "Ties every test to a quoted spec sentence or example line that gives its expected result.",
-        "Writes no test for an answer the spec does not give: the response for a `locker` that names no locker, whether a 422 counts toward or breaks LK-403's run of three wrong pins, and the exact 72-hour instant. Lists these apart as assumptions or open gaps, and says the implementation takes the permissive behavior. A test may expect 422 for a `pin` sent as a JSON number, from LK-402, or 403 for the pin of a returned parcel, from LK-404 with LK-403.",
-        "Pairs LK-402's rejection with accepted pins at both bounds and with a leading-zero pin such as the example's `0417`, and pairs LK-403's lockout with a right pin after two wrong ones."
-      ],
-      "assertions": [
-        {
-          "name": "only-stated-results-tested",
-          "type": "judge",
-          "severity": "gate",
-          "threshold": 4,
-          "graded_dimensions": [
-            {
-              "name": "only-stated-results-tested",
-              "scale": "1-5",
-              "rubric": "5 = Every test's expected result is given by a spec sentence or the example. Whether a test quotes its source is graded by another assertion, not here. Each answer the spec does not give is kept out of the tests and listed apart as an assumption or open gap, with at least two of these three: a `locker` that names no locker, whether a 422 counts toward or breaks LK-403's run of three wrong pins, the exact 72-hour instant. For at least one, the answer says the implementation takes the permissive or least restrictive behavior and that no test asserts it. The spec gives two results that look open, so a test for either is not counted against the answer, and neither is leaving it out: 422 for a `pin` that is not a string of four to six digits, such as a JSON number (LK-402's \"Any other `pin` returns 422\"), and 403 for a pin where no parcel waits, such as after LK-404's return (LK-404's \"its pin stops working\" with LK-403). 4 = No test asserts an answer the spec does not give, but the answer lists apart fewer than two of the three named above, or for none of them does it say both that the implementation takes the permissive or least restrictive behavior and that no test asserts it. 3 = One or two tests assert an answer the spec does not give. A test labeled as an assumption, a proposal, or \"to confirm\" counts. 2 = Three or more tests assert such answers. 1 = A test contradicts a stated rule, or most tests decide unstated answers with no label. When two levels fit, give the lower."
-            }
-          ]
-        },
-        {
-          "name": "tests-quote-spec",
-          "type": "judge",
-          "severity": "gate",
-          "threshold": 4,
-          "graded_dimensions": [
-            {
-              "name": "quoted-sources",
-              "scale": "1-5",
-              "rubric": "5 = Every counted test is tied. A test is tied when it quotes the spec sentence or example line that gives its expected result, or names that sentence or line, by ID or as the example, where the answer quotes it elsewhere. A requirement ID whose sentence the answer never quotes ties nothing. Count only proposed tests whose result the spec gives: a test for an answer the spec does not give is graded by another assertion, and an open question kept out of the tests is not a test. 4 = Exactly one counted test is not tied, and more than half are tied. 3 = Two or more counted tests are not tied, and more than half are tied. 2 = At least one counted test is tied, and half or fewer are. 1 = No counted test is tied, or the answer has no counted test."
-            }
-          ]
-        },
-        {
-          "name": "named-rejections-paired",
-          "type": "judge",
-          "severity": "gate",
-          "threshold": 4,
-          "graded_dimensions": [
-            {
-              "name": "rejections-paired",
-              "scale": "1-5",
-              "rubric": "5 = LK-402's rejection is tested, no test rejects a valid pin, both bounds are rejected, and the tests give all four accepted neighbors. Both bounds are rejected when a test expects 422 for a three-digit pin and a test expects 422 for a seven-digit pin. A test rejects a valid pin when it expects 422 for a pin of four to six digits. A 403 or 423 that LK-403 or LK-404 gives, such as 423 for the right pin while the locker is locked, does not reject a valid pin. The neighbors: (i) a four-digit pin that matches the waiting parcel returns 200, (ii) a six-digit pin that matches the waiting parcel returns 200, (iii) a pin with a leading zero, such as the example's `0417`, is expected accepted as written, (iv) after two wrong pins the right pin still returns 200. One test can give more than one, so the example alone gives (i) and (iii). A test that expects 403 or 423 gives none. 4 = LK-402's rejection is tested, no test rejects a valid pin, both bounds are rejected, and the tests give exactly three of the four. 3 = LK-402's rejection is tested, no test rejects a valid pin, and either the tests give one or two of the four, or they give three or four and at least one of those two 422 tests is missing. 2 = LK-402's rejection is tested, no test rejects a valid pin, and the tests give none of the four. 1 = A test rejects a valid pin, such as one with a leading zero, or LK-402's rejection is not tested."
-            }
-          ]
-        },
-        {
-          "name": "with-skill-loaded",
-          "type": "skill_invoked",
-          "expected": true,
-          "variants": ["with_skill"],
-          "severity": "gate"
-        },
-        {
-          "name": "without-skill-clean",
-          "type": "skill_invoked",
-          "expected": false,
-          "variants": ["without_skill"],
-          "severity": "gate"
-        }
-      ],
-      "tags": ["population:headline-behavior", "source-grounding", "fixed-spec", "rejection-pair"]
     },
     {
       "id": "neg-deployed-incident-restraint",
