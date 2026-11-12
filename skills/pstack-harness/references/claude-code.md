@@ -24,4 +24,4 @@ no per-call field; a `pstack-effort-<level>` agent type carries it (see the [eff
 
 ## Writer isolation
 
-Per the Claude Code worktree docs read on 2026-11-12, a subagent's `isolation: worktree` branches from the repository's default branch unless the `worktree.baseRef` setting is `head`. A writer that needs your unpushed commits therefore gets its worktree from `git worktree add` at the commit its brief names.
+Per the Claude Code worktree docs read on 2026-11-12, a subagent's `isolation: worktree` branches from the repository's default branch unless the `worktree.baseRef` setting is `head`. So whenever a writer must start from any other commit, pushed or not, such as your branch or a parent PR's branch, make its worktree with `git worktree add` at the commit its brief names.
