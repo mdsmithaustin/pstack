@@ -1730,7 +1730,9 @@ def claude_effort(view):
         observed = (spawn.get("observed") or {}).get("efforts") or []
         carrier = spawn.get("x_effort_carrier")
         evidence.append(f"seq {spawn.get('seq')}: type {kind!r} effort {effort!r} carrier {carrier!r} observed {observed}")
-        if carrier != "parameter" and kind != f"pstack-effort-{effort}":
+        if kind == "fork":
+            failures.append(f"seq {spawn.get('seq')} wrote effort {effort} on a fork, which ignores it")
+        elif carrier != "parameter" and kind != f"pstack-effort-{effort}":
             failures.append(f"seq {spawn.get('seq')} wrote effort {effort} without the effort parameter or the pstack-effort-{effort} agent")
         elif observed and effort not in observed:
             failures.append(f"seq {spawn.get('seq')} ran at {observed}, not {effort}")

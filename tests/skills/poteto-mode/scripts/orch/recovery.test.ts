@@ -703,7 +703,7 @@ describe("CLI concrete execution identity", () => {
   for (const [harness, entry, model, effort] of [
     ["codex", "inherit-parent@high", "inherit-parent", "high"],
     ["codex", "auto@high", "inherit-parent", "high"],
-    ["claude-code", "sonnet", "sonnet", "inherit-parent"],
+    ["claude-code", "auto", "inherit-parent", "inherit-parent"],
     ["grok", "grok-4.7", "grok-4.7", "inherit-parent"],
   ] as const) {
     it(`preserves ${harness} resolver inheritance for ${entry}`, async () => {

@@ -1000,6 +1000,12 @@ class HarnessDelivery(unittest.TestCase):
         spawn["observed"] = {"efforts": ["medium"]}
         self.assertEqual(grade("claude-effort-applies-via-effort-agents", trace, feature_case())["verdict"], FAIL)
 
+    def test_an_effort_written_on_a_fork_fails_even_when_the_observed_effort_matches(self):
+        spawn = {"seq": 1, "tool": "Agent", "subagent_type": "fork", "model": None, "effort": "high",
+                 "x_effort_carrier": "parameter", "observed": {"efforts": ["high"]}}
+        result = grade("claude-effort-applies-via-effort-agents", minimal(spawns=[spawn]), feature_case())
+        self.assertEqual(result["verdict"], FAIL)
+
     def test_effort_promise_not_applicable_elsewhere(self):
         result = grade("claude-effort-applies-via-effort-agents", minimal(harness="codex"), feature_case())
         self.assertEqual(result["verdict"], INCONCLUSIVE)

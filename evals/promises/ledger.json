@@ -822,6 +822,8 @@
    "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; Grade the observed effort of applicable Claude delegates. A Feature record may be compact or full.",
    "owners": [
     "skills/pstack-harness/SKILL.md",
+    "skills/pstack-harness/references/claude-code.md",
+    "skills/pstack-harness/references/named-roles.md",
     "skills/pstack-harness/references/registration.md",
     "skills/pstack-harness/references/subagents/effort-delegate.md",
     "skills/pstack-harness/scripts/subagents.py"
