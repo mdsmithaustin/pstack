@@ -4780,7 +4780,7 @@ def tool_that_made_a_child(spawn):
 def history_carried(tool, spawn):
     context, turns = spawn.get("x_fork_context"), spawn.get("fork_turns")
     if tool == "older":
-        if context is None or context is False:
+        if "x_fork_context" not in spawn or context is False:
             return "none"
         return "all" if context is True else "unreadable"
     if context is not None or not isinstance(turns, (str, type(None))):

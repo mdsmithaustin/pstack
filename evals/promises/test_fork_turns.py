@@ -157,15 +157,20 @@ class ToolIdentity(unittest.TestCase):
         self.assertEqual(grade_rollout(v2("all", NO_RESULT), v2())["verdict"], FAIL)
 
     def test_accepted_call_with_a_value_its_tool_refuses_is_inconclusive(self):
-        for spawn in (v2(3), v2(True), v2(["all"]), v2(1.5), v2("0"), v2("-1"), v2("some"), v2("²"), v2("1.5"), v2("\x1fall"), v2("\x1fnone"),
+        for spawn in (v2(3), v2(True), v2(["all"]), v2(1.5), v2("0"), v2("-1"), v2("some"), v2("²"), v2("1.5"), v2("\u0663"), v2("\x1fall"), v2("\x1fnone"),
                       v2("none", fork_context=False), v2("none", fork_context=True), v2("18446744073709551616"), v2("9" * 4301),
-                      v1(fork_context="true"), v1(fork_context=0), v1(fork_context=1), v1(fork_context=[]), v1(fork_context={})):
+                      v1(fork_context="true"), v1(fork_context=None), v1(fork_context=0), v1(fork_context=1), v1(fork_context=[]), v1(fork_context={})):
             with self.subTest(arguments=str(spawn["arguments"])[:80]):
                 result = grade_rollout(spawn, v2("none"), case=CASE)
                 self.assertEqual(result["verdict"], INCONCLUSIVE)
                 self.assertIn("is a value that tool refuses in every release checked", result["failures"][0])
         self.assertIn("fork_turns=a list is a value", grade_rollout(v2(["all"]))["failures"][0])
         self.assertIn("fork_context=True is a value", grade_rollout(v2("none", fork_context=True))["failures"][0])
+        self.assertIn("fork_context=None is a value", grade_rollout(v1(fork_context=None))["failures"][0])
+
+    def test_null_fork_context_on_the_current_tool_reads_as_absent(self):
+        self.assertEqual(grade_rollout(v2("none", fork_context=None), case=CASE)["verdict"], PASS)
+        self.assertEqual(grade_rollout(v2("all", fork_context=None), case=CASE)["verdict"], FAIL)
 
 
 class RefusedCalls(unittest.TestCase):
@@ -274,7 +279,7 @@ class TurnCount(unittest.TestCase):
 class OlderTool(unittest.TestCase):
     def test_fresh_child_passes_whether_or_not_the_call_states_it(self):
         for spawn in (v1(fork_context=False, model="gpt-5.6-luna", agent_type="trail reviewer"), v1(model="gpt-5.6-luna"),
-                      v1(fork_context=None), v1(fork_context=False, fork_turns="all", model="gpt-5.6-luna")):
+                      v1(fork_context=False, fork_turns="all", model="gpt-5.6-luna")):
             with self.subTest(arguments=spawn["arguments"]):
                 self.assertEqual(grade_rollout(spawn, case=CASE)["verdict"], PASS)
 

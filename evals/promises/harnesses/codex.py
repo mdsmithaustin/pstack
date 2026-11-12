@@ -529,7 +529,8 @@ def harvest_rollout(data, prompts=None):
                                    "effort": tool_input.get("reasoning_effort"), "fork_turns": tool_input.get("fork_turns"),
                                    "prompt_head": None if encrypted else (message or "")[:300], "x_prompt_encrypted": encrypted,
                                    "x_namespace": payload.get("namespace"), "x_agent_type": tool_input.get("agent_type"),
-                                   "x_fork_context": tool_input.get("fork_context"), "x_output": None})
+                                   "x_output": None,
+                                   **({"x_fork_context": tool_input["fork_context"]} if "fork_context" in tool_input else {})})
             elif ptype in ("custom_tool_call_output", "function_call_output"):
                 output = payload.get("output")
                 body = text_of(output) if isinstance(output, list) else (output if isinstance(output, str) else json.dumps(output))
