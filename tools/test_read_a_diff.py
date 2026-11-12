@@ -661,6 +661,20 @@ class ReadADiff(unittest.TestCase):
                 saved = self.assert_saved(done, {"Twin.md": "+Twin.md", "twin.md": "+twin.md"}, covers="commits only")
                 self.assertEqual([content.count(b"diff --git ") for content in saved.values()], [1, 1])
 
+    def test_name_with_a_tab_and_name_with_a_backslash_and_t_get_distinct_rows(self):
+        repo = new_repository(os.path.join(self.root, "backslash"))
+        append(repo, "plain.md", "base")
+        commit_all(repo, "base")
+        write(repo, "tab\there.dat", "real tab\n")
+        write(repo, "tab\\there.dat", "backslash and t\n")
+        write(repo, "tab\\\\there.dat", "two backslashes and t\n")
+        expected = {
+            "tab\\there.dat": "+real tab",
+            "tab\\\\there.dat": "+backslash and t",
+            "tab\\\\\\\\there.dat": "+two backslashes and t",
+        }
+        self.assert_saved(self.run_step("HEAD", repo), expected)
+
     def test_no_range_saves_every_staged_unstaged_and_untracked_file_that_git_status_lists(self):
         repo = new_repository(os.path.join(self.root, "uncommitted"))
         for name in ("a", "b", "partly.md", "moved.md", "restored.md"):

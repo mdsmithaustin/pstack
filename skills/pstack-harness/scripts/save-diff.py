@@ -84,8 +84,8 @@ COMMITS = b'commits only'
 PATHSPEC_VARIABLES = ['GIT_LITERAL_PATHSPECS', 'GIT_ICASE_PATHSPECS']
 TOP = b':(top,literal)'
 TOP_EXCLUDED = b':(top,exclude,literal)'
-CONTROL = re.compile(rb'[\x00-\x1f\x7f]')
-ESCAPES = {b'\n': b'\\n', b'\t': b'\\t', b'\r': b'\\r'}
+NEEDS_ESCAPE = re.compile(rb'[\x00-\x1f\x7f\\]')
+ESCAPES = {b'\n': b'\\n', b'\t': b'\\t', b'\r': b'\\r', b'\\': b'\\\\'}
 BINARY = re.compile(rb'^Binary files .*differ$', re.M)
 
 
@@ -194,7 +194,7 @@ def collect(spec, directory):
 
 
 def shown(name):
-    return CONTROL.sub(lambda found: ESCAPES.get(found.group(), b'\\x%02x' % found.group()[0]), name)
+    return NEEDS_ESCAPE.sub(lambda found: ESCAPES.get(found.group(), b'\\x%02x' % found.group()[0]), name)
 
 
 def save(spec, directory):
