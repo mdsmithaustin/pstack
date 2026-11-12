@@ -20,7 +20,7 @@ It also runs general live playbook evals independently of any external benchmark
   - `cursor-only`. An upstream unit with no port counterpart. `reason` says why.
 - `promises` holds one entry per falsifiable claim. `check` picks how the claim is checked:
   - `static`. `evidence` quotes the skill text that makes the claim true, or `test_static.py` has a test named after the promise.
-  - `script`. `test_scripts.py` runs the bundled script and has a test named after the promise.
+  - `script`. A `test_*.py` file in this directory, `test_scripts.py` by default, runs the bundled script and has a test named after the promise.
   - `install`. `install.py` checks the installer and each harness's skill listing without paid model output.
   - `live`. A case under `cases/` runs a real agent.
 

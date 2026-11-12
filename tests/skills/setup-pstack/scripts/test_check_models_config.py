@@ -361,7 +361,7 @@ def run_script(args, codex_catalog=None):
 
 
 class ResolveRunner:
-    def resolve(self, harness, *roles, user=None, workspace=None, codex_catalog=None, work_model=None):
+    def resolve(self, harness, *roles, user=None, workspace=None, codex_catalog=None, work_model=None, lead_model=None):
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp) / "project"
             project.mkdir()
@@ -375,7 +375,8 @@ class ResolveRunner:
                 [
                     "--resolve", "--harness", harness,
                     "--project", str(project), "--user-file", str(user_file),
-                    *(["--work-model", work_model] if work_model else []), *roles,
+                    *(["--work-model", work_model] if work_model else []),
+                    *(["--lead-model", lead_model] if lead_model else []), *roles,
                 ],
                 codex_catalog,
             )
@@ -1685,6 +1686,156 @@ class PanelDiversityNote(ResolveRunner, unittest.TestCase):
     def test_the_claude_code_defaults_are_a_diverse_panel(self):
         arms = self.resolve("claude-code", "interrogate reviewers")
         self.assertEqual([arm.get("notes") for arm in arms], [None, None, None])
+
+
+SKIP_ACTIONS = {
+    "arena runners": (
+        "so skip a design comparison per Spawn a role step 2, "
+        "and still run every arm of a review or second opinion, labeled same-model"
+    ),
+    "architect runners": "so skip the comparison per Spawn a role step 2",
+}
+
+
+def skip_note(role, shown):
+    return f"every {role} and arena cross-judge pool arm resolves to the lead model ({shown}), {SKIP_ACTIONS[role]}"
+
+
+class SameModelComparison(ResolveRunner, unittest.TestCase):
+    ONE_MODEL = "arena runners, architect runners, arena cross-judge pool: opus, opus, opus\n"
+
+    def comparison(self, harness, role="arena runners", **kwargs):
+        arms = self.resolve(harness, role, **kwargs)
+        return arms, [arm.get("comparison") for arm in arms]
+
+    def test_every_arm_on_the_lead_model_skips_on_the_first_arm_only(self):
+        for role in ("arena runners", "architect runners"):
+            with self.subTest(role=role):
+                arms, marks = self.comparison("claude-code", role, user=self.ONE_MODEL, lead_model="opus")
+                self.assertEqual(marks, ["skip", None, None])
+                self.assertIn(skip_note(role, "opus"), arms[0]["notes"])
+
+    def test_arms_that_differ_only_in_effort_are_one_model(self):
+        user = (
+            "arena runners: opus@low, opus@high, opus@max\n"
+            "arena cross-judge pool: opus@xhigh, opus@medium\n"
+        )
+        for lead in ("opus", "opus@medium", "opus@max"):
+            with self.subTest(lead=lead):
+                _, marks = self.comparison("claude-code", user=user, lead_model=lead)
+                self.assertEqual(marks, ["skip", None, None])
+
+    def test_one_runner_on_another_model_runs_the_comparison(self):
+        user = "arena runners: opus, opus, sonnet\narena cross-judge pool: opus\n"
+        arms, marks = self.comparison("claude-code", user=user, lead_model="opus")
+        self.assertEqual(marks, [None, None, None])
+        self.assertEqual([arm.get("notes") for arm in arms], [None, None, None])
+
+    def test_a_judge_on_another_model_runs_the_comparison(self):
+        user = "arena runners: opus, opus\narena cross-judge pool: opus, sonnet\n"
+        _, marks = self.comparison("claude-code", user=user, lead_model="opus")
+        self.assertEqual(marks, [None, None])
+
+    def test_runners_on_one_model_that_is_not_the_lead_run_the_comparison(self):
+        _, marks = self.comparison("claude-code", user=self.ONE_MODEL, lead_model="sonnet")
+        self.assertEqual(marks, [None, None, None])
+
+    def test_inheriting_arms_are_the_lead_with_or_without_the_flag(self):
+        for lead in (None, "anything-7", "auto"):
+            with self.subTest(lead=lead):
+                arms, marks = self.comparison("hermes", lead_model=lead)
+                self.assertEqual(marks, ["skip", None, None])
+                self.assertIn(skip_note("arena runners", "the parent model"), arms[0]["notes"])
+
+    def test_an_inheriting_arm_beside_the_lead_model_skips(self):
+        user = "arena runners: opus, inherit-parent\narena cross-judge pool: auto, opus@high\n"
+        _, marks = self.comparison("claude-code", user=user, lead_model="opus")
+        self.assertEqual(marks, ["skip", None])
+
+    def test_one_concrete_model_without_the_flag_keeps_the_notes_it_had(self):
+        arms, marks = self.comparison("claude-code", user=self.ONE_MODEL)
+        self.assertEqual(marks, [None, None, None])
+        self.assertEqual(
+            arms[0]["notes"],
+            ["arena runners resolves to one distinct model (opus), so agreement between its arms "
+             "is not independent confirmation"],
+        )
+
+    def test_two_concrete_models_without_the_flag_get_no_note(self):
+        arms, marks = self.comparison("claude-code")
+        self.assertEqual(marks, [None, None, None])
+        self.assertEqual([arm.get("notes") for arm in arms], [None, None, None])
+
+    def test_a_lead_that_names_no_model_gets_a_note_and_no_skip(self):
+        for lead in ("auto", "inherit-parent@high"):
+            with self.subTest(lead=lead):
+                arms, marks = self.comparison("claude-code", user=self.ONE_MODEL, lead_model=lead)
+                self.assertEqual(marks, [None, None, None])
+                self.assertIn(
+                    f"lead model {lead.partition('@')[0]} names no model, so pass the session model; "
+                    "no comparison result",
+                    arms[0]["notes"],
+                )
+
+    def test_a_lead_this_cli_cannot_use_gets_a_note_and_no_skip(self):
+        user = "arena runners, arena cross-judge pool: kimi-k3, kimi-k3\n"
+        arms, marks = self.comparison("hermes", user=user, lead_model="opus")
+        self.assertEqual(marks, [None, None])
+        self.assertIn("lead model opus is not usable on hermes; no comparison result", arms[0]["notes"])
+
+    def test_a_full_claude_id_maps_to_its_alias_where_the_cli_takes_aliases(self):
+        _, marks = self.comparison("claude-code", user=self.ONE_MODEL, lead_model="claude-opus-5-5[1m]@xhigh")
+        self.assertEqual(marks, ["skip", None, None])
+
+    def test_a_translated_alias_and_a_release_pair_are_one_model_on_codex(self):
+        user = "## codex\narena runners: gpt-6-sol@max, gpt-6.1-sol@high\narena cross-judge pool: opus\n"
+        for lead in ("gpt-6.1-sol", "gpt-6-sol@low", "opus"):
+            with self.subTest(lead=lead):
+                arms, marks = self.comparison(
+                    "codex", user=user, lead_model=lead, codex_catalog=catalog_json("gpt-6.1-sol", "gpt-6-sol"),
+                )
+                self.assertEqual(marks, ["skip", None])
+                self.assertIn(skip_note("arena runners", "gpt-6.1-sol"), arms[0]["notes"])
+
+    def test_grok_defaults_skip_for_a_grok_lead_and_run_for_the_fast_tier(self):
+        self.assertEqual(self.comparison("grok", "architect runners", lead_model="grok-4.7")[1], ["skip", None, None])
+        self.assertEqual(
+            self.comparison("grok", "architect runners", lead_model="grok-4.7-build-fast")[1], [None, None, None],
+        )
+
+    def test_hermes_keeps_a_full_id_literal_and_case_sensitive(self):
+        user = "arena runners, arena cross-judge pool: claude-opus-4.7@high, claude-opus-4.7@xhigh\n"
+        self.assertEqual(self.comparison("hermes", user=user, lead_model="claude-opus-4.7@max")[1], ["skip", None])
+        self.assertEqual(self.comparison("hermes", user=user, lead_model="Claude-Opus-4.7")[1], [None, None])
+
+    def test_no_other_role_is_ever_marked(self):
+        user = "interrogate reviewers, arena cross-judge pool, swarm workers: inherit-parent\n"
+        for role in ("interrogate reviewers", "arena cross-judge pool", "swarm workers"):
+            with self.subTest(role=role):
+                arms = self.resolve("claude-code", role, user=user, lead_model="opus")
+                self.assertNotIn("comparison", arms[0])
+                self.assertNotIn("lead model", " ".join(arms[0].get("notes", [])))
+
+    def test_the_lead_model_leaves_the_trail_reviewer_step_alone(self):
+        with_lead = self.resolve("claude-code", "trail reviewer", user=OPERATOR_FILE, work_model="opus@xhigh", lead_model="opus")
+        without = self.resolve("claude-code", "trail reviewer", user=OPERATOR_FILE, work_model="opus@xhigh")
+        self.assertEqual(with_lead, without)
+
+    def test_a_bad_lead_model_is_a_usage_error_that_names_the_flag(self):
+        for harness, lead, named in (
+            ("claude-code", "gpt-6-sol", "'gpt-6-sol' is not a Claude Code model"),
+            ("hermes", "anthropic/claude-opus-4.7", "invalid model name 'anthropic/claude-opus-4.7'"),
+            ("codex", "opus@loud", "unknown effort 'loud'"),
+        ):
+            with self.subTest(harness=harness, lead=lead):
+                with tempfile.TemporaryDirectory() as tmp:
+                    result = run_script(
+                        ["--resolve", "--harness", harness, "--project", tmp,
+                         "--user-file", str(Path(tmp) / "none.md"), "--lead-model", lead, "arena runners"],
+                    )
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("argument --lead-model: ", result.stderr)
+                self.assertIn(named, result.stderr)
 
 
 class ResolveExitCodes(unittest.TestCase):

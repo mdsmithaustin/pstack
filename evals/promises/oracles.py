@@ -3596,6 +3596,36 @@ def architect_grounds(view):
     return passed(*evidence)
 
 
+COMPARISON_SKIP = re.compile(r'"comparison": "skip"|so skip the comparison per Spawn a role step 2')
+
+
+def architect_skip_marked(view):
+    verdict = None
+    for _, command, ok, head in reversed(view.commands()):
+        if ok is False or "check-models-config" not in command:
+            continue
+        unmarked = False
+        for line in head.splitlines():
+            if re.match(r'\{"role": "architect runners", "arm": 1,', line) and COMPARISON_SKIP.search(line):
+                return True
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict) and row.get("role") == "architect runners" and row.get("arm") == 1:
+                unmarked = True
+        first = re.match(r'\{"role": "([^"]+)"', head)
+        names_other_roles = "architect runners" not in command and first and first.group(1) in command
+        flagged = "--lead-model" in command
+        if unmarked and flagged:
+            return False
+        if unmarked:
+            verdict = False
+        elif len(head) >= RESULT_HEAD and not names_other_roles and (flagged or verdict is None):
+            return None
+    return verdict
+
+
 @oracle("architect-runs-arena-for-sketches")
 def architect_arena(view):
     runners = runner_spawns(view)
@@ -3608,6 +3638,14 @@ def architect_arena(view):
     if len(runners) < 2:
         if len(runners) + len(sealed) >= 2:
             return inconclusive("sealed briefs hide which spawns were the runners; two sketches cannot be ruled out", *evidence)
+        if not runners and affirmed(r"same-model, comparison skipped", view.final_reply.lower()):
+            marked = architect_skip_marked(view)
+            evidence.append(f"resolver marked the comparison skip: {marked}")
+            if marked is False:
+                return failed("the reply reports a same-model comparison skip, but the resolver's `architect runners` row in the trace has no skip mark", *evidence)
+            if marked is None:
+                return inconclusive("the reply reports a same-model comparison skip, and no resolver output in the trace shows whether `architect runners` was marked", *evidence)
+            return inconclusive("the resolver marked the comparison `skip`, so no sketch fan-out was due", *evidence)
         return inconclusive("run killed before the sketch fan-out", *evidence) if view.killed else failed("fewer than two runner sketches", *evidence)
     if len(wave) < 2:
         return failed("runners spawned sequentially", *evidence)

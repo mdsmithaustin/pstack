@@ -25,7 +25,15 @@ PANEL_ROLES = {
     "arena runners", "arena cross-judge pool",
     "architect runners", "interrogate reviewers",
 }
-AGREEING_PANELS = PANEL_ROLES - {"arena cross-judge pool"}
+JUDGE_POOL = "arena cross-judge pool"
+AGREEING_PANELS = PANEL_ROLES - {JUDGE_POOL}
+COMPARISON_ACTIONS = {
+    "arena runners": (
+        "so skip a design comparison per Spawn a role step 2, "
+        "and still run every arm of a review or second opinion, labeled same-model"
+    ),
+    "architect runners": "so skip the comparison per Spawn a role step 2",
+}
 STEP_SETTING = "trail reviewer step"
 STEP_VALUES = ("on", "off")
 REFLECT_SHORTHANDS = {"divergent", "synthesizer", "tooling", "judgment"}
@@ -305,6 +313,7 @@ class ResolvedArm(NamedTuple):
     source: str
     notes: tuple[str, ...] = ()
     step: str | None = None
+    comparison: str | None = None
 
     def to_json(self) -> str:
         record: dict = {
@@ -315,6 +324,8 @@ class ResolvedArm(NamedTuple):
             record["notes"] = list(self.notes)
         if self.step:
             record["step"] = self.step
+        if self.comparison:
+            record["comparison"] = self.comparison
         return json.dumps(record)
 
 
@@ -484,6 +495,29 @@ def _panel_diversity_note(arms: list[ResolvedArm]) -> str | None:
     )
 
 
+class Lead(NamedTuple):
+    model: str
+    notes: tuple[str, ...]
+
+
+def mark_comparison(runners: list[ResolvedArm], judges: list[ResolvedArm], lead: Lead | None) -> ResolvedArm:
+    first = runners[0]
+    concrete = [arm.model for arm in (*runners, *judges) if arm.model != INHERIT]
+    tiers = {_tier(model) for model in concrete}
+    known = lead is not None and lead.model != INHERIT
+    if tiers and not known:
+        notes = lead.notes if lead else ()
+        return _with_notes(first, *(f"lead model {note}; no comparison result" for note in notes))
+    if tiers - ({_tier(lead.model)} if known else set()):
+        return first
+    shown = concrete[0] if concrete else "the parent model"
+    note = (
+        f"every {first.role} and {JUDGE_POOL} arm resolves to the lead model ({shown}), "
+        + COMPARISON_ACTIONS[first.role]
+    )
+    return _with_notes(first, note)._replace(comparison="skip")
+
+
 def _with_notes(arm: ResolvedArm, *notes: str | None) -> ResolvedArm:
     return arm._replace(notes=(*arm.notes, *(n for n in notes if n)))
 
@@ -530,23 +564,29 @@ def _resolve_main(argv: list[str]) -> int:
     parser.add_argument("--project", type=Path, default=Path.cwd())
     parser.add_argument("--user-file", type=Path, default=Path.home() / ".agents" / CONFIG_NAME)
     parser.add_argument("--work-model", type=_work_model, metavar="MODEL[@EFFORT]")
+    parser.add_argument("--lead-model", type=_work_model, metavar="MODEL[@EFFORT]")
     parser.add_argument("roles", nargs="*", metavar="ROLE")
     args = parser.parse_args(argv)
-    if args.work_model:
-        work_name, work_written_effort = args.work_model
-        work_name = _claude_alias_of(work_name, args.harness)
-        if not _is_valid_model_name(work_name):
+
+    def named_model(flag: str, value: tuple[str, str | None]) -> str:
+        name = _claude_alias_of(value[0], args.harness)
+        if not _is_valid_model_name(name):
             hint = (
                 "; pass the bare model name with no provider prefix or tag, "
-                "such as claude-opus-4.7 for anthropic/claude-opus-4.7, or omit --work-model"
-                if re.search(r"[/:]", work_name) else ""
+                f"such as claude-opus-4.7 for anthropic/claude-opus-4.7, or omit {flag}"
+                if re.search(r"[/:]", name) else ""
             )
-            parser.error(f"argument --work-model: invalid model name {work_name!r}{hint}")
-        if CLIS[args.harness].native_aliases and work_name not in CLAUDE_ALIASES | OTHER_ALIASES:
+            parser.error(f"argument {flag}: invalid model name {name!r}{hint}")
+        if CLIS[args.harness].native_aliases and name not in CLAUDE_ALIASES | OTHER_ALIASES:
             parser.error(
-                f"argument --work-model: {work_name!r} is not a Claude Code model; "
+                f"argument {flag}: {name!r} is not a Claude Code model; "
                 "use an alias (fable, opus, sonnet, haiku) or a claude-<alias>-... ID"
             )
+        return name
+
+    if args.work_model:
+        work_name, work_written_effort = named_model("--work-model", args.work_model), args.work_model[1]
+    lead_name = named_model("--lead-model", args.lead_model) if args.lead_model else None
 
     unknown = [r for r in args.roles if r not in ROLES]
     if unknown:
@@ -581,6 +621,12 @@ def _resolve_main(argv: list[str]) -> int:
                 if arm.model != INHERIT:
                     allowed.setdefault(arm.model, set()).add(role)
         pinned = _step_pinned(layers)
+    lead = None
+    if lead_name:
+        lead_model, _, lead_notes = _resolve_model(lead_name, None, args.harness)
+        if lead_name in OTHER_ALIASES:
+            lead_notes = [f"{lead_name} names no model, so pass the session model"]
+        lead = Lead(lead_model, tuple(lead_notes))
     written = _written_tiers(layers, args.harness)
     for role in args.roles or sorted(ROLES):
         arms = resolve_role(role, args.harness, layers, listed)
@@ -590,6 +636,8 @@ def _resolve_main(argv: list[str]) -> int:
                 for arm in arms
             ]
         arms = [_with_notes(arm, _default_leak_note(arm, written)) for arm in arms]
+        if role in COMPARISON_ACTIONS:
+            arms[0] = mark_comparison(arms, resolve_role(JUDGE_POOL, args.harness, layers, listed), lead)
         arms[0] = _with_notes(arms[0], _panel_diversity_note(arms))
         for arm in arms:
             print(arm.to_json())
@@ -599,7 +647,7 @@ def _resolve_main(argv: list[str]) -> int:
 USAGE = (
     "usage: check-models-config.py <file> [<file>...]\n"
     f"       check-models-config.py --resolve --harness {{{','.join(sorted(CLIS))}}}"
-    " [--project DIR] [--user-file FILE] [--work-model MODEL[@EFFORT]] [ROLE ...]"
+    " [--project DIR] [--user-file FILE] [--work-model MODEL[@EFFORT]] [--lead-model MODEL[@EFFORT]] [ROLE ...]"
 )
 
 

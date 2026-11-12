@@ -12,7 +12,7 @@ The two most common design mistakes are taking the agent's first design and poli
 /architect design the import pipeline before writing any code. i care most about how callers use it.
 ```
 
-[`/architect`](../../skills/architect/SKILL.md) grounds itself first, running `/how` over the code the design touches and `/why` when it moves ownership or layers. Then it runs `/arena` to produce competing design sketches, with the caller's usage written first in each, followed by types, signatures, and a module map.
+[`/architect`](../../skills/architect/SKILL.md) grounds itself first, running `/how` over the code the design touches and `/why` when it moves ownership or layers. Then it runs `/arena` to produce competing design sketches, with the caller's usage written first in each, followed by types, signatures, and a module map. When the model resolver marks the comparison as same-model, it sketches the candidates itself, as described under `/arena` below.
 
 By default it proceeds straight from the synthesized design into implementation. If you want to see the design first, say so:
 
@@ -28,7 +28,7 @@ The design isn't sacred once code starts. If implementation shows the same worka
 /arena take my prompt to the arena verbatim. i want to compare their proposals with yours.
 ```
 
-[`/arena`](../../skills/arena/SKILL.md) is the general tool underneath. N subagents attempt the same design or code brief in parallel, each writing to its own worktree or directory. A read-only judge on a model other than the parent's, from a different model family when your configuration has one, scores every candidate against a rubric. When no such model can run, the coordinator skips the judge, reads every candidate in full, and picks the base itself. The coordinator reads each candidate's rationale and the judge's scores, reads the chosen base in full, grafts in the best ideas from the losers, and verifies the result.
+[`/arena`](../../skills/arena/SKILL.md) is the general tool underneath. N subagents attempt the same design or code brief in parallel, each writing to its own worktree or directory. A read-only judge on a model other than the parent's, from a different model family when your configuration has one, scores every candidate against a rubric. When no such model can run, the coordinator skips the judge, reads every candidate in full, and picks the base itself. When a playbook or `/architect` calls for a design comparison and the model resolver marks every runner and judge as the coordinator's own model, at any reasoning effort, the coordinator skips the comparison, produces the design itself, and says so. The resolver marks a panel whose every arm inherits the chat model without being told that model. It marks a panel whose arms all name the coordinator's model once the coordinator passes that model, which it does when the resolver notes that the panel runs on one model. A panel that mixes a named model with inheriting arms prints no such note, so when it is resolved without the coordinator's model it runs as configured. Ask for `/arena` or for candidates yourself and the panel still runs. A review that runs through `/arena`, such as `/blast-radius` on a wide change, always runs its arms, and is labeled `same-model` when the resolver marks them as the coordinator's own model. The coordinator reads each candidate's rationale and the judge's scores, reads the chosen base in full, grafts in the best ideas from the losers, and verifies the result.
 
 ```mermaid
 flowchart LR
