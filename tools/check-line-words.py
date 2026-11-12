@@ -2,7 +2,7 @@
 """Fail when a line of skill Markdown runs past the word limit.
 
 A long line packs several cases into one block, and a reader that skims it keeps the start and the end.
-The limit is the longest line the two reference suites in PORTING.md carry. Lines inside a code fence,
+PORTING.md records the reference suites used to choose the limit. Lines inside a code fence,
 table rows, block quotes, and headings are not instructions and are not counted.
 """
 import argparse
