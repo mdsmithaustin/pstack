@@ -486,6 +486,28 @@
     "skills/poteto-mode/playbooks/babysit.md"
    ]
   },
+  "babysit-conflict-holds-pushes-not-triage": {
+   "check": "static",
+   "claim": "Babysit reports a conflict instead of resolving it and pushes nothing to that PR until its owner rebases or, in a gated repository, the gate's monitor does. It skips CI work for that PR, still reads status and triages review comments, and holds each real fix for the owner's rebase wave.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/playbooks/babysit.md",
+     "quote": "A conflict is the one blocker you report rather than resolve. Say which branch needs the rebase, and push nothing to that PR until its owner rebases or, in a gated repository, the gate's monitor does. Steps 6, 8, and 9 still run for it."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/babysit.md",
+     "quote": "In `check` and `threads-only` modes, skip this step. Skip it too for a PR whose conflict step 5 reported."
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/babysit.md",
+     "quote": "For a PR whose conflict step 5 reported, triage and dismiss as usual, hold each real fix for the owner's rebase wave, and report it as pending."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/playbooks/babysit.md"
+   ]
+  },
   "babysit-dismisses-noise-with-disproof": {
    "check": "static",
    "claim": "A real finding gets a fix; a noise thread is dismissed with the disproof posted on that thread.",
@@ -1724,6 +1746,29 @@
     "skills/create-formal-verification-skill/SKILL.md"
    ]
   },
+  "gated-run-test-exception-checked-before-ready": {
+   "check": "static",
+   "claim": "Before the agent reports a gated run's outcome or a merge-ready head, it runs the exception check on the run's status and Test round history. A Test exception recorded with no operator reason is reported as blocked, never as passed or merge-ready, and a recorded reason counts only when it matches the operator's own approval of that gap.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/references/gated-publish.md",
+     "quote": "Before you report a run's outcome or a merge-ready head, run the exception check."
+    },
+    {
+     "file": "skills/poteto-mode/references/gated-publish.md",
+     "quote": "Exit 1 means the status records a Test exception with no operator reason. Never report that run as passed or merge-ready."
+    },
+    {
+     "file": "skills/poteto-mode/references/gated-publish.md",
+     "quote": "Any caller can write a reason, so match it to the operator's own approval of that gap, and treat a reason with no such approval as exit 1."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/references/gated-publish.md",
+    "skills/poteto-mode/scripts/gate-exception.py"
+   ]
+  },
   "guide-named-skills-exist": {
    "check": "static",
    "claim": "Every skill the guide names with a slash resolves to skills/<name>/SKILL.md in the port (how, why, poteto-teach, recall, architect, arena, swarm, interrogate, poteto-tdd, unslop, no-comments, blast-radius, create-verification-skill, maintain-verification-skill, documentation-impact, show-me-your-work, figure-it-out, automate-me, reflect, technical-writing, bro, setup-pstack, typescript-best-practices).",
@@ -2573,6 +2618,24 @@
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/playbooks/opening-a-pr.md",
+    "skills/poteto-mode/references/gated-publish.md"
+   ]
+  },
+  "opening-a-pr-gated-unattended-continues-review-coverage": {
+   "check": "static",
+   "claim": "In an unattended run, the agent answers a Review gate that parked only for incomplete coverage with the coverage continuation, without `--yes`, and reports the run as blocked only when Review parks again for incomplete coverage alone on the same head. Findings the continuation returns follow the ordinary gate rules.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/references/gated-publish.md",
+     "quote": "Answer it with `no-mistakes axi respond --step review --action complete-coverage` and without `--yes`, which that action refuses."
+    },
+    {
+     "file": "skills/poteto-mode/references/gated-publish.md",
+     "quote": "When Review parks again for incomplete coverage only, on the same head, report the run as blocked."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
     "skills/poteto-mode/references/gated-publish.md"
    ]
   },
@@ -3955,6 +4018,30 @@
     "skills/pstack-harness/references/registration.md"
    ]
   },
+  "skipped-pr-keeps-commits": {
+   "check": "static",
+   "claim": "In every playbook that changes code, a skipped push or PR never skips the commits of the step that runs Opening a PR, and the plan prints that on the step.",
+   "evidence": [
+    {
+     "file": "skills/poteto-mode/references/routes.md",
+     "quote": "A skipped push or PR never skips that step's commits."
+    },
+    {
+     "file": "skills/poteto-mode/scripts/plan.py",
+     "quote": "still commit when the push or PR is skipped"
+    },
+    {
+     "file": "skills/poteto-mode/playbooks/opening-a-pr.md",
+     "quote": "Short of a pull request, stop at the endpoint: always commit, push only for a pushed branch, and name the branch in the reply."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/poteto-mode/references/routes.md",
+    "skills/poteto-mode/scripts/plan.py",
+    "skills/poteto-mode/playbooks/opening-a-pr.md"
+   ]
+  },
   "skipped-step-stays-in-worklist": {
    "check": "live",
    "claim": "A playbook step the agent chooses not to do stays in the worklist marked `skipped: <reason>`.",
@@ -5017,6 +5104,15 @@
    ],
    "text": "Each PR gets one owner agent that carries it from build through merge, and no owner merges on its own verdict."
   },
+  "113a460f0430": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "skipped-pr-keeps-commits",
+   "sources": [
+    "port"
+   ],
+   "text": "Every playbook that changes code keeps its commits when the push or the PR is skipped, and the printed plan says so on the step that opens the PR."
+  },
   "1157d5dd9345": {
    "class": "context",
    "file": "08-principles.md",
@@ -5882,6 +5978,15 @@
    ],
    "text": "Make the agent able to do it, and you stop being the bottleneck."
   },
+  "2410a24bf75f": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "gated-run-test-exception-checked-before-ready",
+   "sources": [
+    "port"
+   ],
+   "text": "Before the agent reports a gated run as passed or merge-ready, it checks the run's record with a script, and it reports a Test exception recorded without your reason as blocked."
+  },
   "2427878966a1": {
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
@@ -6538,15 +6643,6 @@
    ],
    "text": "Read that section first, then the log rows it points at."
   },
-  "35b0cf1711d0": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "opening-a-pr-gated-unattended-passes-yes",
-   "sources": [
-    "port"
-   ],
-   "text": "For decisions reserved by you or the playbook, the agent follows [Opening a PR's operator-reservation rule](../../skills/poteto-mode/playbooks/opening-a-pr.md)."
-  },
   "35b68e34a990": {
    "also": [
     "review-flags-unrequested-behavior-change"
@@ -6742,6 +6838,15 @@
     "port"
    ],
    "text": "The doc also becomes a concrete target the agent checks its own work against."
+  },
+  "3b3c440565b1": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "babysit-conflict-holds-pushes-not-triage",
+   "sources": [
+    "port"
+   ],
+   "text": "It still reads the PR's status and triages its comments, and holds each real fix for the owner's rebase."
   },
   "3b46a2cd3a8d": {
    "also": [
@@ -8320,6 +8425,15 @@
     "port"
    ],
    "text": "The skill also records which code each check covers and the commit where the check last matched it."
+  },
+  "665a67ea87de": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "babysit-conflict-holds-pushes-not-triage",
+   "sources": [
+    "port"
+   ],
+   "text": "Babysit reports a conflict instead of resolving it, and pushes nothing to that PR until its owner rebases."
   },
   "668f09989d76": {
    "class": "promise",
@@ -11789,6 +11903,15 @@
    ],
    "text": "You can request either mode directly:"
   },
+  "c00776ae9233": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-unattended-continues-review-coverage",
+   "sources": [
+    "port"
+   ],
+   "text": "For unattended Review coverage continuations and their blocked outcomes, the agent follows [gated publish](../../skills/poteto-mode/references/gated-publish.md)."
+  },
   "c0288e8d1b96": {
    "class": "context",
    "file": "02-poteto-mode.md",
@@ -13086,6 +13209,15 @@
     "port"
    ],
    "text": "Until then, run it while you watch."
+  },
+  "e22d50f784c7": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-gated-unattended-passes-yes",
+   "sources": [
+    "port"
+   ],
+   "text": "For decisions reserved by you or the playbook, the agent follows [gated publish's operator-reservation rule](../../skills/poteto-mode/references/gated-publish.md)."
   },
   "e2495d3d552a": {
    "class": "promise",

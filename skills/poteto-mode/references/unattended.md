@@ -14,4 +14,4 @@ Continue authorized work while a next action is available. A defect that blocks 
 
 In an unattended run, hand blocked work back with [authorization's required final question](authorization.md), then end the turn without waiting for a reply. Make decisions covered by the grant, record the choice and reason, and continue. Apply Autonomy's authorization rule to irreversible writes. An action that the user, the matched playbook, or an enforced approval reserves for the operator stays blocked. Report the gate and continue independent authorized work. When nothing can proceed, report the block and the required decision. Elapsed time never supplies approval.
 
-For a gated repository, follow the unattended rules in `../playbooks/opening-a-pr.md`.
+For a gated repository, follow the unattended rules in [gated publish](gated-publish.md).

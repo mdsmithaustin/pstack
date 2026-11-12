@@ -1,0 +1,25 @@
+current_branch: cand/completion-authorization
+other_branch_run:
+  id: "01M75QF96VVM6DGXNK6YEXZM1P"
+  branch: cand/plan-command-setup
+  status: completed
+  head: 384b2cb4
+  head_sha: 384b2cb47f49fe174c6161c1142f83b9320e41fa
+  verification_plan:
+    path: /Users/<user>/.no-mistakes/run-inputs/01M75QF96VVM6DGXNK6YEXZM1P/verification-plan.txt
+    sha256: d14e9e21455a13b70f6061efcd8531a32f7fea03737fb6bef8d52d873c3407f8
+    source_path: <scratchpad>/c7pub/vplan.txt
+    captured_at: 1794414978
+  pr: "https://github.com/mdsmithaustin/pstack/pull/505"
+  findings: 1 awaiting
+  steps[9]{step,status,findings,duration_ms}:
+    intent,completed,0,0
+    rebase,completed,0,1037
+    review,completed,0,8608
+    test,completed,0,80246
+    document,completed,0,47176
+    lint,completed,0,4939
+    push,completed,0,4202
+    pr,completed,0,4317
+    ci,completed,1,1037505
+outcome: passed

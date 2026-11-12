@@ -1,0 +1,42 @@
+schema: branch-publication.v1
+scope:
+  repository_id: fbee15f974d9
+  branch: cand/completion-authorization
+inventory_complete: true
+creation_order: "created_at DESC, id DESC"
+newest_run_id: "01M7691M1B7DEPXRZS080M0Y6Y"
+run:
+  id: "01M7691M1B7DEPXRZS080M0Y6Y"
+  repository_id: fbee15f974d9
+  branch: cand/completion-authorization
+  created_at: 1794433404
+  status: running
+  current_step: ci
+  outcome: null
+  head_sha: b67dcd5ec887353798113afdbb729a9b151f4c72
+  reviewed_head_sha: b67dcd5ec887353798113afdbb729a9b151f4c72
+  last_pushed_sha: b67dcd5ec887353798113afdbb729a9b151f4c72
+  last_pushed_at: 1794433696
+  push_generation: 1
+  push_active: false
+  push_target_kind: upstream
+  push_target_fingerprint: a3a301a0920581660a1addd3f94472f225086d07fd008cddf424a4184145bf8a
+  push_ref: refs/heads/cand/completion-authorization
+  pr: "https://github.com/mdsmithaustin/pstack/pull/508"
+  steps[9]{position,step,recorded,status}:
+    1,intent,true,completed
+    2,rebase,true,completed
+    3,review,true,completed
+    4,test,true,completed
+    5,document,true,completed
+    6,lint,true,completed
+    7,push,true,completed
+    8,pr,true,completed
+    9,ci,true,running
+runs[5]{id,created_at,status,current_step}:
+  "01M7691M1B7DEPXRZS080M0Y6Y",1794433404,running,ci
+  "01M765RYME5ER1DPQ5P46SFG6R",1794429975,cancelled,null
+  "01M765HEYR39DY25N2X6VQZJKF",1794429729,failed,null
+  "01M76080AZEBA1X2QG6VNCFMV6",1794424176,cancelled,null
+  "01M75NQEKPN4N4VPNHXXNZR5NQ",1794413149,cancelled,null
+other_running_run_ids[0]:
