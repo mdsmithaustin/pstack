@@ -22,8 +22,10 @@ path of index.txt, then the rows, then the last line. The caller removes the dir
 A row is "<bytes> <saved file> <status> <name>". Notes follow the name in parentheses:
 
   staged, not staged    with no range, the half of the uncommitted change that the row holds
-  unmerged              the file is in conflict, and it has this one row
-  not shown             git treats the content as binary, so the saved file holds none of it
+  unmerged              the file is in conflict, and it has this one row, which holds its diff against
+                        the revision when the range is one revision or --merge-base
+  not shown             the saved file holds none of the content, because git treats it as binary or
+                        prints nothing but the name of the conflicted file
 
 The last line is "<n> rows saved, <k> not shown; covers <what the range covers>; index <path>".
 
@@ -118,7 +120,9 @@ def collect(spec, directory):
         (status, paths, patch(part, paths), notes)
         for part, notes in parts for status, paths in changed(part) if paths[-1] not in unmerged
     ]
-    rows += [(b'U', [path], patch([], [path]), [b'unmerged']) for path in unmerged]
+    for path in unmerged:
+        against_revision = patch(spec, [path]) if covers == WORKING_TREE else b''
+        rows.append((b'U', [path], against_revision or patch([], [path]), [b'unmerged']))
     if covers in (UNCOMMITTED, WORKING_TREE):
         rows += untracked(directory)
     return rows, covers
@@ -136,6 +140,9 @@ def save(spec, directory):
         if BINARY.search(content):
             hidden += 1
             notes = [*notes, b'not shown: git treats it as binary']
+        elif content.startswith(b'* Unmerged path '):
+            hidden += 1
+            notes = [*notes, b'not shown: git prints only the name of this conflicted file']
         if not content:
             reason = b'a directory with its own repository' if status == b'??' else b'git printed no diff'
             notes = [*notes, b'not saved: ' + reason]
