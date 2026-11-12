@@ -177,6 +177,7 @@ their own corpora.
 | `pstack-harness/scripts/subagents.py brief` | A persona's complete briefing text |
 | `pstack-harness/scripts/preserve.py` | Whether the start commit's tests still pass |
 | `pstack-harness/scripts/read-plan.py` | Commands that read a file within an output cap |
+| `pstack-harness/scripts/save-diff.py` | Which files a range changed, with one saved patch for each |
 | `pstack-harness/scripts/loading-path.py` | Files and bytes one harness action loads |
 | `poteto-mode/scripts/check-plan.mjs` | Whether a multi-phase plan has the required structure |
 | `poteto-mode/scripts/orch` | Durable unit, ledger, and inbox state for Orchestrate |

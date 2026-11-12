@@ -1,3 +1,4 @@
+import collections
 import os
 import re
 import shutil
@@ -14,8 +15,8 @@ LAST_LINE = re.compile(r"(\d+) rows saved, (\d+) not shown; covers (.+); index (
 NOT_SHOWN = " (not shown: git treats it as binary)"
 UNCOMMITTED = "staged, unstaged and untracked"
 WORKING_TREE = "working tree and untracked"
-NAME_ONLY = "; not shown: git prints only the name of this conflicted file)"
 ISOLATED = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+CLEAN = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")} | ISOLATED
 BASE = [
     "café.md", 'say"hi".md', "tab\there.md", "a space.md", ":!magic.md", "*.md", "-dash.md", "new\nline.md",
     "deep/er/path.md", "gone.md", "type.md", "mode.sh", "staged.md",
@@ -44,9 +45,10 @@ UNTRACKED = {
     "sub/empty.txt": "new file mode 100644",
     "-": "+lone dash",
     "link": "new file mode 120000",
+    "cr\\rdel\\x7f.md": "+control",
+    "fresh/directory/file.md": "+fresh",
 }
 COMMITTED = {"committed.md": "+committed"}
-WITHOUT_RENAMES = {"old.md": "deleted file mode 100644", "sub/new.md": "new file mode 100644"}
 SHELLS = {
     "bash": ["", "set -euo pipefail; "],
     "zsh": ["", "set -euo pipefail; ", "setopt no_extended_glob sh_word_split; ", "setopt extended_glob; "],
@@ -63,6 +65,10 @@ INHERITED = {
     "color.ui": {"color.ui": "always", "color.diff": "always"},
     "status.showUntrackedFiles": {"status.showUntrackedFiles": "no"},
     "diff.ignoreSubmodules": {"diff.ignoreSubmodules": "all"},
+    "diff.submodule": {"diff.submodule": "log"},
+    "diff.renames=false": {"diff.renames": "false"},
+    "diff.renames=copies": {"diff.renames": "copies"},
+    "index.sparse": {"index.sparse": "true"},
 }
 
 
@@ -79,7 +85,7 @@ IDENTITY = ["-c", "user.name=t", "-c", "user.email=test.invalid", "-c", "protoco
 
 def git(repo, *args, check=True):
     done = subprocess.run(
-        ["git", "-C", repo, *IDENTITY, *args], env={**os.environ, **ISOLATED}, check=check, capture_output=True,
+        ["git", "-C", repo, *IDENTITY, *args], env=CLEAN, check=check, capture_output=True,
     )
     return done.stdout.decode().strip()
 
@@ -98,7 +104,7 @@ def with_note(expected, note):
 def rows_that_git_status_lists(repo):
     done = subprocess.run(
         ["git", "-C", repo, "status", "--porcelain=v1", "-z", "--untracked-files=all"],
-        env={**os.environ, **ISOLATED}, check=True, capture_output=True,
+        env=CLEAN, check=True, capture_output=True,
     )
     fields = done.stdout.decode().split("\0")[:-1]
     rows = set()
@@ -175,7 +181,151 @@ def scratch_repository(root):
     Path(repo, "-").write_text("lone dash\n", encoding="utf-8")
     os.symlink("nowhere", os.path.join(repo, "link"))
     Path(repo, "ignored.log").write_text("ignored\n", encoding="utf-8")
+    Path(repo, "cr\rdel\x7f.md").write_text("control\n", encoding="utf-8")
+    os.makedirs(os.path.join(repo, "fresh/directory"))
+    Path(repo, "fresh/directory/file.md").write_text("fresh\n", encoding="utf-8")
+    Path(repo, ".git/info/exclude").write_text("ignored-by-info-exclude\n", encoding="utf-8")
+    Path(repo, "ignored-by-info-exclude").write_text("ignored\n", encoding="utf-8")
     return repo
+
+
+ROW_NAME = re.compile(r"(?:(?P<old>.+) -> )?(?P<new>.+?)(?: \((?P<notes>.+)\))?")
+BOTH_MODIFIED = ["bm-markers.md", "bm-ours.md", "bm-theirs.md", "bm-hand.md", "bm-removed.md"]
+INCOMING_SIDE = {"merge": "theirs", "rebase": "ours", "cherry-pick": "theirs", "stash pop": "ours"}
+
+
+def git_bytes(repo, *args):
+    return subprocess.run(["git", "-C", repo, *args], env=CLEAN, check=True, capture_output=True).stdout
+
+
+def numbered(name, count=40):
+    return "".join(f"{name} {line}\n" for line in range(count))
+
+
+def replace_line(repo, name, number, text):
+    lines = Path(repo, name).read_text(encoding="utf-8").splitlines()
+    lines[number] = text
+    write(repo, name, "\n".join(lines) + "\n")
+
+
+def repository_with_every_unmerged_state(root, operation):
+    module = new_repository(os.path.join(root, "module"))
+    append(module, "inner.md", "one")
+    commit_all(module, "one")
+    tips = {}
+    for side in ("ours", "theirs"):
+        git(module, "checkout", "-q", "-b", side, "main")
+        append(module, f"{side}.md", side)
+        commit_all(module, side)
+        tips[side] = git(module, "rev-parse", "HEAD")
+    git(module, "checkout", "-q", "main")
+
+    repo = new_repository(os.path.join(root, "repo"))
+    os.mkdir(os.path.join(repo, "sub"))
+    tracked = ["ours-deleted.md", "theirs-deleted.md", "rename-both.md", "rename-delete.md", "rename-add.md",
+               "sub/clean-theirs.md", "local.md", "star-local.md"]
+    for name in BOTH_MODIFIED + tracked:
+        write(repo, name, numbered(name))
+    write(repo, "image.bin", b"\0\1\2start")
+    git(repo, "submodule", "add", "-q", module, "mod")
+    commit_all(repo, "start")
+    git(repo, "tag", "start")
+
+    def theirs():
+        for name in BOTH_MODIFIED:
+            replace_line(repo, name, 5, f"theirs clean hunk {name}")
+            replace_line(repo, name, 35, f"theirs conflict {name}")
+        os.remove(os.path.join(repo, "theirs-deleted.md"))
+        replace_line(repo, "ours-deleted.md", 3, "theirs kept it")
+        write(repo, "both-added.md", numbered("theirs-added", 6))
+        write(repo, "star*.md", numbered("theirs-star", 6))
+        git(repo, "mv", "rename-both.md", "rename-theirs.md")
+        os.remove(os.path.join(repo, "rename-delete.md"))
+        write(repo, "rename-add-new.md", numbered("theirs-new", 6))
+        replace_line(repo, "sub/clean-theirs.md", 7, "theirs only")
+        write(repo, "theirs-new.md", "theirs new file\n")
+        write(repo, "image.bin", b"\0\1\2theirs")
+        git(os.path.join(repo, "mod"), "checkout", "-q", tips["theirs"])
+
+    def ours():
+        for name in BOTH_MODIFIED:
+            replace_line(repo, name, 12, f"ours clean hunk {name}")
+            replace_line(repo, name, 35, f"ours conflict {name}")
+        replace_line(repo, "theirs-deleted.md", 3, "ours kept it")
+        os.remove(os.path.join(repo, "ours-deleted.md"))
+        write(repo, "both-added.md", numbered("ours-added", 6))
+        write(repo, "star*.md", numbered("ours-star", 6))
+        git(repo, "mv", "rename-both.md", "rename-ours.md")
+        git(repo, "mv", "rename-delete.md", "rename-kept.md")
+        replace_line(repo, "rename-kept.md", 2, "ours edit in the renamed file")
+        git(repo, "mv", "rename-add.md", "rename-add-new.md")
+        write(repo, "image.bin", b"\0\1\2ours")
+        git(os.path.join(repo, "mod"), "checkout", "-q", tips["ours"])
+
+    git(repo, "checkout", "-q", "-b", "other")
+    theirs()
+    commit_all(repo, "theirs")
+    git(repo, "checkout", "-q", "main")
+    git(repo, "submodule", "update", "-q")
+    for name in BOTH_MODIFIED:
+        replace_line(repo, name, 20, f"early edit {name}")
+    commit_all(repo, "early")
+    ours()
+    if operation == "stash pop":
+        git(repo, "add", "-A")
+        git(repo, "stash", "-q")
+        theirs()
+        commit_all(repo, "theirs on main")
+    else:
+        commit_all(repo, "ours")
+    git(repo, *operation.split(), *([] if operation == "stash pop" else ["other"]), check=False)
+
+    git(repo, "checkout", "--ours", "bm-ours.md")
+    git(repo, "checkout", "--theirs", "bm-theirs.md")
+    write(repo, "bm-hand.md", numbered("resolved by hand"))
+    os.remove(os.path.join(repo, "bm-removed.md"))
+    for name in ("local.md", "star-local.md"):
+        replace_line(repo, name, 4, "local edit after the conflict")
+    write(repo, "untracked.md", "untracked\n")
+    return repo
+
+
+def blob(repo, mode, sha):
+    return mode, b"Subproject commit %s\n" % sha if mode == b"160000" else git_bytes(repo, "cat-file", "blob", sha)
+
+
+def tree_side(repo, revision):
+    side = {}
+    for entry in git_bytes(repo, "ls-tree", "-r", "-z", revision).split(b"\0")[:-1]:
+        (mode, _kind, sha), name = entry.split(b"\t")[0].split(), entry.split(b"\t")[1]
+        side[name.decode()] = blob(repo, mode, sha)
+    return side
+
+
+def index_side(repo):
+    side = {}
+    for entry in git_bytes(repo, "ls-files", "-s", "-z").split(b"\0")[:-1]:
+        (mode, sha, stage), name = entry.split(b"\t")[0].split(), entry.split(b"\t")[1]
+        if stage == b"0":
+            side[name.decode()] = blob(repo, mode, sha)
+    return side
+
+
+def working_tree_side(repo):
+    side = {}
+    for directory, directories, files in os.walk(repo):
+        if directory == repo:
+            directories.remove(".git")
+        elif ".git" in files:
+            name = os.path.relpath(directory, repo)
+            side[name] = blob(repo, b"160000", git_bytes(directory, "rev-parse", "HEAD").strip())
+            directories.clear()
+            continue
+        for file in files:
+            found = os.path.join(directory, file)
+            mode = b"100755" if os.access(found, os.X_OK) else b"100644"
+            side[os.path.relpath(found, repo)] = (mode, Path(found).read_bytes())
+    return side
 
 
 def inherited(settings):
@@ -200,36 +350,43 @@ class ReadADiff(unittest.TestCase):
         self.assertIsNotNone(command, "Read a diff needs one fenced sh command")
         return subprocess.run(
             [shell, "-c", prefix + command.rstrip("\n") + suffix], cwd=cwd,
-            env={**os.environ, **ISOLATED, "TMPDIR": tmp or self.tmp, **(env or {})},
+            env={**CLEAN, "TMPDIR": tmp or self.tmp, **(env or {})},
             stdin=subprocess.DEVNULL, stdout=stdout, stderr=subprocess.PIPE, check=False,
         )
 
     def new_tmp(self):
         return tempfile.mkdtemp(dir=self.root)
 
-    def assert_saved(self, done, expected, covers=WORKING_TREE, lines=True):
+    def saved_rows(self, done, covers):
         self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(done.stderr, b"")
         first, *rows, last = done.stdout.decode().splitlines()
         count, hidden, said, index = LAST_LINE.fullmatch(last).groups()
         directory = os.path.dirname(index)
         self.addCleanup(shutil.rmtree, directory)
         self.assertEqual(first, f"index {index}")
         self.assertEqual(Path(index).read_bytes(), done.stdout.split(b"\n", 1)[1])
-        self.assertEqual((int(count), said), (len(expected), covers))
-        self.assertEqual(int(hidden), sum("not shown: " in name for name in expected))
+        self.assertEqual(said, covers)
         saved = {}
         for row in rows:
             size, path, _status, name = row.split(" ", 3)
             saved[name] = Path(path).read_bytes()
             self.assertEqual(os.path.dirname(path), directory)
             self.assertEqual(int(size), len(saved[name]), name)
-        self.assertEqual(sorted(saved), sorted(expected))
-        self.assertEqual(len(rows), len(expected))
-        self.assertEqual(len(os.listdir(directory)), len(expected) + 1)
-        self.assertNotIn(os.path.realpath(self.repo), os.path.realpath(directory))
-        for name, line_start in expected.items():
             self.assertNotIn(b"\x1b", saved[name], name)
-            if lines:
+            self.assertFalse(saved[name].startswith((b"diff --cc ", b"diff --combined ")), name)
+        self.assertEqual(int(count), len(rows))
+        self.assertEqual(len(saved), len(rows))
+        self.assertEqual(int(hidden), sum("not shown: " in name for name in saved))
+        self.assertEqual(len(os.listdir(directory)), len(rows) + 1)
+        self.assertNotIn(Path(os.path.realpath(self.repo)), Path(os.path.realpath(directory)).parents)
+        return saved
+
+    def assert_saved(self, done, expected, covers=WORKING_TREE, lines=True):
+        saved = self.saved_rows(done, covers)
+        self.assertEqual(sorted(saved), sorted(expected))
+        if lines:
+            for name, line_start in expected.items():
                 found = saved[name].decode(errors="replace").splitlines()
                 self.assertTrue(any(line.startswith(line_start) for line in found), name)
         return saved
@@ -255,23 +412,42 @@ class ReadADiff(unittest.TestCase):
                     for name in ("*.md", ":!magic.md", "-dash.md"):
                         self.assertEqual(saved[name].count(b"diff --git "), 1, name)
 
-    def test_inherited_git_configuration_hides_no_file(self):
+    def test_each_inherited_setting_leaves_every_saved_file_byte_equal(self):
+        sub = os.path.join(self.repo, "sub")
+        clean = self.assert_saved(self.run_step("HEAD", sub), TRACKED | UNTRACKED)
         for name, settings in INHERITED.items():
-            for cwd in (self.repo, os.path.join(self.repo, "sub")):
-                with self.subTest(configuration=name, cwd=cwd):
-                    self.assert_saved(self.run_step("HEAD", cwd, env=inherited(settings)), TRACKED | UNTRACKED)
-        with self.subTest(configuration="GIT_EXTERNAL_DIFF"):
-            done = self.run_step("HEAD", self.repo, env={"GIT_EXTERNAL_DIFF": "false"})
-            self.assert_saved(done, TRACKED | UNTRACKED)
+            with self.subTest(configuration=name):
+                done = self.run_step("HEAD", sub, env=inherited(settings))
+                self.assertEqual(self.saved_rows(done, WORKING_TREE), clean)
+        variables = ["GIT_EXTERNAL_DIFF", "GIT_LITERAL_PATHSPECS", "GIT_GLOB_PATHSPECS", "GIT_NOGLOB_PATHSPECS",
+                     "GIT_ICASE_PATHSPECS"]
+        for variable in variables:
+            with self.subTest(variable=variable):
+                done = self.run_step("HEAD", sub, env={variable: "false" if variable == "GIT_EXTERNAL_DIFF" else "1"})
+                self.assertEqual(self.saved_rows(done, WORKING_TREE), clean)
 
-    def test_rename_detection_settings_change_the_listing_and_lose_no_line(self):
-        without = {name: line_start for name, line_start in TRACKED.items() if "->" not in name} | WITHOUT_RENAMES
-        done = self.run_step("HEAD", self.repo, env=inherited({"diff.renames": "false"}))
-        self.assert_saved(done, without | UNTRACKED)
-        done = self.run_step("HEAD", self.repo, env=inherited({"diff.renames": "copies"}))
-        copies = {name: line_start for name, line_start in TRACKED.items() if name != "copied.md"} | UNTRACKED
-        saved = self.assert_saved(done, copies | {"source.md -> copied.md": "+copy"})
-        self.assertIn("copy from source.md", saved["source.md -> copied.md"].decode().splitlines())
+    def test_hostile_global_file_and_environment_leave_every_saved_file_byte_equal(self):
+        hostile = {key: value for settings in INHERITED.values() for key, value in settings.items()}
+        global_file = os.path.join(self.root, "hostile.gitconfig")
+        git(self.root, "config", "--file", global_file, "core.pager", "false")
+        for key, value in hostile.items():
+            git(self.root, "config", "--file", global_file, key, value)
+        sources = {
+            "global file": {"GIT_CONFIG_GLOBAL": global_file},
+            "environment": inherited(hostile) | {
+                "GIT_EXTERNAL_DIFF": "false", "GIT_PAGER": "false", "GIT_LITERAL_PATHSPECS": "1",
+                "GIT_ICASE_PATHSPECS": "1",
+            },
+        }
+        ranges = {
+            "": UNCOMMITTED, "--cached": "staged only", "HEAD": WORKING_TREE, "main": WORKING_TREE,
+            "--merge-base main": WORKING_TREE, "main...HEAD": "commits only", "main HEAD": "commits only",
+        }
+        for spec, covers in ranges.items():
+            clean = self.saved_rows(self.run_step(spec, self.repo), covers)
+            for source, env in sources.items():
+                with self.subTest(spec=spec, source=source):
+                    self.assertEqual(self.saved_rows(self.run_step(spec, self.repo, env=env), covers), clean)
 
     def test_text_conversion_driver_output_is_saved_for_every_file(self):
         attributes = os.path.join(self.root, "attributes")
@@ -282,12 +458,12 @@ class ReadADiff(unittest.TestCase):
         self.assertIn("+ACCENT", saved["café.md"].decode().splitlines())
 
     def test_ranges_without_the_working_tree_leave_untracked_files_out(self):
-        for spec in ("main...HEAD", "main HEAD", "main..HEAD", "--merge-base main HEAD"):
+        for spec in ("main...HEAD", "main HEAD", "main..HEAD", "main..", "--merge-base main HEAD"):
             with self.subTest(spec=spec):
                 done = self.run_step(spec, os.path.join(self.repo, "sub"))
                 self.assert_saved(done, COMMITTED, covers="commits only")
         staged = STAGED | {"old.md -> sub/new.md": "rename from old.md", "copied.md": "+copy"}
-        for spec in ("--cached", "--staged HEAD"):
+        for spec in ("--cached", "--staged HEAD", "--cached --merge-base HEAD"):
             with self.subTest(spec=spec):
                 saved = self.assert_saved(self.run_step(spec, self.repo), staged, covers="staged only")
                 self.assertNotIn("+renamed", saved["old.md -> sub/new.md"].decode().splitlines())
@@ -306,18 +482,59 @@ class ReadADiff(unittest.TestCase):
         self.assert_saved(self.run_step("HEAD HEAD", self.repo), {}, covers="commits only")
 
     def test_failures_are_loud(self):
+        write(self.repo, "odd^{tree}", "a file whose name ends like a peeled revision\n")
+        self.addCleanup(os.remove, os.path.join(self.repo, "odd^{tree}"))
         cases = {
             "bad ref": ("no-such-ref", self.repo, 1),
             "outside a repository": ("HEAD", self.root, 1),
             "path limit": ("HEAD -- sub", self.repo, 2),
+            "path limit with no revision": ("-- sub", self.repo, 2),
             "unchanged path without the separator": ("HEAD .gitignore", self.repo, 1),
+            "changed path without the separator": ("HEAD staged.md", self.repo, 1),
+            "path alone": ("sub", self.repo, 1),
+            "word that is a file name once the script peels it": ("odd", self.repo, 1),
+            "word that names two commits": ("'HEAD^!'", self.repo, 1),
+            "blob": ("HEAD:staged.md", self.repo, 1),
+            "blob by its object name": (git(self.repo, "rev-parse", "HEAD:staged.md"), self.repo, 1),
+            "bad ref in a range": ("main...no-such-ref", self.repo, 1),
             "output option": ("--stat HEAD", self.repo, 2),
             "whitespace option": ("-w HEAD", self.repo, 2),
+            "three revisions": ("main work HEAD", self.repo, 2),
+            "range next to a revision": ("main..work HEAD", self.repo, 2),
+            "range with --merge-base": ("--merge-base main...HEAD", self.repo, 2),
+            "range with --cached": ("--cached main..HEAD", self.repo, 2),
+            "two revisions with --cached": ("--cached main HEAD", self.repo, 2),
+            "--merge-base alone": ("--merge-base", self.repo, 2),
+            "--merge-base with --cached and no revision": ("--cached --merge-base", self.repo, 2),
         }
         for name, (spec, cwd, status) in cases.items():
             with self.subTest(case=name):
                 tmp = self.new_tmp()
-                self.assert_refused(self.run_step(spec, cwd, tmp=tmp), tmp, status)
+                done = self.run_step(spec, cwd, tmp=tmp)
+                self.assert_refused(done, tmp, status)
+                *from_git, last = done.stderr.splitlines()
+                self.assertTrue(last.startswith(b"save-diff.py: error: "), done.stderr)
+                if name == "outside a repository":
+                    self.assertEqual(len(from_git), 1, done.stderr)
+                    continue
+                self.assertEqual(from_git, [])
+                self.assertIn(b"is not a range" if status == 2 else b"does not name one commit or tree", last)
+
+    def test_git_failure_after_the_checks_ends_the_run(self):
+        attributes = os.path.join(self.root, "failing-attributes")
+        Path(attributes).write_text("*.md diff=broken\n", encoding="utf-8")
+        settings = {"core.attributesFile": attributes, "diff.broken.textconv": "false"}
+        tmp = self.new_tmp()
+        done = self.run_step("HEAD", self.repo, env=inherited(settings), tmp=tmp)
+        self.assert_refused(done, tmp)
+        self.assertIn(b"save-diff.py: error: git exited ", done.stderr.splitlines()[-1])
+
+    def test_second_word_that_is_a_path_and_a_branch_is_read_as_a_revision(self):
+        git(self.repo, "branch", "sub", "main")
+        self.addCleanup(git, self.repo, "branch", "-D", "sub")
+        saved = self.assert_saved(self.run_step("HEAD sub", self.repo), {"committed.md": "-committed"},
+                                  covers="commits only")
+        self.assertEqual(saved["committed.md"], git_bytes(self.repo, "diff", "HEAD", "sub", "--"))
 
     def test_nested_repository_fails_with_a_zero_byte_line_and_keeps_nothing(self):
         nested = new_repository(os.path.join(self.repo, "nested"))
@@ -346,53 +563,73 @@ class ReadADiff(unittest.TestCase):
         expected = {"café.md": "+accent", "new here.md": "+untracked"}
         self.assert_saved(self.run_step("HEAD", os.path.join(linked, "deep")), expected)
 
-    def test_conflicted_file_has_one_row_that_says_unmerged(self):
-        for operation in ("merge", "rebase"):
-            repo = new_repository(os.path.join(self.root, f"conflict-{operation}"))
-            for name in ("both.md", "theirs-deleted.md", "plain.md"):
-                write(repo, name, "".join(f"{name} {line}\n" for line in range(30)))
-            commit_all(repo, "base")
-            git(repo, "checkout", "-q", "-b", "other")
-            append(repo, "both.md", "theirs")
-            git(repo, "rm", "-q", "theirs-deleted.md")
-            commit_all(repo, "theirs")
-            git(repo, "checkout", "-q", "main")
-            write(repo, "both.md", "early-edit\n" + "".join(f"both.md {line}\n" for line in range(1, 30)))
-            commit_all(repo, "early")
-            append(repo, "both.md", "ours")
-            append(repo, "theirs-deleted.md", "ours")
-            commit_all(repo, "ours")
-            git(repo, operation, "other", check=False)
-            append(repo, "plain.md", "later")
-            both, deleted = "both.md (unmerged)", "theirs-deleted.md (unmerged)"
-            name_only = {deleted[:-1] + NAME_ONLY: "* Unmerged path "}
-            head_has_the_file = operation == "merge"
+    def test_every_conflict_state_is_saved_whole_or_marked_for_every_range(self):
+        for operation, incoming in INCOMING_SIDE.items():
+            repo = repository_with_every_unmerged_state(os.path.join(self.root, "conflict " + operation), operation)
+            states = {row[:2] for row in git_bytes(repo, "status", "--porcelain=v1").decode().splitlines()}
+            self.assertLessEqual({"UU", "AA", "DU", "UD", "DD", "AU", "UA"}, states, operation)
+            unmerged = sorted({
+                entry.split(b"\t")[1].decode() for entry in git_bytes(repo, "ls-files", "-u", "-z").split(b"\0")[:-1]
+            })
+            self.assertLessEqual({"mod", "image.bin", "star*.md"}, set(unmerged))
+            head, working_tree = tree_side(repo, "HEAD"), working_tree_side(repo)
+            fork = {base: tree_side(repo, git(repo, "merge-base", base, "HEAD")) for base in ("other", "start")}
             ranges = {
-                "": ({both: "++<<<<<<< ", "plain.md (not staged)": "+later"} | name_only, UNCOMMITTED),
-                "--cached": ({both: "++<<<<<<< "} | name_only, "staged only"),
-                "HEAD": (
-                    {both: "+<<<<<<< ", "plain.md": "+later"}
-                    | (name_only if head_has_the_file else {deleted: "new file mode"}),
-                    WORKING_TREE,
-                ),
-                "main~2": ({both: "+early-edit", deleted: "+ours", "plain.md": "+later"}, WORKING_TREE),
-                "--merge-base other": (
-                    {both: "+early-edit", deleted: "+ours" if head_has_the_file else "new file mode", "plain.md": "+later"},
-                    WORKING_TREE,
-                ),
-                "main~1 main": ({"both.md": "+ours", "theirs-deleted.md": "+ours"}, "commits only"),
+                "": (head, working_tree, UNCOMMITTED),
+                "--cached": (head, index_side(repo), "staged only"),
+                "HEAD": (head, working_tree, WORKING_TREE),
+                "start": (tree_side(repo, "start"), working_tree, WORKING_TREE),
+                "--merge-base other": (fork["other"], working_tree, WORKING_TREE),
+                "start...HEAD": (fork["start"], head, "commits only"),
+                "start HEAD": (tree_side(repo, "start"), head, "commits only"),
             }
-            for spec, (expected, covers) in ranges.items():
+            for spec, (before, after, covers) in ranges.items():
                 with self.subTest(operation=operation, spec=spec):
-                    saved = self.assert_saved(self.run_step(spec, repo), expected, covers=covers)
-                    if covers == WORKING_TREE:
-                        against_revision = subprocess.run(
-                            ["git", "-C", repo, "diff", *spec.split(), "--", "both.md"],
-                            env={**os.environ, **ISOLATED}, check=True, capture_output=True,
-                        ).stdout
-                        self.assertEqual(saved[both], against_revision)
-                        self.assertIn(b"+<<<<<<< ", saved[both])
-            self.assertEqual(rows_that_git_status_lists(repo), {name.replace(NAME_ONLY, ")") for name in ranges[""][0]})
+                    saved = self.saved_rows(self.run_step(spec, os.path.join(repo, "sub")), covers)
+                    rows = {name: ROW_NAME.fullmatch(name) for name in saved}
+                    if covers == "commits only":
+                        self.assertFalse([name for name in saved if "unmerged" in name])
+                    else:
+                        for path in unmerged:
+                            mine = [name for name, row in rows.items() if row["new"] == path]
+                            self.assertEqual(len(mine), 1, path)
+                            self.assertIn("unmerged", rows[mine[0]]["notes"])
+                            revision = spec.split() or ["HEAD"]
+                            against = git_bytes(repo, "diff", *revision, "--", ":(literal)" + path)
+                            self.assertEqual(saved[mine[0]], against or b"* Unmerged path %s\n" % path.encode(), path)
+                            if spec == "--cached":
+                                self.assertIn("not shown: ", mine[0])
+                        after = after | dict.fromkeys(unmerged) if spec == "--cached" else after
+                    if covers in (UNCOMMITTED, WORKING_TREE):
+                        clean_hunk = b"+%s clean hunk " % incoming.encode()
+                        for name in ("bm-markers.md", "bm-theirs.md"):
+                            self.assertIn(clean_hunk + name.encode(), saved[f"{name} (unmerged)"].splitlines())
+                    self.assert_every_changed_line_is_saved(before, after, saved)
+                    if spec == "":
+                        self.assertEqual({re.sub(r"; not shown: [^)]+", "", name) for name in saved},
+                                         rows_that_git_status_lists(repo))
+
+    def assert_every_changed_line_is_saved(self, before, after, saved):
+        rows = [(ROW_NAME.fullmatch(name), content.splitlines()) for name, content in saved.items()]
+        for path in sorted(before.keys() | after.keys()):
+            if before.get(path) == after.get(path):
+                continue
+            mine = [(row, lines) for row, lines in rows if path in (row["old"], row["new"])]
+            self.assertTrue(mine, f"{path} changed and has no row")
+            if any("not shown: " in (row["notes"] or "") for row, _lines in mine):
+                continue
+            if all(row["new"] != path for row, _lines in mine):
+                continue
+            source = next((row["old"] for row, _lines in mine if row["old"]), path)
+            old, new = (collections.Counter(side.get(name, (None, b""))[1].splitlines())
+                        for side, name in ((before, source), (after, path)))
+            for sign, needed in ((b"+", new - old), (b"-", old - new)):
+                header = sign * 3 + b" "
+                found = collections.Counter(
+                    line[1:] for _row, lines in mine for line in lines
+                    if line.startswith(sign) and not line.startswith(header)
+                )
+                self.assertFalse(needed - found, f"{path}: lines with {sign.decode()} that no saved file holds")
 
     def test_name_that_is_not_utf8_is_saved_from_two_commits(self):
         repo = new_repository(os.path.join(self.root, "bytes"))
@@ -408,6 +645,21 @@ class ReadADiff(unittest.TestCase):
         self.addCleanup(shutil.rmtree, os.path.dirname(LAST_LINE.fullmatch(last.decode()).group(4)))
         self.assertTrue(row.endswith(b" A caf\xe9.md"), row)
         self.assertIn(b"+base", Path(os.fsdecode(row.split(b" ", 3)[1])).read_bytes().splitlines())
+
+    def test_names_that_differ_only_in_case_each_get_their_own_patch(self):
+        repo = new_repository(os.path.join(self.root, "case"))
+        append(repo, "plain.md", "base")
+        commit_all(repo, "base")
+        for name in ("Twin.md", "twin.md"):
+            write(repo, "content", f"{name}\n")
+            blob = git(repo, "hash-object", "-w", "content")
+            git(repo, "update-index", "--add", "--cacheinfo", f"100644,{blob},{name}")
+        head = git(repo, "commit-tree", git(repo, "write-tree"), "-p", "HEAD", "-m", "twins")
+        for env in ({}, {"GIT_ICASE_PATHSPECS": "1"}):
+            with self.subTest(env=env):
+                done = self.run_step(f"HEAD {head}", repo, env=env)
+                saved = self.assert_saved(done, {"Twin.md": "+Twin.md", "twin.md": "+twin.md"}, covers="commits only")
+                self.assertEqual([content.count(b"diff --git ") for content in saved.values()], [1, 1])
 
     def test_no_range_saves_every_staged_unstaged_and_untracked_file_that_git_status_lists(self):
         repo = new_repository(os.path.join(self.root, "uncommitted"))
@@ -559,14 +811,32 @@ class ReadADiff(unittest.TestCase):
         os.makedirs(os.path.join(repo, "left-out"), exist_ok=True)
         write(repo, "left-out/new.md", "untracked\n")
         self.assert_saved(self.run_step("", repo), {"left-out/new.md": "+untracked"}, covers=UNCOMMITTED)
+        git(repo, "sparse-checkout", "init", "--cone", "--sparse-index")
+        write(repo, "kept/new.md", "inside\n")
+        self.assertEqual(git(repo, "config", "index.sparse"), "true")
+        append(repo, "kept/a.md", "staged")
+        git(repo, "add", "kept/a.md")
+        append(repo, "kept/a.md", "unstaged")
+        untracked = {"kept/new.md": "+inside", "left-out/new.md": "+untracked"}
+        expected = {"kept/a.md (staged)": "+staged", "kept/a.md (not staged)": "+unstaged"} | untracked
+        self.assert_saved(self.run_step("", repo), expected, covers=UNCOMMITTED)
+        self.assert_saved(self.run_step("HEAD", repo), {"kept/a.md": "+staged"} | untracked)
 
     def test_temporary_directory_inside_the_checkout_is_refused(self):
-        tmp = os.path.join(self.repo, "tmp-inside")
+        for tmp in (os.path.join(self.repo, "tmp-inside"), os.path.join(self.repo, "sub", "tmp-inside")):
+            with self.subTest(tmp=tmp):
+                os.mkdir(tmp)
+                self.addCleanup(os.rmdir, tmp)
+                done = self.run_step("HEAD", self.repo, tmp=tmp)
+                self.assert_refused(done, tmp)
+                self.assertIn(b"TMPDIR", done.stderr)
+
+    def test_temporary_directory_beside_the_checkout_with_its_name_as_a_prefix_is_used(self):
+        tmp = self.repo + "-tmp"
         os.mkdir(tmp)
-        self.addCleanup(os.rmdir, tmp)
         done = self.run_step("HEAD", self.repo, tmp=tmp)
-        self.assert_refused(done, tmp)
-        self.assertIn(b"TMPDIR", done.stderr)
+        self.assert_saved(done, TRACKED | UNTRACKED)
+        self.assertTrue(done.stdout.startswith(b"index " + tmp.encode() + b"/"))
 
     def test_output_that_cannot_be_written_leaves_one_error_line_and_no_directory(self):
         tmp = self.new_tmp()
