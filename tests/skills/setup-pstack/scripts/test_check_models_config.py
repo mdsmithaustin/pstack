@@ -142,7 +142,7 @@ class ErrorRules(unittest.TestCase):
         self.assertEqual(findings, [(2, "notice", "gpt-6-sol@ultra pins an expensive tier")])
 
     def test_none_is_refused_on_the_releases_that_reject_it(self):
-        for model in ("gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"):
+        for model in ("gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"):
             with self.subTest(model=model):
                 _, findings = cmc.parse(f"bug-fix: {model}@none\n")
                 self.assertEqual(
@@ -872,6 +872,23 @@ class TrailReviewerStep(ReviewerRunner, unittest.TestCase):
                 "notes": ["trail reviewer matched work model gpt-6-sol; stepped up to gpt-6-astra (allowed by feature)"], "step": "up",
             },
         )
+
+    def test_terra_work_steps_up_to_sol_and_never_down_to_luna(self):
+        catalog = catalog_json("gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna")
+        user = "## codex\ntrail reviewer: gpt-6.1-terra@high\nfeature: gpt-6.1-sol\nroutine: gpt-6-luna\n"
+        self.assertEqual(
+            self.reviewer("codex", "gpt-6.1-terra@high", user=user, codex_catalog=catalog),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "gpt-6.1-sol", "effort": "high", "source": "user ## codex",
+                "notes": ["trail reviewer matched work model gpt-6.1-terra; stepped up to gpt-6.1-sol"], "step": "up",
+            },
+        )
+
+    def test_sol_work_without_astra_steps_down_to_terra_before_luna(self):
+        catalog = catalog_json("gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna")
+        user = "## codex\ntrail reviewer: gpt-6.1-sol@high\nfeature: gpt-6.1-terra\nroutine: gpt-6-luna\n"
+        arm = self.reviewer("codex", "gpt-6.1-sol@high", user=user, codex_catalog=catalog)
+        self.assertEqual((arm["model"], arm["step"]), ("gpt-6.1-terra", "down"))
 
     def test_claude_steps_down_when_the_config_never_names_a_higher_tier(self):
         self.assertEqual(

@@ -88,6 +88,7 @@ CLIS: dict[str, Cli] = {
 
 MODEL_EFFORTS: dict[str, frozenset[str]] = {
     "gpt-6.1-sol": ALLOWED_EFFORTS - {"none"},
+    "gpt-6.1-terra": ALLOWED_EFFORTS - {"none"},
     "gpt-6-astra": ALLOWED_EFFORTS - {"none"},
     "gpt-6-sol": ALLOWED_EFFORTS - {"none"},
     "gpt-6-luna": ALLOWED_EFFORTS - {"none", "ultra"},
@@ -106,7 +107,7 @@ DEFAULT_EFFORT_FLOOR = "high"
 GPT6_RELEASES_NEWEST_FIRST = ("gpt-6.1-", "gpt-6-")
 TIER_FAMILIES = (
     ("fable", "opus", "sonnet", "haiku"),
-    ("astra", "sol", "luna"),
+    ("astra", "sol", "terra", "luna"),
     ("grok-4.7", "grok-4.7-build-fast"),
 )
 STEP_CEILING = "xhigh"
