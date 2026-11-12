@@ -715,7 +715,7 @@
   },
   "budget-labels-set-effort": {
    "check": "static",
-   "claim": "The shipped flat lines write no effort except `routine`, which writes `medium`, so the resolver fills no effort on Claude Code and Grok Build and the `## codex` section pins its own. Such a role runs at the session effort on Grok Build, and on Claude Code when it uses the session's model; on another model Claude Code runs it at that model's own level. `default` keeps them. `unlimited`, `large`, `medium`, and `small` write max, xhigh, high, or medium on every entry that names a model, which overrides the session effort in either direction on Claude Code and Codex. Grok Build's spawn takes no effort, so every role there runs at the session effort.",
+   "claim": "The shipped flat lines write no effort except `routine`, which writes `medium`, so those roles run at the session effort on Grok Build, while the `## claude-code` and `## codex` sections pin their own: medium, high, or xhigh by role on Claude Code. `default` keeps them. `unlimited`, `large`, `medium`, and `small` write max, xhigh, high, or medium on every entry that names a model, which overrides the session effort in either direction on Claude Code and Codex. Grok Build's spawn takes no effort, so every role there runs at the session effort.",
    "evidence": [
     {
      "file": "skills/setup-pstack/examples/pstack-models.md",
@@ -723,7 +723,7 @@
     },
     {
      "file": "skills/setup-pstack/references/models-config.md",
-     "quote": "A line without a usable effort gets no fill on Claude Code and Grok Build."
+     "quote": "A line without a usable effort runs at the session effort on Grok Build."
     },
     {
      "file": "skills/setup-pstack/SKILL.md",
@@ -740,6 +740,10 @@
     {
      "file": "skills/pstack-harness/references/grok.md",
      "quote": "The spawn takes no effort, so a resolved level runs at the session effort and [role resolution step 5](roles.md#spawn-a-role) reports it."
+    },
+    {
+     "file": "skills/setup-pstack/examples/pstack-models.md",
+     "quote": "## claude-code\nfeature, refactoring: sonnet@medium"
     }
    ],
    "harness_sensitive": false,
@@ -8609,7 +8613,7 @@
    "ported_as": [
     "eead1319fd44",
     "f13df52c09ea",
-    "dd1ae5257a2a",
+    "73b6d094eabc",
     "7368fe56929d"
    ],
    "promise": "budget-labels-set-effort",
@@ -9080,6 +9084,15 @@
     "port"
    ],
    "text": "So before review, hand them to fresh eyes:"
+  },
+  "73b6d094eabc": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "On Claude Code the `## claude-code` section pins `medium`, `high`, or `xhigh` by role."
   },
   "73ea518cc68a": {
    "class": "substituted",
@@ -13052,15 +13065,6 @@
     "port"
    ],
    "text": "```text\n/poteto-mode we need rate limiting for external webhooks. /architect it first, and answer open questions with prototypes. let me review before proceeding.\n```"
-  },
-  "dd1ae5257a2a": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "port"
-   ],
-   "text": "On Claude Code it does so only when the role uses your session's model, and a role on another model runs at the level Claude Code keeps for that model."
   },
   "dd2ad473b5ec": {
    "also": [

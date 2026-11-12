@@ -58,12 +58,13 @@ class Cli(NamedTuple):
     native_aliases: bool
     translation: Mapping[str, tuple[str, str | None]]
     catalog: Path | None
+    floors: tuple[str, str] = ("high", "xhigh")
 
 
 CLIS: dict[str, Cli] = {
     "claude-code": Cli(
-        name="Claude Code", efforts=CLAUDE_EFFORTS, session_effort=True, native_aliases=True, translation={},
-        catalog=None,
+        name="Claude Code", efforts=CLAUDE_EFFORTS, session_effort=False, native_aliases=True, translation={},
+        catalog=None, floors=("medium", "high"),
     ),
     "codex": Cli(
         name="Codex", efforts=ALLOWED_EFFORTS, session_effort=False, native_aliases=False,
@@ -103,7 +104,6 @@ XHIGH_FLOOR_ROLES = {
     "reflect synthesizer", "arena cross-judge pool", "architect runners",
     "trail reviewer",
 }
-DEFAULT_EFFORT_FLOOR = "high"
 GPT6_RELEASES_NEWEST_FIRST = ("gpt-6.1-", "gpt-6-")
 TIER_FAMILIES = (
     ("fable", "opus", "sonnet", "haiku"),
@@ -296,7 +296,7 @@ def parse(text: str) -> tuple[dict, list]:
     claude_code_roles = sections.get(CLAUDE_CODE_SECTION, {})
     for line_no, name in pending_flat_notices:
         if name not in claude_code_roles:
-            findings.append((line_no, "notice", f"Claude Code cannot use none or ultra, so it runs `{name}` with no effort set"))
+            findings.append((line_no, "notice", f"Claude Code cannot use none or ultra, so `{name}` falls back to the effort policy there"))
 
     return sections, findings
 
@@ -361,7 +361,7 @@ def _resolve_effort(
             return written
     if cli.session_effort or model == INHERIT:
         return INHERIT
-    floor = "xhigh" if role in XHIGH_FLOOR_ROLES else DEFAULT_EFFORT_FLOOR
+    floor = cli.floors[1] if role in XHIGH_FLOOR_ROLES else cli.floors[0]
     ranked = [e for e in EFFORT_ORDER if e in _model_efforts(model, listed)]
     if floor in ranked or not ranked:
         return floor

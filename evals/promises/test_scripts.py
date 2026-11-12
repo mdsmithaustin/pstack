@@ -360,9 +360,9 @@ class ModelsResolverPromises(ResolverSandbox):
         self.assertEqual(
             self.resolve("claude-code", "arena runners", "arena cross-judge pool"),
             [
-                arm("arena runners", 1, "haiku", INHERIT, "user flat"),
-                arm("arena runners", 2, "sonnet", INHERIT, "user flat"),
-                arm("arena cross-judge pool", 1, "opus", INHERIT, "user flat"),
+                arm("arena runners", 1, "haiku", "medium", "user flat"),
+                arm("arena runners", 2, "sonnet", "medium", "user flat"),
+                arm("arena cross-judge pool", 1, "opus", "high", "user flat"),
             ],
         )
         self.write_user("arena runners: fable, opus, sonnet, haiku\narena cross-judge pool: sonnet, opus\n")
@@ -378,11 +378,11 @@ class ModelsResolverPromises(ResolverSandbox):
 
     def test_config_read_at_next_run(self):
         self.write_user("feature: sonnet\n")
-        self.assertEqual(self.resolve("claude-code", "feature"), [arm("feature", 1, "sonnet", INHERIT, "user flat")])
+        self.assertEqual(self.resolve("claude-code", "feature"), [arm("feature", 1, "sonnet", "medium", "user flat")])
         self.write_user("feature: opus@high\n")
         self.assertEqual(self.resolve("claude-code", "feature"), [arm("feature", 1, "opus", "high", "user flat")])
         self.write_workspace("feature: haiku\n")
-        self.assertEqual(self.resolve("claude-code", "feature"), [arm("feature", 1, "haiku", INHERIT, "workspace flat")])
+        self.assertEqual(self.resolve("claude-code", "feature"), [arm("feature", 1, "haiku", "medium", "workspace flat")])
         (self.project / ".agents" / "pstack-models.md").unlink()
         self.assertEqual(self.resolve("claude-code", "feature"), [arm("feature", 1, "opus", "high", "user flat")])
         guide = (SKILLS / "pstack-harness/references/roles.md").read_text(encoding="utf-8")
@@ -409,7 +409,7 @@ class ModelsResolverPromises(ResolverSandbox):
             self.resolve("claude-code", "feature", "bug-fix", "hillclimb"),
             [
                 arm("feature", 1, "sonnet", "high", "user flat"),
-                arm("bug-fix", 1, "opus", INHERIT, "user flat"),
+                arm("bug-fix", 1, "opus", "high", "user flat"),
                 arm("hillclimb", 1, "haiku", "low", "user flat"),
             ],
         )
@@ -426,7 +426,7 @@ class ModelsResolverPromises(ResolverSandbox):
         self.write_user("feature: haiku\nbug-fix: sonnet\n\n## codex\nfeature: gpt-6-luna@low\n")
         self.assertEqual(
             self.resolve("claude-code", "feature", "bug-fix"),
-            [arm("feature", 1, "haiku", INHERIT, "user flat"), arm("bug-fix", 1, "sonnet", INHERIT, "user flat")],
+            [arm("feature", 1, "haiku", "medium", "user flat"), arm("bug-fix", 1, "sonnet", "high", "user flat")],
         )
         codex = self.resolve("codex", "feature", "bug-fix")
         self.assertEqual(codex[0], arm("feature", 1, "gpt-6-luna", "low", "user ## codex"))
@@ -470,11 +470,11 @@ class ModelsResolverPromises(ResolverSandbox):
                 restored = self.resolve(harness, "hardest tasks")
                 self.assertEqual(len(restored), 1)
                 self.assertEqual(restored[0]["model"], model)
-                self.assertEqual(restored[0]["source"], "skill default ## codex" if harness == "codex" else "skill default")
+                self.assertEqual(restored[0]["source"], f"skill default ## {harness}")
                 if effort:
                     self.assertEqual(restored[0]["effort"], effort)
         (self.home / ".agents" / "pstack-models.md").unlink()
-        self.assertEqual(self.resolve("claude-code", "hardest tasks")[0]["source"], "skill default")
+        self.assertEqual(self.resolve("claude-code", "hardest tasks")[0]["source"], "skill default ## claude-code")
 
     def test_resolver_resolves_roles(self):
         self.write_workspace("feature: haiku\n")
@@ -482,9 +482,9 @@ class ModelsResolverPromises(ResolverSandbox):
         self.assertEqual(
             self.resolve("claude-code", "feature", "bug-fix", "swarm workers"),
             [
-                arm("feature", 1, "haiku", INHERIT, "workspace flat"),
+                arm("feature", 1, "haiku", "medium", "workspace flat"),
                 arm("bug-fix", 1, "opus", "xhigh", "user flat"),
-                arm("swarm workers", 1, "sonnet", INHERIT, "user flat"),
+                arm("swarm workers", 1, "sonnet", "medium", "user flat"),
             ],
         )
         self.write_workspace("## codex\nfeature: gpt-6-sol@high\n")
