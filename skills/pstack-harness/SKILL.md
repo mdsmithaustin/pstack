@@ -7,7 +7,7 @@ description: Maps pstack's delegation and portable resource primitives to the cu
 
 Use this skill when a pstack workflow names a delegation action, worklist, question, loop, transcript, portable resource, shell command, or process inspection.
 
-pstack tool names describe intent. Satisfy that intent with the live session's capabilities. Your tool inventory and CLI help are authoritative. Never invent a tool. Report the mechanism when it affects execution or evidence. For worklists, report item state rather than the carrier.
+Your tool inventory and CLI help are authoritative. Never invent a tool. Report the mechanism when it affects execution or evidence. For worklists, report item state rather than the carrier.
 
 Before executing shell commands or answering what is running, read [shell commands and running processes](references/shell-and-processes.md). This applies to every action and runtime.
 
@@ -42,7 +42,7 @@ For spawn or transcript, read only the current runtime column for that action. O
 
 ## Resolve portable resources
 
-Read the portable resource path contract selected above. Resolve only the roots that the next command needs. Keep the exact command forms in generated plans and restore the recorded roots across owners, delegates, wake-ups, and later ticks.
+Resolve only the roots that the next command needs. Keep the exact command forms in generated plans and restore the recorded roots across owners, delegates, wake-ups, and later ticks.
 
 ## Preserve roles across handoffs
 
@@ -63,10 +63,6 @@ Every pstack spawn runs a role from the models config, such as `feature` or `how
 3. Build the call from the current runtime adapter. `inherit-parent` in a field means omit that field.
 4. For a persona, put its complete briefing at the top of the prompt, from `python3 "${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/subagents.py" brief <persona>`, unless the live agent catalog lists the persona's native name.
 5. Report the model and effort each arm ran on, and label a review `same-model` when it matches the work's model.
-
-## The primitives
-
-Use the action table above for spawning, parallelism, read-only execution, structured questions, worklists, loops, and transcripts.
 
 ## Universal rules
 
