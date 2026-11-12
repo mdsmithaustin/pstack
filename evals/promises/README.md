@@ -157,7 +157,7 @@ Only the unconditional loads printed under a worklist item are graded. Condition
 
 The step-load verdict carries `measures` that never change it: the route, each load's mechanism and order, `entry_rereads` (lead reads of the `poteto-mode` entry after it was in context, null after a compaction), `step_text_calls`, and `unlisted_skill_loads` (sibling skills the lead loaded that the plan printed as neither a step load nor a gate, leaving out `poteto-mode` and `pstack-harness`). The endpoint verdict records whether the reply gives a diff command.
 
-The [2026-11-11 run](results/2026-11-11-floor-lead-plan-route.md) owns the first results, the counting rule, and the limits.
+The [2026-11-11 run](results/2026-11-11-floor-lead-plan-route.md) owns the first results, the counting rule, and the limits. The [second run](results/2026-11-11-plan-command-second-run.md) owns the results after the entry's plan command stopped naming an environment variable.
 
 ## Keep live evidence aligned with changes
 

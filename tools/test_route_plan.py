@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import subprocess
 import sys
@@ -212,6 +213,34 @@ class Worklist(unittest.TestCase):
 
     def test_unknown_playbook_is_a_usage_error(self):
         self.assertEqual(run("nope").returncode, 2)
+
+
+class EntryPlanCommand(unittest.TestCase):
+    BASE = "<this skill's base directory>"
+
+    def command(self):
+        entry = (MODE / "SKILL.md").read_text(encoding="utf-8")
+        blocks = re.findall(r"```sh\n(.*?)\n```", entry.split("print its plan", 1)[1], re.DOTALL)
+        self.assertTrue(blocks, "the entry prints no plan command")
+        return blocks[0]
+
+    def test_filled_command_runs_from_another_directory_with_nothing_set(self):
+        command = self.command()
+        with tempfile.TemporaryDirectory() as tmp:
+            skills = Path(tmp) / "installed skills"
+            skills.mkdir()
+            (skills / "poteto-mode").symlink_to(MODE, target_is_directory=True)
+            elsewhere = Path(tmp) / "elsewhere"
+            elsewhere.mkdir()
+            filled = (command.replace(self.BASE, str(skills / "poteto-mode"))
+                      .replace("<file-stem>", "feature")
+                      .replace("<claude-code|codex|grok|hermes|other>", "claude-code")
+                      .replace("python3", f'"{sys.executable}"', 1))
+            env = {name: value for name, value in os.environ.items() if not name.startswith("PSTACK_")}
+            done = subprocess.run(filled, shell=True, capture_output=True, text=True, cwd=elsewhere, env=env)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue(done.stdout.startswith("playbook: feature"), done.stdout)
+        self.assertIn("route: pending", done.stdout)
 
 
 class OneStep(unittest.TestCase):

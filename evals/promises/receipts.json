@@ -3,26 +3,31 @@
   "default-endpoint-local-branch-without-remote": {
    "claude-code": {
     "feature-plan-route-run": {
-     "grader": "012fcbea3936d1cb9d724a4a074778c40a6fe426b626107dbd0fd03150afe4b2",
+     "grader": "cd329529c768928d2756e3af4bd3eb7dc4fb63061bfc760a5dc133f974044216",
      "inputs": {
       "case": "750da31d99f6d96bda1d3623040b92cb0b34c0ac523de9800421e243f9cfbcc4",
       "owners": {
-       "skills/poteto-mode/SKILL.md": "d74fa9eef9cf14089c256e27279b73235a42f989cb5fe596b5d6700c4661f4dd",
+       "skills/poteto-mode/SKILL.md": "45ebda72a29e253b438157edf7d457537a8d30758e3dcb32436d73c2a5349473",
        "skills/poteto-mode/references/routes.md": "ff74d763618959596edb031cb911337a07749f94d12adb52ef97ad5e557b6b24",
        "skills/poteto-mode/scripts/plan.py": "cd2beee9c14bfaf35e15cf7b47c0ef621d2ab317cedd2b7b20f98f3857b93250"
       }
      },
      "model": "claude-sonnet-5-5",
+     "previous": "MIXED",
      "recorded": "2026-11-11",
      "runs": {
-      "08ef41f9779541e8": "FAIL",
-      "28ffc6b25150d514": "PASS",
-      "a3369467834c23c7": "FAIL"
+      "7cb9384289be6724": "PASS",
+      "c1146b0c1693b060": "PASS",
+      "dad8b564ee087535": "PASS"
      },
-     "skills_at": "0cabc6143b1cc1dcb9f2eb2c6042a4019ffba2fc",
+     "skills_at": "404ddca10f4d64c8bd9111935dff724382e5f204",
+     "superseded": [
+      "08ef41f9779541e8",
+      "28ffc6b25150d514",
+      "a3369467834c23c7"
+     ],
      "verdicts": {
-      "FAIL": 2,
-      "PASS": 1
+      "PASS": 3
      }
     }
    }
@@ -30,27 +35,32 @@
   "lead-prints-plan-before-edits": {
    "claude-code": {
     "feature-plan-route-run": {
-     "grader": "012fcbea3936d1cb9d724a4a074778c40a6fe426b626107dbd0fd03150afe4b2",
+     "grader": "cd329529c768928d2756e3af4bd3eb7dc4fb63061bfc760a5dc133f974044216",
      "inputs": {
       "case": "750da31d99f6d96bda1d3623040b92cb0b34c0ac523de9800421e243f9cfbcc4",
       "owners": {
-       "skills/poteto-mode/SKILL.md": "d74fa9eef9cf14089c256e27279b73235a42f989cb5fe596b5d6700c4661f4dd",
+       "skills/poteto-mode/SKILL.md": "45ebda72a29e253b438157edf7d457537a8d30758e3dcb32436d73c2a5349473",
        "skills/poteto-mode/references/routes.md": "ff74d763618959596edb031cb911337a07749f94d12adb52ef97ad5e557b6b24",
        "skills/poteto-mode/routes.json": "dd1fb67ee378e3581cb5b87b27322b360c68e4251fd0d5b085f24c1c9df1d73d",
        "skills/poteto-mode/scripts/plan.py": "cd2beee9c14bfaf35e15cf7b47c0ef621d2ab317cedd2b7b20f98f3857b93250"
       }
      },
      "model": "claude-sonnet-5-5",
+     "previous": "MIXED",
      "recorded": "2026-11-11",
      "runs": {
-      "08ef41f9779541e8": "FAIL",
-      "28ffc6b25150d514": "PASS",
-      "a3369467834c23c7": "FAIL"
+      "7cb9384289be6724": "PASS",
+      "c1146b0c1693b060": "PASS",
+      "dad8b564ee087535": "PASS"
      },
-     "skills_at": "0cabc6143b1cc1dcb9f2eb2c6042a4019ffba2fc",
+     "skills_at": "404ddca10f4d64c8bd9111935dff724382e5f204",
+     "superseded": [
+      "08ef41f9779541e8",
+      "28ffc6b25150d514",
+      "a3369467834c23c7"
+     ],
      "verdicts": {
-      "FAIL": 2,
-      "PASS": 1
+      "PASS": 3
      }
     }
    }
@@ -58,11 +68,11 @@
   "plan-step-loads-arrive-with-step": {
    "claude-code": {
     "feature-plan-route-run": {
-     "grader": "012fcbea3936d1cb9d724a4a074778c40a6fe426b626107dbd0fd03150afe4b2",
+     "grader": "cd329529c768928d2756e3af4bd3eb7dc4fb63061bfc760a5dc133f974044216",
      "inputs": {
       "case": "750da31d99f6d96bda1d3623040b92cb0b34c0ac523de9800421e243f9cfbcc4",
       "owners": {
-       "skills/poteto-mode/SKILL.md": "d74fa9eef9cf14089c256e27279b73235a42f989cb5fe596b5d6700c4661f4dd",
+       "skills/poteto-mode/SKILL.md": "45ebda72a29e253b438157edf7d457537a8d30758e3dcb32436d73c2a5349473",
        "skills/poteto-mode/playbooks/feature.md": "d1e71ff1a6ac44fae87ff3327139c3a1e1e5ccd9153feaa86b951100e59b91c5",
        "skills/poteto-mode/references/routes.md": "ff74d763618959596edb031cb911337a07749f94d12adb52ef97ad5e557b6b24",
        "skills/poteto-mode/routes.json": "dd1fb67ee378e3581cb5b87b27322b360c68e4251fd0d5b085f24c1c9df1d73d",
@@ -70,15 +80,22 @@
       }
      },
      "model": "claude-sonnet-5-5",
+     "previous": "INCONCLUSIVE",
      "recorded": "2026-11-11",
      "runs": {
-      "08ef41f9779541e8": "INCONCLUSIVE",
-      "28ffc6b25150d514": "INCONCLUSIVE",
-      "a3369467834c23c7": "INCONCLUSIVE"
+      "7cb9384289be6724": "FAIL",
+      "c1146b0c1693b060": "FAIL",
+      "dad8b564ee087535": "PASS"
      },
-     "skills_at": "0cabc6143b1cc1dcb9f2eb2c6042a4019ffba2fc",
+     "skills_at": "404ddca10f4d64c8bd9111935dff724382e5f204",
+     "superseded": [
+      "08ef41f9779541e8",
+      "28ffc6b25150d514",
+      "a3369467834c23c7"
+     ],
      "verdicts": {
-      "INCONCLUSIVE": 3
+      "FAIL": 2,
+      "PASS": 1
      }
     }
    }
@@ -86,26 +103,33 @@
   "worklist-follows-plan-and-is-kept": {
    "claude-code": {
     "feature-plan-route-run": {
-     "grader": "012fcbea3936d1cb9d724a4a074778c40a6fe426b626107dbd0fd03150afe4b2",
+     "grader": "cd329529c768928d2756e3af4bd3eb7dc4fb63061bfc760a5dc133f974044216",
      "inputs": {
       "case": "750da31d99f6d96bda1d3623040b92cb0b34c0ac523de9800421e243f9cfbcc4",
       "owners": {
-       "skills/poteto-mode/SKILL.md": "d74fa9eef9cf14089c256e27279b73235a42f989cb5fe596b5d6700c4661f4dd",
+       "skills/poteto-mode/SKILL.md": "45ebda72a29e253b438157edf7d457537a8d30758e3dcb32436d73c2a5349473",
        "skills/poteto-mode/routes.json": "dd1fb67ee378e3581cb5b87b27322b360c68e4251fd0d5b085f24c1c9df1d73d",
        "skills/poteto-mode/scripts/plan.py": "cd2beee9c14bfaf35e15cf7b47c0ef621d2ab317cedd2b7b20f98f3857b93250",
        "skills/pstack-harness/SKILL.md": "fc47678c91f318d4f8f2bfcfa1c798b3a74d8d376479c3406128ea17402542ed"
       }
      },
      "model": "claude-sonnet-5-5",
+     "previous": "INCONCLUSIVE",
      "recorded": "2026-11-11",
      "runs": {
-      "08ef41f9779541e8": "INCONCLUSIVE",
-      "28ffc6b25150d514": "INCONCLUSIVE",
-      "a3369467834c23c7": "INCONCLUSIVE"
+      "7cb9384289be6724": "FAIL",
+      "c1146b0c1693b060": "FAIL",
+      "dad8b564ee087535": "INCONCLUSIVE"
      },
-     "skills_at": "0cabc6143b1cc1dcb9f2eb2c6042a4019ffba2fc",
+     "skills_at": "404ddca10f4d64c8bd9111935dff724382e5f204",
+     "superseded": [
+      "08ef41f9779541e8",
+      "28ffc6b25150d514",
+      "a3369467834c23c7"
+     ],
      "verdicts": {
-      "INCONCLUSIVE": 3
+      "FAIL": 2,
+      "INCONCLUSIVE": 1
      }
     }
    }
@@ -113,24 +137,31 @@
   "worklist-in-native-task-tool": {
    "claude-code": {
     "feature-plan-route-run": {
-     "grader": "012fcbea3936d1cb9d724a4a074778c40a6fe426b626107dbd0fd03150afe4b2",
+     "grader": "cd329529c768928d2756e3af4bd3eb7dc4fb63061bfc760a5dc133f974044216",
      "inputs": {
       "case": "750da31d99f6d96bda1d3623040b92cb0b34c0ac523de9800421e243f9cfbcc4",
       "owners": {
-       "skills/poteto-mode/SKILL.md": "d74fa9eef9cf14089c256e27279b73235a42f989cb5fe596b5d6700c4661f4dd",
+       "skills/poteto-mode/SKILL.md": "45ebda72a29e253b438157edf7d457537a8d30758e3dcb32436d73c2a5349473",
        "skills/pstack-harness/SKILL.md": "fc47678c91f318d4f8f2bfcfa1c798b3a74d8d376479c3406128ea17402542ed"
       }
      },
      "model": "claude-sonnet-5-5",
+     "previous": "FAIL",
      "recorded": "2026-11-11",
      "runs": {
-      "08ef41f9779541e8": "FAIL",
-      "28ffc6b25150d514": "FAIL",
-      "a3369467834c23c7": "FAIL"
+      "7cb9384289be6724": "FAIL",
+      "c1146b0c1693b060": "FAIL",
+      "dad8b564ee087535": "PASS"
      },
-     "skills_at": "0cabc6143b1cc1dcb9f2eb2c6042a4019ffba2fc",
+     "skills_at": "404ddca10f4d64c8bd9111935dff724382e5f204",
+     "superseded": [
+      "08ef41f9779541e8",
+      "28ffc6b25150d514",
+      "a3369467834c23c7"
+     ],
      "verdicts": {
-      "FAIL": 3
+      "FAIL": 2,
+      "PASS": 1
      }
     }
    }
@@ -138,23 +169,29 @@
   "worklist-opens-with-playbook-steps": {
    "claude-code": {
     "feature-plan-route-run": {
-     "grader": "012fcbea3936d1cb9d724a4a074778c40a6fe426b626107dbd0fd03150afe4b2",
+     "grader": "cd329529c768928d2756e3af4bd3eb7dc4fb63061bfc760a5dc133f974044216",
      "inputs": {
       "case": "750da31d99f6d96bda1d3623040b92cb0b34c0ac523de9800421e243f9cfbcc4",
       "owners": {
-       "skills/poteto-mode/SKILL.md": "d74fa9eef9cf14089c256e27279b73235a42f989cb5fe596b5d6700c4661f4dd",
+       "skills/poteto-mode/SKILL.md": "45ebda72a29e253b438157edf7d457537a8d30758e3dcb32436d73c2a5349473",
        "skills/poteto-mode/playbooks/feature.md": "d1e71ff1a6ac44fae87ff3327139c3a1e1e5ccd9153feaa86b951100e59b91c5",
        "skills/pstack-harness/SKILL.md": "fc47678c91f318d4f8f2bfcfa1c798b3a74d8d376479c3406128ea17402542ed"
       }
      },
      "model": "claude-sonnet-5-5",
+     "previous": "FAIL",
      "recorded": "2026-11-11",
      "runs": {
-      "08ef41f9779541e8": "FAIL",
-      "28ffc6b25150d514": "FAIL",
-      "a3369467834c23c7": "FAIL"
+      "7cb9384289be6724": "FAIL",
+      "c1146b0c1693b060": "FAIL",
+      "dad8b564ee087535": "FAIL"
      },
-     "skills_at": "0cabc6143b1cc1dcb9f2eb2c6042a4019ffba2fc",
+     "skills_at": "404ddca10f4d64c8bd9111935dff724382e5f204",
+     "superseded": [
+      "08ef41f9779541e8",
+      "28ffc6b25150d514",
+      "a3369467834c23c7"
+     ],
      "verdicts": {
       "FAIL": 3
      }
