@@ -1,0 +1,18 @@
+{
+ "promises": [
+  "codex-spawns-state-fork-turns"
+ ],
+ "fixture": "kiln",
+ "entry": "poteto-mode",
+ "turns": [
+  "hand one helper subagent the job of reading every package under packages/ and listing each package's functions with their files. don't read the packages yourself. give me its list."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "fresh_delegates": true
+ },
+ "note": "Port-owned, with no guide claim. The helper's brief is the whole task, so nothing in the lead's history is worth carrying and any fork fails. On Codex an omitted fork_turns forks the full history, which is the default this case exists to catch."
+}
