@@ -542,7 +542,7 @@
             {
               "name": "spec-citations",
               "scale": "1-5",
-              "rubric": "5 = Every proposed test quotes the spec sentence or example that gives its expected result, or names one the response quotes elsewhere, and the response proposes no test whose result no requirement gives. An open question kept out of the tests is not a test. 4 = No test expects a result that no requirement gives, but exactly one test is not tied to a quoted sentence and more than half are. 3 = More than half of the tests are tied to a quoted sentence but two or more are not, or the tests name requirements and the response quotes no spec sentence, or one test expects a result that no requirement gives. A test labeled as an assumption counts. 2 = Half or fewer of the tests are tied to a quoted sentence, or two or more tests expect results that no requirement gives. 1 = No test is tied to the spec text. When two levels fit, give the lower."
+              "rubric": "5 = Every proposed test is tied, and the response proposes no test whose result no requirement gives. A test is tied when it quotes the spec sentence or example that gives its expected result, or names one the response quotes elsewhere. An open question kept out of the tests is not a test. 4 = No test expects a result that no requirement gives, but exactly one test is not tied and more than half are. 3 = More than half of the tests are tied but two or more are not, or one test expects a result that no requirement gives. A test labeled as an assumption counts. 2 = Half or fewer of the tests are tied, or two or more tests expect results that no requirement gives. 1 = No test quotes or names any spec text. When two levels fit, give the lower."
             }
           ]
         },
@@ -689,7 +689,7 @@
       ],
       "assertions": [
         {
-          "name": "only-quoted-criteria-tested",
+          "name": "only-stated-results-tested",
           "type": "judge",
           "severity": "gate",
           "threshold": 4,
