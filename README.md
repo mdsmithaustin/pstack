@@ -27,7 +27,7 @@ fork it. improve it. make it yours. PRs are welcome!
 npx skills add mdsmithaustin/pstack
 ```
 
-pick the targets you use at the prompt, including `hermes-agent` for hermes. `-g` installs user-level instead of per-project. hermes project skills require project trust; confirm discovery in your installed version. for global hermes use, install into its native skills directory or configure `skills.external_dirs` to include the shared `~/.agents/skills` directory. the installer may skip a project hermes symlink when `.hermes` does not exist.
+pick the targets you use at the prompt, including `hermes-agent` for hermes. `-g` installs user-level instead of per-project. hermes project skills require project trust, and grok build skips project skills in a folder it does not trust; confirm discovery in your installed version. for global hermes use, install into its native skills directory or configure `skills.external_dirs` to include the shared `~/.agents/skills` directory. the installer may skip a project hermes symlink when `.hermes` does not exist.
 
 ## get started
 
