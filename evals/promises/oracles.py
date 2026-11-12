@@ -3596,6 +3596,36 @@ def architect_grounds(view):
     return passed(*evidence)
 
 
+COMPARISON_SKIP = re.compile(r'"comparison": "skip"|so skip the comparison per Spawn a role step 2')
+
+
+def architect_skip_marked(view):
+    verdict = None
+    for _, command, ok, head in reversed(view.commands()):
+        if ok is False or "check-models-config" not in command:
+            continue
+        unmarked = False
+        for line in head.splitlines():
+            if re.match(r'\{"role": "architect runners", "arm": 1,', line) and COMPARISON_SKIP.search(line):
+                return True
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict) and row.get("role") == "architect runners" and row.get("arm") == 1:
+                unmarked = True
+        first = re.match(r'\{"role": "([^"]+)"', head)
+        names_other_roles = "architect runners" not in command and first and first.group(1) in command
+        flagged = "--lead-model" in command
+        if unmarked and flagged:
+            return False
+        if unmarked:
+            verdict = False
+        elif len(head) >= RESULT_HEAD and not names_other_roles and (flagged or verdict is None):
+            return None
+    return verdict
+
+
 @oracle("architect-runs-arena-for-sketches")
 def architect_arena(view):
     runners = runner_spawns(view)
@@ -3608,6 +3638,14 @@ def architect_arena(view):
     if len(runners) < 2:
         if len(runners) + len(sealed) >= 2:
             return inconclusive("sealed briefs hide which spawns were the runners; two sketches cannot be ruled out", *evidence)
+        if not runners and affirmed(r"same-model, comparison skipped", view.final_reply.lower()):
+            marked = architect_skip_marked(view)
+            evidence.append(f"resolver marked the comparison skip: {marked}")
+            if marked is False:
+                return failed("the reply reports a same-model comparison skip, but the resolver's `architect runners` row in the trace has no skip mark", *evidence)
+            if marked is None:
+                return inconclusive("the reply reports a same-model comparison skip, and no resolver output in the trace shows whether `architect runners` was marked", *evidence)
+            return inconclusive("the resolver marked the comparison `skip`, so no sketch fan-out was due", *evidence)
         return inconclusive("run killed before the sketch fan-out", *evidence) if view.killed else failed("fewer than two runner sketches", *evidence)
     if len(wave) < 2:
         return failed("runners spawned sequentially", *evidence)
@@ -4742,36 +4780,62 @@ def worklist_follows_plan(view):
     return inconclusive("the run did not finish with a project change, so a missing or idle worklist proves nothing", *evidence)
 
 
-def forked_turns(value):
-    """How much lead history a Codex spawn carries: None for an omitted field, which Codex forks in full."""
-    if value in ("none", "all"):
-        return value
-    if isinstance(value, bool):
-        return "invalid"
-    if value is None:
-        return None
+COUNTS_FORK_IN_FULL_FROM = (0, 162, 0)
+RUST_WHITESPACE = "\t\n\x0b\x0c\r \x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
+SPAWN_REFUSAL = re.compile(
+    r"failed to parse function arguments: |fork_context is not supported in MultiAgentV2|fork_turns must be "
+    r"|Empty message can't be sent to an agent|Provide either message or items, but not both|Provide one of: message or items"
+    r"|Items can't be empty|Agent depth limit reached|Full-history forked agents inherit the parent agent type"
+    r"|Reasoning effort `[^`]*` is not supported for model |collab spawn failed: agent thread limit reached"
+    r"|agent path `[^`]*` already exists")
+OLDER_SPAWN_NAMESPACE = "multi_agent_v1"
+
+
+def plain_release(view):
+    version = view.trace.get("cli_version")
+    named = re.fullmatch(r"(?:codex-cli )?([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})", version.strip()) if isinstance(version, str) else None
+    return tuple(int(part) for part in named.groups()) if named else None
+
+
+def refused_before_a_child(spawn):
+    output = spawn.get("x_output")
+    return isinstance(output, str) and bool(SPAWN_REFUSAL.match(output))
+
+
+def tool_that_made_a_child(spawn):
     try:
-        count = int(value) if isinstance(value, (int, str)) else 0
-    except ValueError:
-        return "invalid"
-    return count if count > 0 and str(value).strip() == str(count) else "invalid"
+        result = json.loads(spawn.get("x_output"))
+    except (TypeError, ValueError, RecursionError):
+        return None
+    if not isinstance(result, dict):
+        return None
+    made = [tool for tool, key in (("current", "task_name"), ("older", "agent_id")) if isinstance(result.get(key), str)]
+    if len(made) != 1 or (made == ["current"] and spawn.get("x_namespace") == OLDER_SPAWN_NAMESPACE):
+        return None
+    return made[0]
 
 
-REVIEW_SEAT = re.compile(r"(?<![a-z])(?:review(?:er)?s?|judges?|verdicts?|adversar(?:y|ies|ial))(?![a-z])")
-REVIEW_ORDER = re.compile(r"\A\s*(?:(?:task|role|goal)\s*:\s*)?(?:(?:adversarially|independently)\s+)?(?:review|judge)(?![a-z])"
-                          r"|\A\s*(?:you are|act as) (?:the |an? )?(?:[a-z-]+ ){0,2}(?:reviewer|judge)(?![a-z])")
+def history_carried(tool, spawn):
+    context, turns = spawn.get("x_fork_context"), spawn.get("fork_turns")
+    if tool == "older":
+        if "x_fork_context" not in spawn or context is False:
+            return "none"
+        return "all" if context is True else "unreadable"
+    if context is not None or not isinstance(turns, (str, type(None))):
+        return "unreadable"
+    turns = (turns or "").strip(RUST_WHITESPACE).lower()
+    if turns in ("none", "all"):
+        return turns
+    if not turns:
+        return "omitted"
+    if not re.fullmatch(r"\+?[0-9]+", turns):
+        return "unreadable"
+    digits = turns.removeprefix("+").lstrip("0")
+    return "count" if digits and len(digits) <= 20 and int(digits) < 2 ** 64 else "unreadable"
 
 
-def assigned_review(view, spawn):
-    """Whether the spawn's assigned seat is a review. The words of the brief's body and of the child's reply are not a seat."""
-    call = next((c for c in view.tool_calls if str(c.get("seq")) == str(spawn.get("seq"))), None)
-    given = (call or {}).get("input") or {}
-    seat = [spawn.get(key) for key in ("persona", "subagent_type", "task_name", "role")]
-    seat += [given.get(key) for key in ("agent_type", "task_name", "name")] if isinstance(given, dict) else []
-    head = (spawn.get("prompt_head") or "").lower()
-    role = named_role(spawn, view.spawn_brief(spawn).replace("\\n", "\n").lower()) or ""
-    return (any(REVIEW_SEAT.search(str(name).lower()) for name in seat if name) or bool(REVIEW_SEAT.search(role))
-            or bool(REVIEW_ORDER.match(head)))
+def shown(value):
+    return repr(value)[:60] if isinstance(value, (str, int, float, type(None))) else f"a {type(value).__name__}"
 
 
 @oracle("codex-spawns-state-fork-turns")
@@ -4782,23 +4846,57 @@ def codex_spawns_state_fork_turns(view):
     if not spawns:
         return inconclusive("the lead made no spawn_agent call, so no fork choice came due")
     fresh = bool((view.case.get("expect") or {}).get("fresh_delegates"))
-    reviewers = {s.get("seq") for s in spawns if assigned_review(view, s)}
-    failures, evidence = [], []
+    release = plain_release(view)
+    failures, unknown, evidence, graded = [], [], [], 0
     for spawn in spawns:
-        seq, carried = spawn.get("seq"), forked_turns(spawn.get("fork_turns"))
+        seq = spawn.get("seq")
+        if refused_before_a_child(spawn):
+            evidence.append(f"spawn at seq {seq}: Codex refused the call ({shown(spawn['x_output'])}), so it created no child")
+            continue
+        tool = tool_that_made_a_child(spawn)
+        if tool is None:
+            unknown.append(f"spawn at seq {seq} has no recorded result that proves which spawn tool ran and whether it created a child "
+                           f"(result: {shown(spawn.get('x_output'))})")
+            continue
+        if not spawn.get("x_arguments_read"):
+            unknown.append(f"spawn at seq {seq} created a child, yet its arguments are not a JSON object the adapter can read, "
+                           "so the trace does not show its fork choice")
+            continue
+        fork = history_carried(tool, spawn)
+        stated = (f"fork_context={shown(spawn.get('x_fork_context'))}" if tool == "older" or spawn.get("x_fork_context") is not None
+                  else f"fork_turns={shown(spawn.get('fork_turns'))}")
+        if fork == "unreadable":
+            unknown.append(f"spawn at seq {seq} created a child on the {tool} spawn tool, yet {stated} is a value that tool refuses "
+                           "in every release checked")
+            continue
+        graded += 1
+        seat = spawn.get("x_agent_type")
+        reviewer = isinstance(seat, str) and seat.strip(RUST_WHITESPACE) == "trail reviewer"
         pinned = [key for key in ("model", "effort") if spawn.get(key)]
-        evidence.append(f"spawn at seq {seq}: fork_turns={spawn.get('fork_turns')!r}, pinned={pinned}, reviewer={seq in reviewers}")
-        if carried is None:
+        evidence.append(f"spawn at seq {seq}: {tool} spawn tool (namespace {shown(spawn.get('x_namespace'))}), {stated}, read as {fork}, "
+                        f"pinned={pinned}, reviewer={reviewer}")
+        if fork == "none":
+            continue
+        if fork == "omitted":
             failures.append(f"spawn at seq {seq} omits fork_turns, so Codex forks the lead's full history into it")
-        elif carried == "invalid":
-            failures.append(f"spawn at seq {seq} passes fork_turns={spawn.get('fork_turns')!r}, which is not \"none\", \"all\", or a positive count")
-        elif carried == "all" and pinned:
-            failures.append(f"spawn at seq {seq} forks the full history while passing {' and '.join(pinned)}, which a full fork ignores")
-        elif carried != "none" and seq in reviewers:
-            failures.append(f"reviewer spawn at seq {seq} carries lead history (fork_turns={spawn.get('fork_turns')!r})")
-        elif carried != "none" and fresh:
-            failures.append(f"spawn at seq {seq} carries lead history (fork_turns={spawn.get('fork_turns')!r}) on a task whose brief needs none")
-    return failed(failures, *evidence) if failures else passed(*evidence)
+        elif reviewer:
+            failures.append(f"reviewer spawn at seq {seq} carries lead history ({stated})")
+        elif fresh:
+            failures.append(f"spawn at seq {seq} carries lead history ({stated}) on a task whose brief needs none")
+        elif pinned and fork == "count" and (release is None or release < COUNTS_FORK_IN_FULL_FROM):
+            unknown.append(f"spawn at seq {seq} passes a turn count with {' and '.join(pinned)}: Codex from 0.162.0 forks the full history "
+                           f"for a count and earlier releases carried only that many turns, and the trace names "
+                           f"{'no plain release' if release is None else 'release ' + '.'.join(map(str, release))}")
+        elif pinned:
+            failures.append(f"spawn at seq {seq} forks the full history while passing {' and '.join(pinned)} ({stated})")
+        else:
+            unknown.append(f"spawn at seq {seq} carries lead history ({stated}), and the trace does not prove whether the fork "
+                           "restrictions permit it")
+    if failures:
+        return failed(failures, *evidence)
+    if unknown:
+        return inconclusive(unknown, *evidence)
+    return passed(*evidence) if graded else inconclusive("Codex refused every recorded spawn_agent call, so no fork choice took effect", *evidence)
 
 
 @oracle("default-endpoint-local-branch-without-remote")

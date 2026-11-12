@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import subprocess
 import sys
@@ -214,6 +215,34 @@ class Worklist(unittest.TestCase):
         self.assertEqual(run("nope").returncode, 2)
 
 
+class EntryPlanCommand(unittest.TestCase):
+    BASE = "<this skill's base directory>"
+
+    def command(self):
+        entry = (MODE / "SKILL.md").read_text(encoding="utf-8")
+        blocks = re.findall(r"```sh\n(.*?)\n```", entry.split("print its plan", 1)[1], re.DOTALL)
+        self.assertTrue(blocks, "the entry prints no plan command")
+        return blocks[0]
+
+    def test_filled_command_runs_from_another_directory_with_nothing_set(self):
+        command = self.command()
+        with tempfile.TemporaryDirectory() as tmp:
+            skills = Path(tmp) / "installed skills"
+            skills.mkdir()
+            (skills / "poteto-mode").symlink_to(MODE, target_is_directory=True)
+            elsewhere = Path(tmp) / "elsewhere"
+            elsewhere.mkdir()
+            filled = (command.replace(self.BASE, str(skills / "poteto-mode"))
+                      .replace("<file-stem>", "feature")
+                      .replace("<claude-code|codex|grok|hermes|other>", "claude-code")
+                      .replace("python3", f'"{sys.executable}"', 1))
+            env = {name: value for name, value in os.environ.items() if not name.startswith("PSTACK_")}
+            done = subprocess.run(filled, shell=True, capture_output=True, text=True, cwd=elsewhere, env=env)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue(done.stdout.startswith("playbook: feature"), done.stdout)
+        self.assertIn("route: pending", done.stdout)
+
+
 class OneStep(unittest.TestCase):
     def test_step_prints_that_step_and_no_other(self):
         done = run("bug-fix", "--step", "2", "--route", "standard")
@@ -318,6 +347,29 @@ class GatesAndEndpoint(unittest.TestCase):
             self.assertIn("No remote", local["scrutiny"])
             subprocess.run(["git", "-C", directory, "remote", "add", "origin", "https://example.invalid/r.git"], check=True)
             self.assertIn("PR", plan("feature", *LOW, "--project", directory)["default_endpoint"])
+
+    def test_every_code_step_that_runs_opening_a_pr_keeps_its_commits(self):
+        line = "   still commit when the push or PR is skipped"
+        for name, entry in MANIFEST["playbooks"].items():
+            args = facts(reach="material:shared caller") if entry.get("tiered") else []
+            steps = [step for step in plan(name, *args)["steps"] if step["runs_pr"]]
+            with self.subTest(playbook=name):
+                self.assertTrue(steps, "a code playbook needs a step that runs Opening a PR")
+                text = run(name, *args).stdout.split("\n")
+                for step in steps:
+                    at = next(index for index, row in enumerate(text) if row.startswith(f"{step['number']}. "))
+                    self.assertEqual(text[at + 1], line)
+        self.assertIn(line, run("feature", *LOW).stdout, "the lightweight grouped worklist keeps the line")
+
+    def test_a_playbook_that_changes_no_code_gets_no_commit_line(self):
+        for name in ("babysit", "shipping", "investigation", "autopilot-full"):
+            with self.subTest(playbook=name):
+                self.assertFalse(any(step["runs_pr"] for step in plan(name)["steps"]))
+                self.assertNotIn("still commit", run(name).stdout)
+
+    def test_the_router_owns_the_commit_rule_for_a_skipped_pr(self):
+        routes = (MODE / "references/routes.md").read_text(encoding="utf-8")
+        self.assertIn("A skipped push or PR never skips that step's commits.", routes)
 
 
 class Manifest(unittest.TestCase):

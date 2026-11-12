@@ -1,0 +1,21 @@
+run:
+  id: "01M765RYME5ER1DPQ5P46SFG6R"
+  branch: cand/completion-authorization
+  status: cancelled
+  head: 52337cad
+  head_sha: 52337cad0bb244687abb9c8f9a755440ebd54fa2
+  verification_plan: none
+  pr: "https://github.com/mdsmithaustin/pstack/pull/508"
+  findings: none
+  steps[9]{step,status,findings,duration_ms}:
+    intent,completed,0,0
+    rebase,completed,0,1037
+    review,completed,0,13590
+    test,completed,0,90288
+    document,completed,0,65879
+    lint,completed,0,4822
+    push,completed,0,7131
+    pr,completed,0,4827
+    ci,failed,0,3241498
+outcome: cancelled
+error: "cancelled: superseded by new push"

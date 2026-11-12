@@ -34,6 +34,8 @@ SCRUTINY_REMOTE = ("Credit an existing independent review of the current revisio
                    "record the revision it must cover, and report delivery as pending review. Otherwise brief one `trail reviewer`.")
 SCRUTINY_LOCAL = ("No remote, so no PR review exists to credit. Brief one `trail reviewer`, or report the user's review of "
                   "the local branch as pending.")
+RUN_PR = re.compile(r"\bRun \*\*Opening a PR\*\*")
+KEEP_COMMITS = "   still commit when the push or PR is skipped"
 NO_CHANGE_ENDPOINT = ("what this playbook's Reply line names", "this playbook does not produce a code change")
 
 
@@ -257,7 +259,8 @@ def build(args, manifest, endpoint=None):
         uses = [] if route == "lightweight" else [s for s in dict.fromkeys(named)
                                                  if s not in loads + conditional + held and (MODE.parent / s / "SKILL.md").is_file()]
         planned.append({"number": number, "name": step_name(text), "outcome": outcome(text), "loads": loads,
-                        "conditional": conditional, "uses": uses, "held_for_intensive": held, "skipped": skips.get(step_name(text))})
+                        "conditional": conditional, "uses": uses, "held_for_intensive": held, "skipped": skips.get(step_name(text)),
+                        "runs_pr": changes_code and bool(RUN_PR.search(text))})
 
     gates = []
     for gate in manifest["gates"]:
@@ -312,6 +315,8 @@ def render(plan, harness):
             maybe = [skill for step in covered for skill in step["conditional"]]
             if maybe:
                 out.append("   load only when the step's own condition holds: " + ", ".join(maybe))
+            if any(step["runs_pr"] for step in covered):
+                out.append(KEEP_COMMITS)
         for step in plan["steps"]:
             if step["skipped"]:
                 out.append(f"   {step['name']}: `skipped: {step['skipped']}` only when that is true. Otherwise raise the route.")
@@ -323,6 +328,8 @@ def render(plan, harness):
         out.append("Then one item per step:")
         for step in plan["steps"]:
             out.append(f"{step['number']}. {step['outcome']}")
+            if step["runs_pr"]:
+                out.append(KEEP_COMMITS)
             if step["loads"]:
                 out.append("   load: " + "; ".join(load_phrase(skill, harness) for skill in step["loads"]))
             if step["conditional"]:

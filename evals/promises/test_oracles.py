@@ -2925,6 +2925,26 @@ class SpawnIdentity(unittest.TestCase):
         self.assertEqual(result["verdict"], PASS, result)
         self.assertIn("briefs that lead with caller usage: 4", result["evidence"])
 
+    def test_a_reported_same_model_skip_with_no_runner_is_not_a_failed_fan_out(self):
+        reply = "Designed the import pipeline myself: same-model, comparison skipped (grok-4.7)."
+        trace = minimal(events=[read(5, "arena/SKILL.md")], final_reply=reply, harness="grok")
+        result = grade("architect-runs-arena-for-sketches", trace, load_case("architect-run"))
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_no_runner_and_no_reported_skip_still_fails(self):
+        for reply in ("Designed the import pipeline.", "This was not a same-model, comparison skipped case."):
+            with self.subTest(reply=reply):
+                trace = minimal(events=[read(5, "arena/SKILL.md")], final_reply=reply, harness="grok")
+                result = grade("architect-runs-arena-for-sketches", trace, load_case("architect-run"))
+                self.assertEqual(result["verdict"], FAIL, result)
+
+    def test_one_runner_beside_a_reported_skip_still_fails(self):
+        spawns = [{"seq": 21, "tool": "Agent", "prompt_head": "You are an architect runner. Write caller usage first."}]
+        events = [read(5, "arena/SKILL.md"), {"seq": 21, "kind": "tool_call", "name": "Agent", "input": {}}]
+        trace = minimal(events=events, spawns=spawns, final_reply="same-model, comparison skipped (opus).")
+        result = grade("architect-runs-arena-for-sketches", trace, load_case("architect-run"))
+        self.assertEqual(result["verdict"], FAIL, result)
+
     def test_sequential_runners_still_fail(self):
         spawns = [{"seq": s, "tool": "Agent", "prompt_head": "You are an architect runner. Write caller usage first."} for s in (21, 30)]
         events = [read(5, "arena/SKILL.md"), {"seq": 21, "kind": "tool_call", "name": "Agent", "input": {}}, text(25, "First one is running."),

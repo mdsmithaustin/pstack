@@ -1,0 +1,26 @@
+run:
+  id: "01M75NQEKPN4N4VPNHXXNZR5NQ"
+  branch: cand/completion-authorization
+  status: running
+  head: 92a1a074
+  head_sha: 92a1a0740c585d6b5825f93f79e990b18090c4b0
+  test_override_reason: "live validation verdict: inconclusive\nTest exception approved: Operator approved on 2026-11-11: proceed without live validation of the two untested scenarios. No live agent run exists for them, and the PR body says so."
+  verification_plan:
+    path: /Users/<user>/.no-mistakes/run-inputs/01M75NQEKPN4N4VPNHXXNZR5NQ/verification-plan.txt
+    sha256: 2de4baa7a03c88f977c849fa1a0809136008138abee30058a2e5710792563baf
+    source_path: <scratchpad>/c3/verification-plan.md
+    captured_at: 1794413148
+  pr: "https://github.com/mdsmithaustin/pstack/pull/508"
+  findings: 1 awaiting
+  steps[9]{step,status,findings,duration_ms}:
+    intent,completed,0,0
+    rebase,completed,0,1130
+    review,completed,0,98425
+    test,completed,1,143820
+    document,completed,0,47519
+    lint,completed,0,5725
+    push,completed,0,3893
+    pr,completed,0,5936
+    ci,running,0,0
+  active_steps[1]{step,status,active_for,round_active_for,last_activity,agent_pid,round}:
+    ci,running,14m16s,14m16s,"15s ago: log: all CI checks passed - still monitoring until merged or closed","",starting

@@ -1,0 +1,22 @@
+current_branch: cand/completion-authorization
+other_branch_run:
+  id: "01M6S1JPSPRNCZT52A28F74V1V"
+  branch: fix/issue-427
+  status: completed
+  head: "8e257437"
+  head_sha: 8e2574377defd7701ab644ccb11e7a155bd00d75
+  test_override_reason: "live validation verdict: inconclusive\nTest exception approved: no operator reason supplied"
+  verification_plan: none
+  pr: "https://github.com/mdsmithaustin/pstack/pull/434"
+  findings: 1 awaiting
+  steps[9]{step,status,findings,duration_ms}:
+    intent,completed,0,9
+    rebase,completed,0,2292
+    review,completed,0,17588
+    test,completed,1,1465850
+    document,completed,0,61749
+    lint,completed,0,5098
+    push,completed,0,10061
+    pr,completed,0,6886
+    ci,completed,0,648760
+outcome: passed-with-override

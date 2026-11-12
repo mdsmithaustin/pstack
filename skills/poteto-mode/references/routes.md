@@ -44,7 +44,7 @@ When new evidence changes a fact, rerun the plan script and expand the worklist 
 
 ## Endpoint
 
-The endpoint is how far the task goes. The user's stated endpoint governs, and so does a host instruction such as "do not open a pull request unless asked". This holds for every playbook, including one whose last step says to run **Opening a PR**. An endpoint is one of evidence, local commits, a pushed branch, a reviewable PR, or merge. Merge always needs its own authorization.
+The endpoint is how far the task goes. The user's stated endpoint governs, and so does a host instruction such as "do not open a pull request unless asked". This holds for every playbook, including one whose last step says to run **Opening a PR**. A skipped push or PR never skips that step's commits. An endpoint is one of evidence, local commits, a pushed branch, a reviewable PR, or merge. Merge always needs its own authorization.
 
 With no stated endpoint, use the furthest reviewable state the repository supports. The plan prints it.
 
@@ -54,8 +54,6 @@ With no stated endpoint, use the furthest reviewable state the repository suppor
 | A remote and no pull request tool | A pushed branch, named in the reply. |
 | No remote | Commits on a local branch. Give the branch and its diff command in the reply. |
 | No Git repository | Run `git init`, then use the row above. |
-
-Steps past the endpoint stay in the worklist as `skipped: <reason>`.
 
 ## Budget and stopping
 

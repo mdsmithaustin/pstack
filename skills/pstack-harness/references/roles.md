@@ -27,7 +27,7 @@ Every pstack spawn runs a role from the models config, such as `feature` or `how
 2. **Resolve the role.** Run the resolver once per task, and again after the harness or config changes:
 
    ```sh
-   python3 "${PSTACK_SKILLS_ROOT:?}/setup-pstack/scripts/check-models-config.py" --resolve --harness <claude-code|codex|grok|hermes> [--work-model '<model>@<effort>'] [<role>...]
+   python3 "${PSTACK_SKILLS_ROOT:?}/setup-pstack/scripts/check-models-config.py" --resolve --harness <claude-code|codex|grok|hermes> [--work-model '<model>@<effort>'] [--lead-model '<model>'] [<role>...]
    ```
 
    Failure signal: nonzero exit. It prints one JSON line per arm with `model`, `effort`, and `source`, and a `notes` list when the resolver has a warning. Relay each note to the user in the reply. Pass the roles the skill names, or none to print every role.
@@ -39,6 +39,14 @@ Every pstack spawn runs a role from the models config, such as `feature` or `how
    - With the reviewer unpinned, the resolver prefers a different model in the work model's family that the user's config allows, a higher tier first, and adjusts the effort. A `"step": "same-model"` field means the config allows no other model in the work model's family, or the user pinned the reviewer with `trail reviewer step: off`. Report that resolution and disclose the execution identity per step 5.
    - Every model you pass comes from this output or an explicit request in the task. Never improvise one, and say which role each model came from.
    - If the resolver exits nonzero or cannot run, still spawn the role. Omit the model and effort so the child inherits the session's. For `trail reviewer`, disclose the execution identity per step 5. For a panel role, keep the arm count that the panel's skill names as its default, and brief each arm the way that skill says. Report the resolver error and the values the child ran on. Never drop a spawn because the resolver failed.
+
+   **Same-model design comparison.** A design comparison is a panel whose candidates you choose between: architect's sketches, or an `arena` run that produces candidate designs or implementations for your own pick. It buys an independent opinion, and arms on your own model give none. The first `arena runners` or `architect runners` arm prints `"comparison": "skip"` when every runner arm and every `arena cross-judge pool` arm resolves to your model. For this check, effort is not a model: two arms, or an arm and you, that differ only in effort are one model. An `inherit-parent` arm is your model. When the arm has no `"comparison"` field and a note says that either role resolves to one distinct model, rerun with `--lead-model '<model>'`, passing your session model the way `--work-model` takes it. If you cannot tell your session model, run the panel and say that the model check did not run.
+
+   On `skip` in a design comparison, spawn no runner and no cross-judge. Produce the one artifact yourself, and state in the reply `same-model, comparison skipped` with the model. The skip covers the comparison only. Keep spawning for the other reasons to delegate: an explorer for bulk reading or an implementer briefed with the design keeps that work out of your context on any model, and every review or verdict the task requires still runs under its own role and rules. Without the field, run every arm. No other role prints it, so `interrogate reviewers` and every other panel keep their arms on one model.
+
+   A review always runs. When a skill loads `arena` to review, judge, or get a second opinion on finished work, as `blast-radius` step 6 does, and the arm prints `skip`, ignore the field: run every runner arm, let arena's Phase C choose or skip the judge, and label the result `same-model` in the verdict and the reply. Count agreement between those arms as one opinion. Without the field, a review follows arena as written.
+
+   Run a design comparison despite `skip` only when the user asked for the comparison itself in this task: they invoked `arena` by name, asked for candidates, a panel, or a count, or named models. A playbook step, a trigger, or a skill that loads `arena` or `architect` for a design comparison is not that request. Say in the reply that the panel ran at the user's request, and name the model each arm ran on.
 3. **Build the spawn call for this CLI.** Use the current runtime adapter selected in [pstack-harness](../SKILL.md#runtime-adapters). `inherit-parent` in a field means omit that field.
 4. **Brief the persona.** A persona that runs as a briefing gets its complete text from the [persona contract](named-roles.md). Never summarize it.
 5. **Report execution without dropping an arm.** Apply this step to every spawn, including a `trail reviewer` that normally resolves to `inherit-parent` without a fallback or `step` marker.
@@ -50,5 +58,5 @@ Every pstack spawn runs a role from the models config, such as `feature` or `how
 ## Fork restrictions
 
 A fork, such as Claude Code's `fork` agent type or a Codex full-history fork, inherits the lead's whole context and runs on the lead's model and effort, ignoring any override. Fork only when the role resolves to `inherit-parent` for both, as `default` ships, and the brief would otherwise restate context the lead already holds, such as drafting from files the lead just read or writing a resume note. Never fork a verdict, a review, a fresh-perspective role, or a role that resolves to a model or an effort.
-- Every other spawn starts with a fresh context. Where a harness can carry only the last few turns, as Codex can, a role outside this allowance may take them when its brief depends on them, except a verdict, a review, or a fresh-perspective role, which always starts fresh. Where the harness forks unless told otherwise, as Codex does, the spawn call says which one it wants.
+- Every other spawn starts with a fresh context. Where the spawn tool forks unless told otherwise, as Codex's current one does, the spawn call says which one it wants.
 - A fork returns the same thin report as any spawn. Call the Skill tool with `principle-guard-the-context-window`.

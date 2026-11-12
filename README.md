@@ -17,7 +17,7 @@ there's a growing sense that ai writes too much slop code. i agree. i don't want
 
 **pstack gives you fearless parallelism.** when you can go deep on one agent and trust it to write good, verifiable code, you can truly parallelize with confidence. start multiple agents up with `poteto-mode` and trust that they'll apply rigorous engineering principles to their work.
 
-**every frontier model has its strengths and weaknesses.** use any model with pstack. in fact, many of my skills use multi-model workflows to take advantage of each model's unique strengths (in CLIs that can switch models per subagent; elsewhere the panels keep their arm count on your session model).
+**every frontier model has its strengths and weaknesses.** use any model with pstack. in fact, many of my skills use multi-model workflows to take advantage of each model's unique strengths (in CLIs that can switch models per subagent; elsewhere pstack skips a design comparison when its model resolver marks every arm as your session model, and the other panels keep their arm count).
 
 fork it. improve it. make it yours. PRs are welcome! 
 

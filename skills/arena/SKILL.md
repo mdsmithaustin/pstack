@@ -13,7 +13,7 @@ Every candidate gets the same prompt, so the prompt is the contract.
 
 1. State the artifact each candidate is producing.
 2. Derive the rubric, 3-6 concrete gradeable criteria for what success looks like on *this* task. For subjective criteria, use [Eval's criterion and calibration guidance](../poteto-mode/playbooks/eval.md). It is the picker's tool in Phase D. Candidates only see the task.
-3. Pick the runners. Use the `arena runners` role, one arm per entry. Its default is one each on `fable`, `opus`, `sonnet`. A rejected entry also follows the required-arm rule below. Spawn more runners when the arena covers multiple design directions. Use the same model N times when the work is generation-bound rather than judgment-sensitive. Call the Skill tool with `pstack-harness` for the spawn. Its **Spawn a role** section resolves the role and builds this CLI's spawn call.
+3. Pick the runners. Use the `arena runners` role, one arm per entry. Its default is one each on `fable`, `opus`, `sonnet`. A rejected entry also follows the required-arm rule below. Spawn more runners when the arena covers multiple design directions. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section. On `"comparison": "skip"`, follow its same-model rule: a design comparison skips Phases B through E, and a review still runs them.
 4. Give each candidate its own output location (a git worktree where possible, otherwise `candidate-<n>/` inside a fresh `mktemp -d "${TMPDIR:-/tmp}/arena-<slug>.XXXXXX"` made for this run). Call the Skill tool with `principle-separate-before-serializing-shared-state`. Never reuse an earlier run's directory.
    - A native isolation option counts only when it makes a git worktree, where `git -C <its path> rev-parse --path-format=absolute --git-common-dir` prints the project's. Grok Build's `isolation: worktree` can make a standalone clone, so spawn there with `isolation: none`. If you omit the field, a Grok role or persona default can still turn isolation on.
    - Make every other candidate worktree yourself, one at a time, with `git worktree add --detach <run dir>/candidate-<n>`, where `<run dir>` is that fresh `mktemp -d`, and name the path in the candidate's brief. If an add fails, remove the worktrees already made and give every candidate a plain directory there instead, so all candidates start alike.
@@ -23,7 +23,7 @@ Every candidate gets the same prompt, so the prompt is the contract.
 
 ## Phase B: Fan out
 
-Spawn all N subagents in one message, in the background, each with the task, the path to the shared grounding, its own output path, and instructions to produce the artifact and a short rationale naming the alternatives it considered and what it rejected.
+Spawn all N subagents in one message, in the background, each with the task, the path to the shared grounding, its own output path, and instructions to produce the artifact and a short rationale naming the alternatives it considered and what it rejected. Send a running runner or judge only a correction to the source or scope or a stop order, never your tests, reading, or pick. If the question changes, reframe and re-run.
 
 ### Required arms
 
@@ -35,7 +35,7 @@ After all Phase B candidates complete, choose one arm of the `arena cross-judge 
 - Spawn one read-only judge subagent. The judge never runs on the parent's model.
 - Try the pool's entries in pool order, first those from a model family other than the parent's, then those on a different capability tier of the parent's family. An `auto` or `inherit-parent` entry is the parent model, so it never judges. An arm that **Spawn a role** moves onto the session model after a rejection is the parent model too, so move to the next entry.
 - If no entry runs on another model, skip the judge, pick the base alone in Phase D, and say so. If you do not know the parent's model, try the pool's entries in pool order and say that the model check did not run.
-- The judge sees the rubric and the candidates by path label, scores each criterion, and recommends a base with rationale. It runs in parallel with your reading in Phase D. Don't spawn it while candidates are still writing.
+- The judge sees the rubric and the candidates by path label, scores each criterion, and recommends a base with rationale. It runs in parallel with your reading in Phase D.
 
 ## Phase D: Pick a base
 
@@ -53,7 +53,7 @@ Start no graft, and spawn no implementation of the result, before you pick the b
 
 Walk each losing candidate's rationale and the cross-judge's scores once more for what is worth porting into the base, usually one or two things per candidate, not most of it. Read only the parts of a losing artifact you will graft. Fold each graft in by hand, so the result stays coherent under one mental model. Call the Skill tool with `principle-redesign-from-first-principles`. Don't paste mechanically.
 
-If the candidates converge on one shape, note the convergence subject to Phase D's actual-model disclosure and one-model limitation. Ship the consensus shape. No graft is needed. If they wildly diverge, Phase A was under-specified. Reframe and re-run rather than averaging the divergence. Before the re-run, remove this run's candidate worktrees and their branches and delete its scratch directory.
+If the candidates converge on one shape, note the convergence subject to Phase D's actual-model disclosure and one-model limitation. Ship the consensus shape. No graft is needed. If they wildly diverge, Phase A was under-specified. Reframe and re-run rather than averaging the divergence.
 
 ## Phase F: Verify
 

@@ -1,0 +1,22 @@
+run:
+  id: "01M7691M1B7DEPXRZS080M0Y6Y"
+  branch: cand/completion-authorization
+  status: running
+  head: b67dcd5e
+  head_sha: b67dcd5ec887353798113afdbb729a9b151f4c72
+  test_override_reason: "live validation verdict: inconclusive\nTest exception approved: Operator, 2026-11-11: I approve without live validation."
+  verification_plan: none
+  pr: "https://github.com/mdsmithaustin/pstack/pull/508"
+  findings: 1 awaiting
+  steps[9]{step,status,findings,duration_ms}:
+    intent,completed,0,0
+    rebase,completed,0,2234
+    review,completed,0,85367
+    test,completed,1,131193
+    document,completed,0,38252
+    lint,completed,0,4653
+    push,completed,0,6707
+    pr,completed,0,4037
+    ci,running,0,0
+  active_steps[1]{step,status,active_for,round_active_for,last_activity,agent_pid,round}:
+    ci,running,1h17m,1h17m,"quiet 57m17s ago: log: all CI checks passed - still monitoring until merged or closed","",starting

@@ -144,7 +144,7 @@ def records(data):
     for line in data.decode(errors="replace").splitlines():
         try:
             record = json.loads(line)
-        except json.JSONDecodeError:
+        except (ValueError, RecursionError):
             continue
         if isinstance(record, dict):
             yield record
@@ -394,16 +394,28 @@ def relay_review_inputs(leads, children, thread, project):
 def text_of(content):
     if isinstance(content, str):
         return content
-    return "".join(part.get("text", "") for part in content or [] if isinstance(part, dict))
+    if not isinstance(content, list):
+        return ""
+    return "".join(part["text"] for part in content if isinstance(part, dict) and isinstance(part.get("text"), str))
 
 
-def parse_arguments(value):
+def argument_object(value):
     if isinstance(value, dict):
         return value
     try:
         parsed = json.loads(value)
-        return parsed if isinstance(parsed, dict) else {"value": parsed}
-    except (TypeError, json.JSONDecodeError):
+    except (TypeError, ValueError, RecursionError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def parse_arguments(value):
+    found = argument_object(value)
+    if found is not None:
+        return found
+    try:
+        return {"value": json.loads(value)}
+    except (TypeError, ValueError, RecursionError):
         return {"raw": value}
 
 
@@ -515,7 +527,8 @@ def harvest_rollout(data, prompts=None):
                         worklist.append({"seq": seq, "carrier": "update_plan (inside exec)", "items": plan_items(call)})
                         plan_calls.append(seq)
                 if name == "spawn_agent":
-                    message = tool_input.get("message") or tool_input.get("prompt") or text_of(tool_input.get("items"))
+                    briefs = (tool_input.get("message"), tool_input.get("prompt"), text_of(tool_input.get("items")))
+                    message = next((brief for brief in briefs if brief and isinstance(brief, str)), "")
                     persona = tool_input.get("agent_type")
                     if persona in (None, "default"):
                         hit = PERSONA_LINE.search(message or "")
@@ -524,13 +537,19 @@ def harvest_rollout(data, prompts=None):
                     spawn_by_call[payload.get("call_id")] = len(spawns)
                     spawns.append({"seq": seq, "turn": events[seq].get("turn"), "tool": name, "persona": persona, "model": tool_input.get("model"),
                                    "effort": tool_input.get("reasoning_effort"), "fork_turns": tool_input.get("fork_turns"),
-                                   "prompt_head": None if encrypted else (message or "")[:300], "x_prompt_encrypted": encrypted})
+                                   "prompt_head": None if encrypted else (message or "")[:300], "x_prompt_encrypted": encrypted,
+                                   "x_namespace": payload.get("namespace"), "x_agent_type": tool_input.get("agent_type"),
+                                   "x_output": None,
+                                   "x_arguments_read": argument_object(payload.get("arguments")) is not None,
+                                   **({"x_fork_context": tool_input["fork_context"]} if "fork_context" in tool_input else {})})
             elif ptype in ("custom_tool_call_output", "function_call_output"):
                 output = payload.get("output")
                 body = text_of(output) if isinstance(output, list) else (output if isinstance(output, str) else json.dumps(output))
                 ok = not re.search(r"^(Script failed|Error|error:)", body or "", re.M)
                 add({"kind": "tool_result", "name": names.get(payload.get("call_id")), "ok": ok, "output_head": (body or "")[:400],
                      "id": payload.get("call_id")})
+                if payload.get("call_id") in spawn_by_call:
+                    spawns[spawn_by_call[payload["call_id"]]]["x_output"] = body if isinstance(output, (str, list)) else None
         if kind == "event_msg" and payload.get("type") == "item_completed":
             item = payload.get("item") or {}
             itype = item.get("type")
