@@ -6,7 +6,7 @@ Observed circa 2026-09. Verify these hints against the live session and prefer i
 
 State the fork choice on every `spawn_agent` call. When the tool takes `task_name`, set `fork_turns` to `"none"` or `"all"`, because that tool forks the lead's full history into the child when the field is omitted or empty. Use `"none"` unless the [fork restrictions](roles.md#fork-restrictions) permit a fork for this spawn. Pass no turn count. From 0.162.0 Codex forks the full history for any positive count, and only earlier releases carried that many turns. This was checked in the Codex source at 0.161.0, 0.162.0, 0.163.0, 0.167.0, and 0.167.2, and in the tool schema of 0.167.0.
 
-Codex gives some models an older `spawn_agent` that takes `fork_context` and no `task_name`. Its child starts fresh unless `fork_context` is `true`. On that tool pass `fork_context: false`, or `true` only for a fork the restrictions permit, wherever a rule below sets `fork_turns`. It ignores `fork_turns`. This was checked in the Codex source at 0.167.0.
+Codex gives some models an older `spawn_agent` that takes `fork_context` and no `task_name`. Its child starts fresh unless `fork_context` is `true`. On that tool pass `fork_context: false`, or `true` only for a fork the restrictions permit, wherever a rule below sets `fork_turns`. It ignores `fork_turns`, and it refuses `fork_context: true` beside `agent_type`, so leave `agent_type` out of that call. This was checked in the Codex source at 0.167.0.
 
 For a review, verdict, or fresh-perspective role, always set `fork_turns: "none"`, even when both model and effort resolve to `inherit-parent`. Pass the original task and file pointers in its brief. This restriction takes precedence over the full-history permission below.
 

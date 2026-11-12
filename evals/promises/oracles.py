@@ -4757,7 +4757,9 @@ def spawn_fork(given):
         return None
     context, turns = given.get("fork_context"), given.get("fork_turns")
     if "task_name" not in given:
-        return {True: "all", False: "none"}[context] if isinstance(context, bool) else "rejected"
+        if not isinstance(context, bool) or (context and str(given.get("agent_type") or "").strip()):
+            return "rejected"
+        return "all" if context else "none"
     if context is not None or not isinstance(turns, (str, type(None))):
         return "rejected"
     turns = (turns or "").strip().lower()
@@ -4765,7 +4767,7 @@ def spawn_fork(given):
         return turns
     if not turns:
         return "omitted"
-    return "count" if re.fullmatch(r"\+?[0-9]+", turns) and int(turns) else "rejected"
+    return "count" if re.fullmatch(r"\+?[0-9]+", turns) and 0 < int(turns) < 2 ** 64 else "rejected"
 
 
 REVIEW_SEAT = re.compile(r"(?<![a-z])(?:review(?:er)?s?|judges?|verdicts?|adversar(?:y|ies|ial))(?![a-z])")

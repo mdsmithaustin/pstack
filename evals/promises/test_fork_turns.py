@@ -62,7 +62,7 @@ class CurrentTool(unittest.TestCase):
 
     def test_case_that_needs_no_history_rejects_any_fork(self):
         self.assertEqual(grade_rollout(v2("none"), case=CASE)["verdict"], PASS)
-        for carried in ("all", "2"):
+        for carried in ("all", "2", "18446744073709551615"):
             for release in ("0.161.0", "0.167.0"):
                 with self.subTest(carried=carried, release=release):
                     self.assertEqual(grade_rollout(v2(carried), case=CASE, release=release)["verdict"], FAIL)
@@ -109,7 +109,8 @@ class TurnCount(unittest.TestCase):
 
 class RefusedCalls(unittest.TestCase):
     REFUSED = (v2(3), v2(True), v2(["all"]), v2(1.5), v2("0"), v2("-1"), v2("some"), v2("²"), v2("1.5"),
-               v2("none", fork_context=False), v1(fork_context="true"), v1(fork_context=None))
+               v2("none", fork_context=False), v2("18446744073709551616"),
+               v1(fork_context="true"), v1(fork_context=None), v1(fork_context=True, agent_type="default"))
 
     def test_refused_call_is_not_a_fork(self):
         for call in self.REFUSED:
@@ -120,6 +121,8 @@ class RefusedCalls(unittest.TestCase):
 
     def test_refused_call_beside_a_fresh_spawn_passes(self):
         self.assertEqual(grade_rollout(v2(3, model="gpt-6-sol"), v2("none", model="gpt-6-sol"))["verdict"], PASS)
+        self.assertEqual(grade_rollout(v2("18446744073709551616"), v2("none"), case=CASE)["verdict"], PASS)
+        self.assertEqual(grade_rollout(v1(fork_context=True, agent_type="default"), v1(fork_context=False), case=CASE)["verdict"], PASS)
 
 
 class OlderTool(unittest.TestCase):
