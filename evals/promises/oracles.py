@@ -4820,6 +4820,10 @@ def codex_spawns_state_fork_turns(view):
             unknown.append(f"spawn at seq {seq} has no recorded result that proves which spawn tool ran and whether it created a child "
                            f"(result: {shown(spawn.get('x_output'))})")
             continue
+        if not spawn.get("x_arguments_read"):
+            unknown.append(f"spawn at seq {seq} created a child, yet its arguments are not a JSON object the adapter can read, "
+                           "so the trace does not show its fork choice")
+            continue
         fork = history_carried(tool, spawn)
         stated = (f"fork_context={shown(spawn.get('x_fork_context'))}" if tool == "older" or spawn.get("x_fork_context") is not None
                   else f"fork_turns={shown(spawn.get('fork_turns'))}")

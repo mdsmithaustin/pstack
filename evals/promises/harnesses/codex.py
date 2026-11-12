@@ -399,12 +399,22 @@ def text_of(content):
     return "".join(part["text"] for part in content if isinstance(part, dict) and isinstance(part.get("text"), str))
 
 
-def parse_arguments(value):
+def argument_object(value):
     if isinstance(value, dict):
         return value
     try:
         parsed = json.loads(value)
-        return parsed if isinstance(parsed, dict) else {"value": parsed}
+    except (TypeError, ValueError, RecursionError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def parse_arguments(value):
+    found = argument_object(value)
+    if found is not None:
+        return found
+    try:
+        return {"value": json.loads(value)}
     except (TypeError, ValueError, RecursionError):
         return {"raw": value}
 
@@ -530,6 +540,7 @@ def harvest_rollout(data, prompts=None):
                                    "prompt_head": None if encrypted else (message or "")[:300], "x_prompt_encrypted": encrypted,
                                    "x_namespace": payload.get("namespace"), "x_agent_type": tool_input.get("agent_type"),
                                    "x_output": None,
+                                   "x_arguments_read": argument_object(payload.get("arguments")) is not None,
                                    **({"x_fork_context": tool_input["fork_context"]} if "fork_context" in tool_input else {})})
             elif ptype in ("custom_tool_call_output", "function_call_output"):
                 output = payload.get("output")

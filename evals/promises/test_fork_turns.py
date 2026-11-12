@@ -153,6 +153,21 @@ class ToolIdentity(unittest.TestCase):
         self.assertEqual(grade_rollout(v2("none"), shell, v2("none", NO_RESULT), shell, case=CASE)["verdict"], INCONCLUSIVE)
         self.assertEqual(grade_rollout(shell, v2("none"), shell, case=CASE)["verdict"], PASS)
 
+    def test_created_child_whose_arguments_the_adapter_cannot_read_is_inconclusive(self):
+        forked = '{"message": "m", "fork_context": true, "ignored": ' + "9" * 5000 + "}"
+        for arguments in (forked, '{"message": "m", "fork_context": true, "ignored": ' + "[" * 100000 + "]" * 100000 + "}", "not json", "[1]", "3",
+                          '"all"', "null"):
+            for tool in (OLDER, CURRENT):
+                with self.subTest(arguments=arguments[:40], tool=tool):
+                    spawn = {**call({}, MADE[tool], tool), "arguments": arguments, "encode": False}
+                    result = grade_rollout(spawn, v2("none"), case=CASE)
+                    self.assertEqual(result["verdict"], INCONCLUSIVE)
+                    self.assertIn("seq 0 created a child, yet its arguments are not a JSON object the adapter can read", result["failures"][0])
+        for arguments in ({"value": 3, "message": "m"}, {"raw": "x", "message": "m"}):
+            with self.subTest(arguments=arguments):
+                self.assertEqual(grade_rollout(call(arguments, namespace=OLDER), case=CASE)["verdict"], PASS)
+                self.assertEqual(grade_rollout({**call(arguments, namespace=OLDER), "encode": False}, case=CASE)["verdict"], PASS)
+
     def test_proven_failure_outranks_an_unproven_call(self):
         self.assertEqual(grade_rollout(v2("all", NO_RESULT), v2())["verdict"], FAIL)
 
