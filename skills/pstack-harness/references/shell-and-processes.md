@@ -25,16 +25,32 @@ printf '%s\n' 'opus[1m]@xhigh' '*.jsonl'
 
 Read without a cap any diff, test file, or code that you will judge. Never pipe it through `head`, `tail`, or a line limit. A cap on search or log output that you only scan is fine. Never cap the list from step 1. When a skill tells you to print one part of a file, such as one playbook step, you need only that part, and it must arrive uncut.
 
-1. Save each changed file's diff to its own file. Run this in any shell, with your range in place of `<range>`: nothing, `HEAD`, `--cached`, `main...HEAD`, or two commits. Quote a revision that holds `^`, as in `'HEAD^'`.
+1. Save each changed file's diff to its own file. Run this in any shell, with one range from the table in place of `<range>`. Quote a revision that holds `^`, as in `'HEAD^'`.
 
    ```sh
    python3 "<installed skills root>/pstack-harness/scripts/save-diff.py" <range>
    ```
 
-   Each printed line gives a byte count, the saved file, the status, and the changed file's name. The last line gives the number of files and the new directory that holds them, which is outside the repository. When the range includes the working tree, the script also saves each untracked file whole, because `git diff` never shows one. It leaves ignored files out, and it saves a submodule as its commit change only. It cannot save an untracked directory that holds its own repository, so it prints that directory with a byte count of 0. Let the script pass every path. A path you copy from a git listing can match no file and print nothing, because git prints some names quoted and `--stat` shortens them. The script refuses a path limit and every git option other than `--cached`, `--staged`, and `--merge-base`, because either one leaves part of the change unread.
+   | `<range>` | What the script saves |
+   |---|---|
+   | nothing | Everything not yet committed: staged changes, unstaged changes, and untracked files. Use it before a commit. |
+   | `--cached` | Staged changes only. |
+   | `HEAD`, or one other revision | The working tree against that revision, and untracked files. |
+   | `--merge-base <base>` | A branch's whole change against the commit where it left `<base>`: its commits, its working tree, and untracked files. |
+   | `<base>...HEAD`, or two revisions | Commits only. It leaves out the working tree and untracked files. |
+
+   The script makes a new directory under the system temporary directory and saves one file there for each row. When that directory would be inside the checkout, the script refuses to run. Set `TMPDIR` to a directory outside the checkout and run it again. The first line it prints is `index <file>`. That index file holds every line that follows. Each row is `<bytes> <saved file> <status> <name>`, and notes can follow the name in parentheses:
+
+   - `staged` or `not staged`. With no range, a file with both kinds of change has one row for each.
+   - `unmerged`. The file is in conflict, and it has this one row.
+   - `not shown`. Git treats the content as binary, so the saved file holds none of it. Git does this for a file with a `-diff` or `binary` attribute, which lockfiles often have, and for UTF-16 text.
+
+   The last line is `<n> rows saved, <k> not shown; covers <what the range covers>; index <file>`. If the output came back cut or without that last line, do not run the script again. Read the index file as [Read files](codex.md#read-files) says, and take the rows and the last line from it.
+
+   The script saves each untracked file whole, because `git diff` never shows one. It saves an untracked symbolic link as the link's target and never reads what the link names. It leaves ignored files out, and it saves a submodule as its commit change only. It cannot save an untracked directory that holds its own repository, so that run fails and prints the directory with a byte count of 0. Let the script pass every path. A path you copy from a git listing can match no file and print nothing, because git prints some names quoted and `--stat` shortens them. The script refuses a path limit and every git option other than `--cached`, `--staged`, and `--merge-base`, because either one leaves part of the change unread.
 2. Read every saved file, one at a time. On Codex, read each as [Read files](codex.md#read-files) says.
-3. Check the last line that step 1 printed. It must give one number twice, as in `7 files changed or untracked, 7 saved in <directory>`, and that number must equal the count of lines above it and the count of files you read to the end. If the command exits with an error, the last line starts with `FAILED`, or a line has a byte count of 0, the change is unread. Report that and stop. A file that came back cut off is unread, so read its missing part before you judge the change.
-4. Remove the directory that the last line names once you have judged the change.
+3. Check the last line. `<n>` must equal the count of rows and the count of saved files that you read to the end. A file that came back cut off is unread, so read its missing part before you judge the change. For each row marked `not shown`, read the file itself, with `git show <revision>:<name>` when the range ends at a commit, or report that file as unread. If the command exits with an error, the change is unread and the script has already removed its directory. Report the error line and stop.
+4. Remove the directory that holds the index file once you have judged the change.
 
 ## Inspect running processes
 

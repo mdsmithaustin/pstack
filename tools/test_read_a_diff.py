@@ -10,7 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 REFERENCE = ROOT / "skills/pstack-harness/references/shell-and-processes.md"
 SECTION = re.compile(r"^## Read a diff\n(.*?)(?=^## )", re.M | re.S)
 FENCE = re.compile(r"^[ \t]*```sh\n(.*?)^[ \t]*```", re.M | re.S)
-LAST_LINE = re.compile(r"(\d+) files (changed or untracked|changed), (\d+) saved in (.+)")
+LAST_LINE = re.compile(r"(\d+) rows saved, (\d+) not shown; covers (.+); index (.+)")
+NOT_SHOWN = " (not shown: git treats it as binary)"
+UNCOMMITTED = "staged, unstaged and untracked"
+WORKING_TREE = "working tree and untracked"
+ISOLATED = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 BASE = [
     "café.md", 'say"hi".md', "tab\there.md", "a space.md", ":!magic.md", "*.md", "-dash.md", "new\nline.md",
     "deep/er/path.md", "gone.md", "type.md", "mode.sh", "staged.md",
@@ -31,7 +35,7 @@ TRACKED = STAGED | {
     "copied.md": "+copy",
     "type.md": "new file mode 120000",
     "mode.sh": "new mode 100755",
-    "bin.dat": "Binary files ",
+    "bin.dat" + NOT_SHOWN: "Binary files ",
     "mod": "-Subproject commit",
 }
 UNTRACKED = {
@@ -56,7 +60,6 @@ INHERITED = {
     "core.quotePath=false": {"core.quotePath": "false"},
     "core.quotePath=true": {"core.quotePath": "true"},
     "color.ui": {"color.ui": "always", "color.diff": "always"},
-    "core.pager": {"core.pager": "false", "pager.diff": "true"},
     "status.showUntrackedFiles": {"status.showUntrackedFiles": "no"},
     "diff.ignoreSubmodules": {"diff.ignoreSubmodules": "all"},
 }
@@ -74,8 +77,43 @@ IDENTITY = ["-c", "user.name=t", "-c", "user.email=test.invalid", "-c", "protoco
 
 
 def git(repo, *args, check=True):
-    done = subprocess.run(["git", "-C", repo, *IDENTITY, *args], check=check, capture_output=True)
+    done = subprocess.run(
+        ["git", "-C", repo, *IDENTITY, *args], env={**os.environ, **ISOLATED}, check=check, capture_output=True,
+    )
     return done.stdout.decode().strip()
+
+
+def write(repo, name, content):
+    Path(repo, name).write_bytes(content.encode() if isinstance(content, str) else content)
+
+
+def with_note(expected, note):
+    return {
+        name.replace(" (", f" ({note}; ") if name.endswith(NOT_SHOWN) else f"{name} ({note})": line_start
+        for name, line_start in expected.items()
+    }
+
+
+def rows_that_git_status_lists(repo):
+    done = subprocess.run(
+        ["git", "-C", repo, "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        env={**os.environ, **ISOLATED}, check=True, capture_output=True,
+    )
+    fields = done.stdout.decode().split("\0")[:-1]
+    rows = set()
+    while fields:
+        state, name = fields[0][:2], fields.pop(0)[3:]
+        renamed_from = fields.pop(0) + " -> " if state[0] in "RC" else ""
+        if state == "??":
+            rows.add(name)
+        elif "U" in state or state in ("AA", "DD"):
+            rows.add(f"{name} (unmerged)")
+        else:
+            if state[0] != " ":
+                rows.add(f"{renamed_from}{name} (staged)")
+            if state[1] != " ":
+                rows.add(f"{name} (not staged)")
+    return rows
 
 
 def append(repo, name, line):
@@ -156,20 +194,28 @@ class ReadADiff(unittest.TestCase):
         os.mkdir(cls.tmp)
         cls.repo = scratch_repository(cls.root)
 
-    def run_step(self, spec, cwd, shell="bash", prefix="", env=None):
+    def run_step(self, spec, cwd, shell="bash", prefix="", env=None, tmp=None, suffix="", stdout=subprocess.PIPE):
         command = step_command(spec)
         self.assertIsNotNone(command, "Read a diff needs one fenced sh command")
         return subprocess.run(
-            [shell, "-c", prefix + command], cwd=cwd, env={**os.environ, "TMPDIR": self.tmp, **(env or {})},
-            stdin=subprocess.DEVNULL, capture_output=True, check=False,
+            [shell, "-c", prefix + command.rstrip("\n") + suffix], cwd=cwd,
+            env={**os.environ, **ISOLATED, "TMPDIR": tmp or self.tmp, **(env or {})},
+            stdin=subprocess.DEVNULL, stdout=stdout, stderr=subprocess.PIPE, check=False,
         )
 
-    def assert_saved(self, done, expected, scope="changed or untracked", lines=True):
+    def new_tmp(self):
+        return tempfile.mkdtemp(dir=self.root)
+
+    def assert_saved(self, done, expected, covers=WORKING_TREE, lines=True):
         self.assertEqual(done.returncode, 0, done.stderr)
-        *rows, last = done.stdout.decode().splitlines()
-        count, said, saved_count, directory = LAST_LINE.fullmatch(last).groups()
+        first, *rows, last = done.stdout.decode().splitlines()
+        count, hidden, said, index = LAST_LINE.fullmatch(last).groups()
+        directory = os.path.dirname(index)
         self.addCleanup(shutil.rmtree, directory)
-        self.assertEqual((int(count), int(saved_count), said), (len(expected), len(expected), scope))
+        self.assertEqual(first, f"index {index}")
+        self.assertEqual(Path(index).read_bytes(), done.stdout.split(b"\n", 1)[1])
+        self.assertEqual((int(count), said), (len(expected), covers))
+        self.assertEqual(int(hidden), sum(NOT_SHOWN[2:-1] in name for name in expected))
         saved = {}
         for row in rows:
             size, path, _status, name = row.split(" ", 3)
@@ -177,18 +223,22 @@ class ReadADiff(unittest.TestCase):
             self.assertEqual(os.path.dirname(path), directory)
             self.assertEqual(int(size), len(saved[name]), name)
         self.assertEqual(sorted(saved), sorted(expected))
-        self.assertEqual(len(os.listdir(directory)), len(expected))
+        self.assertEqual(len(rows), len(expected))
+        self.assertEqual(len(os.listdir(directory)), len(expected) + 1)
         self.assertNotIn(os.path.realpath(self.repo), os.path.realpath(directory))
         for name, line_start in expected.items():
             self.assertNotIn(b"\x1b", saved[name], name)
             if lines:
-                self.assertTrue(any(found.startswith(line_start) for found in saved[name].decode().splitlines()), name)
+                found = saved[name].decode(errors="replace").splitlines()
+                self.assertTrue(any(line.startswith(line_start) for line in found), name)
         return saved
 
-    def assert_refused(self, done, status=1):
+    def assert_refused(self, done, tmp, status=1):
         self.assertEqual(done.returncode, status, done.stdout)
-        self.assertNotIn(b"saved in", done.stdout)
+        self.assertNotIn(b"rows saved", done.stdout or b"")
         self.assertTrue(done.stderr.strip())
+        self.assertNotIn(b"Traceback", done.stderr)
+        self.assertEqual(os.listdir(tmp), [])
 
     def test_every_shell_and_option_saves_every_file_from_a_subdirectory(self):
         for shell, prefixes in SHELLS.items():
@@ -233,11 +283,12 @@ class ReadADiff(unittest.TestCase):
     def test_ranges_without_the_working_tree_leave_untracked_files_out(self):
         for spec in ("main...HEAD", "main HEAD", "main..HEAD", "--merge-base main HEAD"):
             with self.subTest(spec=spec):
-                self.assert_saved(self.run_step(spec, os.path.join(self.repo, "sub")), COMMITTED, scope="changed")
+                done = self.run_step(spec, os.path.join(self.repo, "sub"))
+                self.assert_saved(done, COMMITTED, covers="commits only")
         staged = STAGED | {"old.md -> sub/new.md": "rename from old.md", "copied.md": "+copy"}
         for spec in ("--cached", "--staged HEAD"):
             with self.subTest(spec=spec):
-                saved = self.assert_saved(self.run_step(spec, self.repo), staged, scope="changed")
+                saved = self.assert_saved(self.run_step(spec, self.repo), staged, covers="staged only")
                 self.assertNotIn("+renamed", saved["old.md -> sub/new.md"].decode().splitlines())
 
     def test_ranges_with_the_working_tree_include_untracked_files(self):
@@ -245,11 +296,13 @@ class ReadADiff(unittest.TestCase):
             name: line_start for name, line_start in TRACKED.items()
             if name not in STAGED and name != "copied.md" and "->" not in name
         }
-        self.assert_saved(self.run_step("", self.repo), unstaged | {"sub/new.md": "+renamed"} | UNTRACKED)
+        staged = STAGED | {"old.md -> sub/new.md": "rename from old.md", "copied.md": "+copy"}
+        expected = with_note(staged, "staged") | with_note(unstaged | {"sub/new.md": "+renamed"}, "not staged")
+        self.assert_saved(self.run_step("", self.repo), expected | UNTRACKED, covers=UNCOMMITTED)
         self.assert_saved(self.run_step("--merge-base main", self.repo), TRACKED | COMMITTED | UNTRACKED)
 
     def test_empty_range_says_zero_files(self):
-        self.assert_saved(self.run_step("HEAD HEAD", self.repo), {}, scope="changed")
+        self.assert_saved(self.run_step("HEAD HEAD", self.repo), {}, covers="commits only")
 
     def test_failures_are_loud(self):
         cases = {
@@ -262,17 +315,21 @@ class ReadADiff(unittest.TestCase):
         }
         for name, (spec, cwd, status) in cases.items():
             with self.subTest(case=name):
-                self.assert_refused(self.run_step(spec, cwd), status)
+                tmp = self.new_tmp()
+                self.assert_refused(self.run_step(spec, cwd, tmp=tmp), tmp, status)
 
-    def test_nested_repository_fails_with_a_zero_byte_line(self):
+    def test_nested_repository_fails_with_a_zero_byte_line_and_keeps_nothing(self):
         nested = new_repository(os.path.join(self.repo, "nested"))
         self.addCleanup(shutil.rmtree, nested)
-        done = self.run_step("HEAD", self.repo)
+        tmp = self.new_tmp()
+        done = self.run_step("HEAD", self.repo, tmp=tmp)
         self.assertEqual(done.returncode, 1)
-        *rows, last = done.stdout.decode().splitlines()
-        self.addCleanup(shutil.rmtree, last.rsplit(" ", 1)[1])
-        self.assertIn("0 - ?? nested/ (not saved: a directory with its own repository)", rows)
-        self.assertTrue(last.startswith(f"FAILED: 1 of {len(TRACKED | UNTRACKED) + 1} files not saved"), last)
+        count = len(TRACKED | UNTRACKED) + 1
+        self.assertEqual(done.stdout.decode().splitlines(), [
+            "0 - ?? nested/ (not saved: a directory with its own repository)",
+            f"FAILED: 1 of {count} rows not saved. The script removed its directory.",
+        ])
+        self.assertEqual(os.listdir(tmp), [])
 
     def test_git_directory_from_the_environment_and_a_linked_worktree(self):
         env = {"GIT_DIR": os.path.join(self.repo, ".git"), "GIT_WORK_TREE": self.repo}
@@ -288,28 +345,33 @@ class ReadADiff(unittest.TestCase):
         expected = {"café.md": "+accent", "new here.md": "+untracked"}
         self.assert_saved(self.run_step("HEAD", os.path.join(linked, "deep")), expected)
 
-    def test_unmerged_file_is_saved(self):
-        repo = new_repository(os.path.join(self.root, "conflict"))
-        append(repo, "both.md", "base")
-        commit_all(repo, "base")
-        git(repo, "checkout", "-q", "-b", "other")
-        append(repo, "both.md", "theirs")
-        commit_all(repo, "theirs")
-        git(repo, "checkout", "-q", "main")
-        append(repo, "both.md", "ours")
-        commit_all(repo, "ours")
-        git(repo, "merge", "-q", "other", check=False)
-        for spec in ("", "HEAD"):
-            with self.subTest(spec=spec):
-                done = self.run_step(spec, repo)
-                self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-                *rows, last = done.stdout.decode().splitlines()
-                directory = LAST_LINE.fullmatch(last).group(4)
-                self.addCleanup(shutil.rmtree, directory)
-                self.assertEqual(int(LAST_LINE.fullmatch(last).group(1)), len(rows))
-                saved = [row.split(" ", 3)[1] for row in rows if row.endswith(" both.md")]
-                texts = [Path(path).read_text(encoding="utf-8") for path in saved]
-                self.assertTrue(any("theirs" in text for text in texts), rows)
+    def test_conflicted_file_has_one_row_that_says_unmerged(self):
+        for operation in ("merge", "rebase"):
+            repo = new_repository(os.path.join(self.root, f"conflict-{operation}"))
+            for name in ("both.md", "theirs-deleted.md", "plain.md"):
+                append(repo, name, "base")
+            commit_all(repo, "base")
+            git(repo, "checkout", "-q", "-b", "other")
+            append(repo, "both.md", "theirs")
+            git(repo, "rm", "-q", "theirs-deleted.md")
+            commit_all(repo, "theirs")
+            git(repo, "checkout", "-q", "main")
+            append(repo, "both.md", "ours")
+            append(repo, "theirs-deleted.md", "ours")
+            commit_all(repo, "ours")
+            git(repo, operation, "other", check=False)
+            append(repo, "plain.md", "later")
+            unmerged = {"both.md (unmerged)": "++<<<<<<< ", "theirs-deleted.md (unmerged)": "* Unmerged path "}
+            ranges = {
+                "": (unmerged | {"plain.md (not staged)": "+later"}, UNCOMMITTED),
+                "HEAD": (unmerged | {"plain.md": "+later"}, WORKING_TREE),
+                "--cached": (unmerged, "staged only"),
+                "main~1 main": ({"both.md": "+ours", "theirs-deleted.md": "+ours"}, "commits only"),
+            }
+            for spec, (expected, covers) in ranges.items():
+                with self.subTest(operation=operation, spec=spec):
+                    self.assert_saved(self.run_step(spec, repo), expected, covers=covers)
+            self.assertEqual(rows_that_git_status_lists(repo), set(ranges[""][0]))
 
     def test_name_that_is_not_utf8_is_saved_from_two_commits(self):
         repo = new_repository(os.path.join(self.root, "bytes"))
@@ -321,10 +383,163 @@ class ReadADiff(unittest.TestCase):
         head = git(repo, "commit-tree", tree, "-p", "HEAD", "-m", "bytes")
         done = self.run_step(f"HEAD {head}", repo)
         self.assertEqual(done.returncode, 0, done.stderr)
-        row, last = done.stdout.splitlines()
-        self.addCleanup(shutil.rmtree, LAST_LINE.fullmatch(last.decode()).group(4))
+        _first, row, last = done.stdout.splitlines()
+        self.addCleanup(shutil.rmtree, os.path.dirname(LAST_LINE.fullmatch(last.decode()).group(4)))
         self.assertTrue(row.endswith(b" A caf\xe9.md"), row)
         self.assertIn(b"+base", Path(os.fsdecode(row.split(b" ", 3)[1])).read_bytes().splitlines())
+
+    def test_no_range_saves_every_staged_unstaged_and_untracked_file_that_git_status_lists(self):
+        repo = new_repository(os.path.join(self.root, "uncommitted"))
+        for name in ("a", "b", "partly.md", "moved.md", "restored.md"):
+            write(repo, name, "".join(f"{name} {line}\n" for line in range(20)))
+        commit_all(repo, "base")
+        append(repo, "a", "s")
+        git(repo, "add", "a")
+        append(repo, "b", "u")
+        append(repo, "partly.md", "first")
+        git(repo, "add", "partly.md")
+        append(repo, "partly.md", "second")
+        git(repo, "mv", "moved.md", "moved-here.md")
+        append(repo, "moved-here.md", "after")
+        append(repo, "restored.md", "undone")
+        git(repo, "add", "restored.md")
+        write(repo, "restored.md", "".join(f"restored.md {line}\n" for line in range(20)))
+        append(repo, "added-then-deleted.md", "gone")
+        git(repo, "add", "added-then-deleted.md")
+        os.remove(os.path.join(repo, "added-then-deleted.md"))
+        append(repo, "new.md", "untracked")
+        expected = {
+            "a (staged)": "+s",
+            "b (not staged)": "+u",
+            "partly.md (staged)": "+first",
+            "partly.md (not staged)": "+second",
+            "moved.md -> moved-here.md (staged)": "rename from moved.md",
+            "moved-here.md (not staged)": "+after",
+            "restored.md (staged)": "+undone",
+            "restored.md (not staged)": "-undone",
+            "added-then-deleted.md (staged)": "+gone",
+            "added-then-deleted.md (not staged)": "-gone",
+            "new.md": "+untracked",
+        }
+        self.assertEqual(rows_that_git_status_lists(repo), set(expected))
+        for cwd in (repo, self.root):
+            with self.subTest(cwd=cwd):
+                env = {} if cwd == repo else {"GIT_DIR": os.path.join(repo, ".git"), "GIT_WORK_TREE": repo}
+                self.assert_saved(self.run_step("", cwd, env=env), expected, covers=UNCOMMITTED)
+
+    def test_no_range_works_before_the_first_commit(self):
+        repo = new_repository(os.path.join(self.root, "unborn"))
+        append(repo, "staged.md", "s")
+        git(repo, "add", "staged.md")
+        append(repo, "new.md", "untracked")
+        expected = {"staged.md (staged)": "+s", "new.md": "+untracked"}
+        self.assertEqual(rows_that_git_status_lists(repo), set(expected))
+        self.assert_saved(self.run_step("", repo), expected, covers=UNCOMMITTED)
+
+    def test_index_file_holds_every_row_when_the_printed_rows_are_cut(self):
+        repo = new_repository(os.path.join(self.root, "many"))
+        append(repo, "base.md", "base")
+        commit_all(repo, "base")
+        expected = {f"file-{number:03}.md": f"+{number}" for number in range(300)}
+        for name, line_start in expected.items():
+            append(repo, name, line_start[1:])
+        done = self.run_step("", repo)
+        self.assert_saved(done, expected, covers=UNCOMMITTED)
+        first_line_only = done.stdout.decode().splitlines()[0]
+        *rows, last = Path(first_line_only.removeprefix("index ")).read_text(encoding="utf-8").splitlines()
+        self.assertEqual(int(LAST_LINE.fullmatch(last).group(1)), 300)
+        self.assertEqual(sorted(row.split(" ", 3)[3] for row in rows), sorted(expected))
+        self.assertTrue(all(os.path.getsize(row.split(" ", 3)[1]) == int(row.split(" ", 1)[0]) for row in rows))
+
+    def test_content_that_git_does_not_show_is_marked_on_its_row_and_counted(self):
+        repo = new_repository(os.path.join(self.root, "hidden"))
+        write(repo, ".gitattributes", "yarn.lock -diff\nvendored.js binary\n")
+        for name in ("yarn.lock", "vendored.js", "plain.md"):
+            write(repo, name, f"{name} one\n")
+        write(repo, "wide.txt", "one\n".encode("utf-16"))
+        write(repo, "image.bin", b"\0\1\2")
+        commit_all(repo, "base")
+        for name in ("yarn.lock", "vendored.js", "plain.md"):
+            append(repo, name, "lock-secret-line")
+        write(repo, "wide.txt", "one\ntwo\n".encode("utf-16"))
+        write(repo, "image.bin", b"\0\3\4")
+        write(repo, "new-wide.txt", "untracked\n".encode("utf-16"))
+        tracked = {name + NOT_SHOWN: "Binary files " for name in ("yarn.lock", "vendored.js", "wide.txt", "image.bin")}
+        tracked["plain.md"] = "+lock-secret-line"
+        untracked = {"new-wide.txt" + NOT_SHOWN: "Binary files "}
+        saved = self.assert_saved(self.run_step("HEAD", repo), tracked | untracked)
+        for name, content in saved.items():
+            self.assertEqual(b"lock-secret-line" in content, name == "plain.md", name)
+            self.assertNotIn(b"\0", content, name)
+        expected = with_note(tracked, "not staged") | untracked
+        self.assert_saved(self.run_step("", repo), expected, covers=UNCOMMITTED)
+        commit_all(repo, "change")
+        self.assert_saved(self.run_step("HEAD~1 HEAD", repo), tracked | untracked, covers="commits only")
+
+    def test_untracked_symbolic_link_is_saved_as_a_link_and_never_followed(self):
+        outside = os.path.join(self.root, "outside")
+        os.mkdir(outside)
+        write(outside, "secret.txt", "content-outside-the-repository\n")
+        repo = new_repository(os.path.join(self.root, "links"))
+        os.mkdir(os.path.join(repo, "directory"))
+        write(repo, "directory/inside.md", "content-inside-the-directory\n")
+        commit_all(repo, "base")
+        targets = {
+            "to-directory": "directory",
+            "to-file": "directory/inside.md",
+            "dangling": "nowhere",
+            "to-outside-file": os.path.join(outside, "secret.txt"),
+            "to-outside-directory": outside,
+            "to-root": "/",
+        }
+        for name, target in targets.items():
+            os.symlink(target, os.path.join(repo, name))
+        objects_before = git(repo, "count-objects", "-v")
+        saved = self.assert_saved(self.run_step("", repo), {name: f"+{target}" for name, target in targets.items()},
+                                  covers=UNCOMMITTED)
+        for name, content in saved.items():
+            self.assertIn(b"new file mode 120000", content, name)
+            self.assertNotIn(b"content-", content, name)
+        self.assertEqual(git(repo, "count-objects", "-v"), objects_before)
+        self.assertEqual(git(repo, "status", "--porcelain=v1"), "\n".join(f"?? {name}" for name in sorted(targets)))
+
+    def test_untracked_file_outside_a_sparse_checkout_is_saved(self):
+        repo = new_repository(os.path.join(self.root, "sparse"))
+        os.mkdir(os.path.join(repo, "kept"))
+        os.mkdir(os.path.join(repo, "left-out"))
+        write(repo, "kept/a.md", "a\n")
+        write(repo, "left-out/b.md", "b\n")
+        commit_all(repo, "base")
+        git(repo, "sparse-checkout", "set", "--cone", "kept")
+        os.makedirs(os.path.join(repo, "left-out"), exist_ok=True)
+        write(repo, "left-out/new.md", "untracked\n")
+        self.assert_saved(self.run_step("", repo), {"left-out/new.md": "+untracked"}, covers=UNCOMMITTED)
+
+    def test_temporary_directory_inside_the_checkout_is_refused(self):
+        tmp = os.path.join(self.repo, "tmp-inside")
+        os.mkdir(tmp)
+        self.addCleanup(os.rmdir, tmp)
+        done = self.run_step("HEAD", self.repo, tmp=tmp)
+        self.assert_refused(done, tmp)
+        self.assertIn(b"TMPDIR", done.stderr)
+
+    def test_output_that_cannot_be_written_leaves_one_error_line_and_no_directory(self):
+        tmp = self.new_tmp()
+        done = self.run_step("HEAD", self.repo, tmp=tmp, suffix=" >&-")
+        self.assert_refused(done, tmp)
+        self.assertEqual(len(done.stderr.splitlines()), 1, done.stderr)
+
+        read_end, write_end = os.pipe()
+        os.close(read_end)
+        self.addCleanup(os.close, write_end)
+        done = self.run_step("HEAD", self.repo, tmp=tmp, stdout=write_end)
+        self.assert_refused(done, tmp)
+        self.assertEqual(len(done.stderr.splitlines()), 1, done.stderr)
+
+        if os.path.exists("/dev/full"):
+            done = self.run_step("HEAD", self.repo, tmp=tmp, suffix=" >/dev/full")
+            self.assert_refused(done, tmp)
+            self.assertEqual(len(done.stderr.splitlines()), 1, done.stderr)
 
 
 if __name__ == "__main__":
