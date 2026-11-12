@@ -4767,7 +4767,10 @@ def spawn_fork(given):
         return turns
     if not turns:
         return "omitted"
-    return "count" if re.fullmatch(r"\+?[0-9]+", turns) and 0 < int(turns) < 2 ** 64 else "rejected"
+    if not re.fullmatch(r"\+?[0-9]+", turns):
+        return "rejected"
+    digits = turns.removeprefix("+").lstrip("0")
+    return "count" if digits and len(digits) <= 20 and int(digits) < 2 ** 64 else "rejected"
 
 
 REVIEW_SEAT = re.compile(r"(?<![a-z])(?:review(?:er)?s?|judges?|verdicts?|adversar(?:y|ies|ial))(?![a-z])")

@@ -109,7 +109,7 @@ class TurnCount(unittest.TestCase):
 
 class RefusedCalls(unittest.TestCase):
     REFUSED = (v2(3), v2(True), v2(["all"]), v2(1.5), v2("0"), v2("-1"), v2("some"), v2("²"), v2("1.5"),
-               v2("none", fork_context=False), v2("18446744073709551616"),
+               v2("none", fork_context=False), v2("18446744073709551616"), v2("9" * 4301),
                v1(fork_context="true"), v1(fork_context=None), v1(fork_context=True, agent_type="default"))
 
     def test_refused_call_is_not_a_fork(self):
