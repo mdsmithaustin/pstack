@@ -94,8 +94,8 @@ def untracked(directory):
     env = {**os.environ, 'GIT_INDEX_FILE': os.fsdecode(index), 'GIT_OBJECT_DIRECTORY': os.fsdecode(objects)}
     if files:
         pathspecs = b''.join(TOP + name + b'\0' for name in files)
-        git('-c', 'core.sparseCheckout=false', 'add', '--intent-to-add', '--pathspec-from-file=-', '--pathspec-file-nul',
-            env=env, stdin=pathspecs)
+        git('-c', 'core.sparseCheckout=false', '-c', 'core.splitIndex=false', 'add', '--intent-to-add',
+            '--pathspec-from-file=-', '--pathspec-file-nul', env=env, stdin=pathspecs)
     rows = [(b'??', [name], patch([], [name], env), []) for name in names]
     shutil.rmtree(objects)
     if files:

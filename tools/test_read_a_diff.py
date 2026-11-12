@@ -524,6 +524,30 @@ class ReadADiff(unittest.TestCase):
         self.assertEqual(git(repo, "count-objects", "-v"), objects_before)
         self.assertEqual(git(repo, "status", "--porcelain=v1"), "\n".join(f"?? {name}" for name in sorted(targets)))
 
+    def test_run_leaves_the_git_directory_as_it_was_with_a_split_index(self):
+        repo = new_repository(os.path.join(self.root, "split-index"))
+        append(repo, "tracked.md", "base")
+        commit_all(repo, "base")
+        git(repo, "config", "core.splitIndex", "true")
+        append(repo, "tracked.md", "staged")
+        git(repo, "add", "tracked.md")
+        append(repo, "tracked.md", "unstaged")
+        append(repo, "new.md", "untracked")
+        os.symlink("tracked.md", os.path.join(repo, "link"))
+
+        def git_directory():
+            found = Path(repo, ".git").rglob("*")
+            return {str(path): path.read_bytes() for path in found if path.is_file()}
+
+        before = git_directory()
+        for spec in ("", "HEAD"):
+            with self.subTest(spec=spec):
+                done = self.run_step(spec, repo)
+                self.assertEqual(done.returncode, 0, done.stderr)
+                self.addCleanup(shutil.rmtree, os.path.dirname(done.stdout.decode().splitlines()[0][len("index "):]))
+                self.assertIn(" ?? new.md\n", done.stdout.decode())
+                self.assertEqual(git_directory(), before)
+
     def test_untracked_file_outside_a_sparse_checkout_is_saved(self):
         repo = new_repository(os.path.join(self.root, "sparse"))
         os.mkdir(os.path.join(repo, "kept"))
