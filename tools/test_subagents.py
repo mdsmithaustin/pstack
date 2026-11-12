@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -85,6 +86,59 @@ class SubagentCommands(unittest.TestCase):
         brief = self.run_cli("brief", "poteto-agent").stdout
         self.assertIn("Put the exact line `persona: poteto-agent` on its own line in your first reply.\n", brief)
         self.assertTrue(brief.startswith("Pstack installed skill paths\n"))
+
+    def test_brief_states_the_read_rule_before_the_persona_body(self):
+        rule = "A cut-off read is no read."
+        for alias, heading in (("poteto-agent", "You are operating as"), ("Comment Sicko", "# Comment Sicko")):
+            with self.subTest(alias=alias):
+                brief = self.run_cli("brief", alias).stdout
+                self.assert_read_preamble(brief, heading)
+                self.assertEqual(brief.count(rule), 1)
+                self.assertLess(brief.index(rule), brief.index(heading))
+                self.assertLess(brief.index("On Codex"), brief.index(heading))
+
+    def test_read_rule_in_the_brief_is_the_harness_skill_rule(self):
+        brief = self.run_cli("brief", "poteto-agent").stdout
+        rule = next(line for line in brief.splitlines() if line.startswith("A cut-off read is no read."))
+        skill = (ROOT / "skills/pstack-harness/SKILL.md").read_text().replace("**", "")
+        self.assertIn(rule, skill)
+        self.assertLess(skill.index(rule), skill.index("## Select the action"), "the rule sits above the first table")
+
+    def test_brief_read_plan_command_runs_from_a_root_with_spaces(self):
+        brief = self.run_cli("brief", "poteto-agent").stdout
+        line = next(line for line in brief.splitlines() if line.startswith("On Codex"))
+        command = line.split("`")[1]
+        self.assertTrue(command.startswith("python3 "))
+        target = self.installed / "poteto-mode/SKILL.md"
+        filled = command.replace("python3", shlex.quote(sys.executable), 1).replace("<file>", shlex.quote(str(target))).replace("<n>", "400")
+        plan = subprocess.run(filled, shell=True, cwd=self.project, capture_output=True, text=True)
+        self.assertEqual(plan.returncode, 0, plan.stderr)
+        self.assertTrue(plan.stdout.startswith("sed -n '1,"), plan.stdout)
+
+    def assert_read_preamble(self, body, heading):
+        lines = body.lstrip().splitlines()
+        self.assertEqual(lines[0], "Pstack installed skill paths")
+        rule = next(i for i, line in enumerate(lines) if line.startswith("A cut-off read is no read. "))
+        paths = [i for i, line in enumerate(lines) if line.startswith("- ") and "SKILL.md" in line]
+        self.assertTrue(paths)
+        self.assertGreater(rule, max(paths))
+        self.assertTrue(lines[rule + 1].startswith("On Codex"), lines[rule + 1])
+        self.assertIn(shlex.quote(str(self.installed / "pstack-harness/scripts/read-plan.py")), lines[rule + 1])
+        self.assertLess(body.index(lines[rule + 1]), body.index(heading))
+
+    def test_native_wrappers_carry_the_read_rule(self):
+        for harness in ("codex", "claude-code"):
+            report = json.loads(self.native(harness).stdout)
+            for row in report["roles"]:
+                with self.subTest(harness=harness, role=row["id"]):
+                    text = Path(row["path"]).read_text()
+                    body = tomllib.loads(text)["developer_instructions"] if harness == "codex" else text[4:].split("---\n", 1)[1]
+                    heading = {
+                        "poteto-agent": "You are operating as",
+                        "comment-sicko": "# Comment Sicko",
+                        "trail-reviewer": "## Trail reviewer",
+                    }[row["id"]]
+                    self.assert_read_preamble(body, heading)
 
     def test_persona_with_its_own_first_line_gets_no_marker(self):
         brief = self.run_cli("brief", "Comment Sicko").stdout

@@ -1,3 +1,4 @@
+import shlex
 import subprocess
 import sys
 import unittest
@@ -22,6 +23,14 @@ class BriefClauses(unittest.TestCase):
         self.assertIn('preserve.py" --since abc123', text)
         self.assertIn("before every commit or amend", text)
         self.assertIn("nested delegates, replacement owners, and fix rounds", text)
+
+    def test_read_rule_comes_before_the_first_read_it_governs(self):
+        for arguments in (("--source", "t.md"), ("--source", "t.md", "--no-commits")):
+            with self.subTest(arguments=arguments):
+                text = clauses(*arguments)[1]
+                self.assertTrue(text.startswith("- A cut-off read is no read. "), text)
+                self.assertLess(text.index("read-plan.py"), text.index("Read the original task in full"))
+                self.assertIn(shlex.quote(str(SCRIPT.with_name("read-plan.py"))), text)
 
     def test_cleanup_cadence_follows_the_run(self):
         self.assertIn("before each push, over every commit not yet pushed", clauses("--source", "t.md", "--cleanup", "push")[1])
