@@ -7,7 +7,7 @@ This repository is an independent community port. It is not affiliated with, mai
 For this port's agreed goals, evidence standards, and remaining measurement gaps,
 see the [suite outcomes and evaluation contract](./evals/framework.md).
 
-The introduction below is reproduced from upstream in Poteto's voice.
+The introduction below is reproduced from upstream in Poteto's voice. Further down, a section written in lowercase first person is also hers. Sentence-case sections are this port's.
 
 i'm [poteto](https://x.com/poteto). i'm not a president or ceo, but i've worked with millions of lines of code at Meta, Netflix, and Cursor. i'm also on the react core team where i help build and maintain react compiler.
 
@@ -21,19 +21,35 @@ there's a growing sense that ai writes too much slop code. i agree. i don't want
 
 fork it. improve it. make it yours. PRs are welcome! 
 
+## what this port adds
+
+Upstream pstack is a Cursor plugin. This port keeps Poteto's workflows and goes further in six places. [PORTING.md](./PORTING.md) records every change.
+
+- **Four CLIs from one install.** The suite runs in Claude Code, Codex, Hermes, and Grok Build. [`/pstack-harness`](./skills/pstack-harness/SKILL.md) maps each workflow step (spawn, wait, ask, track, loop) to the CLI you are in. One [models config](#make-it-yours) sets a model and a reasoning effort for each role, with a section for each CLI.
+- **Six skills that upstream pstack does not ship.** [`/deslop`](./skills/deslop/SKILL.md), [`/pr-recap`](./skills/pr-recap/SKILL.md), [`/documentation-impact`](./skills/documentation-impact/SKILL.md), [`/verify-commands`](./skills/verify-commands/SKILL.md), [`/spec-probes`](./skills/spec-probes/SKILL.md), and [`/runtime-probes`](./skills/runtime-probes/SKILL.md).
+- **Two more playbooks.** [Research](./skills/poteto-mode/playbooks/research.md) gathers outside evidence for a decision. [Code review](./skills/poteto-mode/playbooks/code-review.md) reviews someone else's branch without editing it.
+- **Routes sized to risk.** Bug fix, feature, refactoring, and perf work record five risk facts, and a [plan script](./skills/poteto-mode/scripts/plan.py) picks a lightweight, standard, or intensive [route](./skills/poteto-mode/references/routes.md). The same facts give the same route on every CLI.
+- **Stricter shipping.** A [PR watcher](./skills/poteto-mode/scripts/watch-pr/README.md) handles any review bot and PRs that have no CI. Merges go through a merge gate, and a merge always needs its own [authorization](./skills/poteto-mode/references/authorization.md).
+- **Promises that are checked.** Each sentence in the [guide](./docs/guide/README.md) that promises a behavior is tracked in a [ledger](./evals/promises/README.md) and tied to a static, install, or live check. The [evaluation contract](./evals/framework.md) says what is still unmeasured.
+
 ## install
 
 ```bash
 npx skills add mdsmithaustin/pstack
 ```
 
-pick the targets you use at the prompt, including `hermes-agent` for hermes. `-g` installs user-level instead of per-project. hermes project skills require project trust, and grok build skips project skills in a folder it does not trust; confirm discovery in your installed version. for global hermes use, install into its native skills directory or configure `skills.external_dirs` to include the shared `~/.agents/skills` directory. the installer may skip a project hermes symlink when `.hermes` does not exist.
+pick the targets you use at the prompt, including `hermes-agent` for hermes. `-g` installs user-level instead of per-project.
+
+notes by CLI. confirm discovery in your installed version:
+
+- **hermes.** project skills require project trust. for global use, install into its native skills directory or add the shared `~/.agents/skills` directory to `skills.external_dirs`. the installer may skip a project hermes symlink when `.hermes` does not exist.
+- **grok build.** it skips project skills in a folder it does not trust.
 
 ## get started
 
 two steps:
 
-1. run [`/setup-pstack`](./skills/setup-pstack/SKILL.md) to check the bundled personas, optionally register native agents, set claude code's skill listing, pick a reasoning budget, and choose which models you want. until the listing step runs, claude code shows every pstack skill's description and can load one on its own, so rerun it after `npx skills update`.
+1. run [`/setup-pstack`](./skills/setup-pstack/SKILL.md). it checks the bundled personas, offers to register native agents, sets claude code's skill listing, and asks for a reasoning budget and models. rerun it after `npx skills update`: until the listing step runs, claude code shows every pstack skill's description and can load one on its own.
 2. use [`/poteto-mode`](./skills/poteto-mode/SKILL.md) whenever you're doing anything that requires rigor.
 
 new here? the [pstack guide](./docs/guide/README.md) walks you through a first real task, from setup and prompting through verification and overnight runs. stuck, or unsure which skill fits? ask [`/poteto-help`](./skills/poteto-help/SKILL.md).
@@ -91,14 +107,12 @@ morning.
 
 </details>
 
-
-
 when invoked it:
 
-1. matches your task to a [playbook](./skills/poteto-mode/playbooks/) and tracks progress under the mode's [worklist and completion rules](./skills/poteto-mode/SKILL.md#playbooks). a [plan script](./skills/poteto-mode/scripts/plan.py) prints the worklist items, each step's skill loads, and the gates, so the same recorded facts give the same route on every CLI.
-1. for bug fix, feature, refactoring, and perf work, records five risk facts and lets the script pick a lightweight, standard, or intensive [route](./skills/poteto-mode/references/routes.md). say `keep this lightweight` or `be thorough` to set the route yourself.
-2. routes to the other skills as the steps fire.
-3. writes unslopped replies framed for the consumer and the maintainer.
+1. matches your task to a [playbook](./skills/poteto-mode/playbooks/) and tracks progress under the mode's [worklist and completion rules](./skills/poteto-mode/SKILL.md#playbooks).
+2. for bug fix, feature, refactoring, and perf work, records five risk facts and lets a [plan script](./skills/poteto-mode/scripts/plan.py) pick a lightweight, standard, or intensive [route](./skills/poteto-mode/references/routes.md). say `keep this lightweight` or `be thorough` to set the route yourself.
+3. routes to the other skills as the steps fire.
+4. writes unslopped replies framed for the consumer and the maintainer.
 
 the mode's [Playbooks section](./skills/poteto-mode/SKILL.md#playbooks) also owns the preservation gate required before every commit. the task runs to the endpoint you state. without one it stops at the furthest reviewable state your repository supports: a pull request, a pushed branch, or a local branch when there is no remote. the mode is designed to work with a mid-tier model in the lead, such as Sonnet 5.5, GPT-6.1 Sol, or Grok 4.7 at medium effort. that target is a design goal that no evaluation here has verified yet, as the [evaluation contract](./evals/framework.md#lead-model-floor-and-subtraction) records. the full rules and playbooks live in [`skills/poteto-mode/SKILL.md`](./skills/poteto-mode/SKILL.md).
 
@@ -108,7 +122,7 @@ the mode's [Playbooks section](./skills/poteto-mode/SKILL.md#playbooks) also own
 
 ## skills
 
-[`/poteto-mode`](./skills/poteto-mode/SKILL.md) runs most of these for you when a step needs them (`how`, `why`, `architect`, `arena`, `swarm`, `interrogate`, `deslop`, `unslop`, `no-comments`, `technical-writing`, `poteto-tdd`, and the principles). the table below is for when you want one directly:
+[`/poteto-mode`](./skills/poteto-mode/SKILL.md) runs most of these for you when a step needs them (`how`, `why`, `architect`, `arena`, `swarm`, `interrogate`, `deslop`, `unslop`, `no-comments`, `technical-writing`, `poteto-tdd`, and the principles). the table below is for when you want one directly. most skills load only when you type their name or the mode calls them. [`/poteto-help`](./skills/poteto-help/SKILL.md#fix-a-run-that-went-wrong) lists the few that also load from your words.
 
 ```
 /how do we cancel runs? do we have an n+1 when we look up every run to cancel?
@@ -124,9 +138,9 @@ the mode's [Playbooks section](./skills/poteto-mode/SKILL.md#playbooks) also own
 | skill | use it when |
 |---|---|
 | [`/poteto-mode`](./skills/poteto-mode/SKILL.md) | default entry point for any non-trivial task. |
-| [`/poteto-help`](./skills/poteto-help/SKILL.md) | you're new to pstack, or unsure which skill, playbook, or principle fits. finds out what you're trying to do, answers that part, and hands you a prompt to type. it doesn't load from its description (on claude code, once `/setup-pstack` sets the skill listing), so type `/poteto-help`. |
-| [`/in-your-own-words`](./skills/in-your-own-words/SKILL.md) | you want the agent to play back your goal and the problem before it starts. it doesn't load from its description (on claude code, once `/setup-pstack` sets the skill listing), so type `/in-your-own-words`. |
-| [`/sharpen`](./skills/sharpen/SKILL.md) | you want a prompt made deeper, not bigger, before you send it: what a top professional would do that you didn't ask for, the raw material they'd start from, their methods and tools, and an outside check that the result is right. hands back the rewritten prompt and leaves your choices open. doesn't do the task. it doesn't load from its description (on claude code, once `/setup-pstack` sets the skill listing), so type `/sharpen`. |
+| [`/poteto-help`](./skills/poteto-help/SKILL.md) | you're new to pstack, or unsure which skill, playbook, or principle fits. finds out what you're trying to do, answers that part, and hands you a prompt to type. |
+| [`/in-your-own-words`](./skills/in-your-own-words/SKILL.md) | you want the agent to play back your goal and the problem before it starts. |
+| [`/sharpen`](./skills/sharpen/SKILL.md) | you want a prompt made deeper, not bigger, before you send it. hands back the rewritten prompt and leaves your choices open. doesn't do the task. |
 | [`/how`](./skills/how/SKILL.md) | you want a walkthrough of how a subsystem works. |
 | [`/why`](./skills/why/SKILL.md) | you want to know why something was built this way. discovers available MCPs at run time and queries each evidence category in parallel (source control, issue tracker, long-form docs, real-time chat, infra observability, error tracking, analytics warehouse). |
 | [`/recall`](./skills/recall/SKILL.md) | you're starting or resuming work and want your recent context on a topic rebuilt from your own chat history and the shared record, handed back as a tight current-state brief. |
@@ -142,13 +156,13 @@ the mode's [Playbooks section](./skills/poteto-mode/SKILL.md#playbooks) also own
 | [`/setup-pstack`](./skills/setup-pstack/SKILL.md) | you want to configure pstack models or repository PR templates. full setup preserves existing templates and installs poteto defaults when none exist. |
 | [`/pstack-harness`](./skills/pstack-harness/SKILL.md) | (port addition) maps spawning, per-subagent models, parallelism, and transcript access to claude code, codex, hermes, and grok build, with shared guidance for shell commands and running processes. |
 | [`/reflect`](./skills/reflect/SKILL.md) | a long task landed and you want the recipe captured as a skill edit. |
-| [`/correct`](./skills/correct/SKILL.md) | you keep correcting agents for the same mistakes. mines history for mistake classes, fixes each at the highest level that works (architecture, then types, lint, and ci, then tests, with docs last), and keeps a table pairing each rule with what enforces it. |
+| [`/correct`](./skills/correct/SKILL.md) | you keep correcting agents for the same mistakes. mines history for mistake classes and fixes each at the highest level that works, from architecture down to docs. |
 | [`/poteto-teach`](./skills/poteto-teach/SKILL.md) | you want to actually understand a change or subsystem, not just have it summarized. runs how + why and weaves one plain explanation, built up diagram by diagram. |
 | [`/poteto-tdd`](./skills/poteto-tdd/SKILL.md) | you're fixing a bug and there's a cheap local test path. write the failing test first, then the fix. |
 | [`/benchmark-checklist`](./skills/benchmark-checklist/SKILL.md) | you ran a benchmark or measured a speedup or regression. vets the number (limiter, tuning, errors, repeat runs, end-to-end relevance) before you report or act on it. |
 | [`/no-comments`](./skills/no-comments/SKILL.md) | strip comments before review; spawns Comment Sicko, fixes accepted findings, offers encodings for claimed constraints. |
-| [`/pr-recap`](./skills/pr-recap/SKILL.md) | (port addition) you opened or pushed to a pull request and want its reviewers to see the story first. posts one comment: two sentences on why and what, one hand-drawn sketch of the changed mechanism attached as an image, one line on what the PR does not prove, and a collapsed block with the risk, SHAs, and reading order. a refresh patches the same comment and reuses an unchanged image, and where `gh` cannot upload (GHES) it asks for a web UI upload when you allow one. see [sketch setup](./skills/pr-recap/references/sketch.md#setup) for runtime requirements and the `npx` fallback. [Opening a PR](./skills/poteto-mode/playbooks/opening-a-pr.md) invokes it for a new PR. [Task triggers](./skills/poteto-mode/references/task-triggers.md) govern post-push refresh timing. its sources are credited in [`skills/pr-recap/CREDITS.md`](./skills/pr-recap/CREDITS.md). |
-| [`/deslop`](./skills/deslop/SKILL.md) | (port addition) you're about to commit and the diff reads padded. removes narrating comments, guards on impossible states, dead compatibility paths, one-caller wrappers, and unrelated edits from the changed hunks, then reruns the touched tests. a comment its rules don't settle goes through `/no-comments` in the same pass, and the report says what that review did. code only; `/unslop` is for prose. |
+| [`/pr-recap`](./skills/pr-recap/SKILL.md) | (port addition) you opened or pushed to a pull request and want its reviewers to see the story first. posts one comment: why and what, one hand-drawn sketch of the changed mechanism, and what the PR does not prove. see [sketch setup](./skills/pr-recap/references/sketch.md#setup) and [credits](./skills/pr-recap/CREDITS.md). |
+| [`/deslop`](./skills/deslop/SKILL.md) | (port addition) you're about to commit and the diff reads padded. removes narrating comments, dead paths, one-caller wrappers, and unrelated edits from the changed hunks, then reruns the touched tests. code only; `/unslop` is for prose. |
 | [`/typescript-best-practices`](./skills/typescript-best-practices/SKILL.md) | you're reading or editing typescript. grounds the type-system-discipline principle in syntax. |
 | [`/figure-it-out`](./skills/figure-it-out/SKILL.md) | no bundled playbook fits. designs a rigorous, auditable playbook for the task. |
 | [`/show-me-your-work`](./skills/show-me-your-work/SKILL.md) | you want a reviewable decision trail. owns the logging and evidence-retention rules. |
@@ -167,12 +181,9 @@ the mode's [Playbooks section](./skills/poteto-mode/SKILL.md#playbooks) also own
 
 </details>
 
-
-
 ### examples
 
 mostly i type [`/poteto-mode`](./skills/poteto-mode/SKILL.md) at the start of a task and let it route to a playbook. the other skills fire as the steps need them. a few i reach for directly.
-
 
 <details>
 <summary>all the examples</summary>
@@ -220,13 +231,12 @@ help:              /poteto-help which skill should i use to review this branch?
 
 ## the `poteto-agent` and Comment Sicko subagents
 
-pstack ships both complete personas inside the installed `pstack-harness` skill. `npx skills` delivers these payloads with the skills; it does not register native agents. [`/setup-pstack`](./skills/setup-pstack/SKILL.md) checks them and can install native registrations into an explicit project or user destination.
+Two named helpers do delegated work. You rarely call them yourself.
 
-[`poteto-agent`](./agents/poteto-agent.md) is a scoped delegate for one unit of a playbook step. It reads `poteto-mode` in full before work, and does not run the playbook router itself. When its brief names a narrow role whose output cannot land in the project, such as a judge, a reviewer, or a design runner, it reads only the files its brief names. The [persona's cleanup contract](./agents/poteto-agent.md) governs the delegate's cleanup cadence and evidence. The delegate pushes a branch or opens a PR only when its brief says to. The main conversation runs `/poteto-mode` and owns the plan. It spawns one delegate per unit and does not resume a delegate across phases. [Comment Sicko](./agents/comment-sicko.md), usually invoked through [`/no-comments`](./skills/no-comments/SKILL.md), edits scoped comments and reports application-code refactor targets. it does not write application code.
+- [`poteto-agent`](./agents/poteto-agent.md) does one unit of a playbook step for the main conversation, which runs `/poteto-mode` and owns the plan. It reads `poteto-mode` first, pushes a branch or opens a PR only when its brief says to, and is never resumed across phases.
+- [Comment Sicko](./agents/comment-sicko.md) reviews comments, usually through [`/no-comments`](./skills/no-comments/SKILL.md). It edits scoped comments and reports code that should be refactored. It does not write application code.
 
-The [persona contract](./skills/pstack-harness/references/named-roles.md) uses the native persona when the live agent catalog lists it, or supplies the complete persona to a generic delegate. Claude uses Markdown registrations, and Codex uses TOML. Hermes receives the full persona through delegation context. The normalized native names are `poteto-agent` and `comment-sicko`; `Comment Sicko` remains a supported logical alias. Model and effort choices still come from pstack's existing model policy.
-
-A ready payload, an installed native file, and an agent loaded in the current session are separate states. Setup reports each separately. A skill's `agents/openai.yaml` sets its Codex invocation policy and, when it turns implicit invocation off, puts that skill in setup-pstack's claude code name-only listing; it does not register a subagent.
+Both ship inside the installed `pstack-harness` skill, so they work without registration. [`/setup-pstack`](./skills/setup-pstack/SKILL.md) can also register them as native agents on Claude Code and Codex. The [persona contract](./skills/pstack-harness/references/named-roles.md) says which form a spawn uses, and the [registration reference](./skills/pstack-harness/references/registration.md) covers the files and their states.
 
 ## principles
 
@@ -271,8 +281,7 @@ upstream leans on cursor-only pieces. this port swaps them for self-contained eq
 - `/deslop` (upstream's `cursor-team-kit`) → the port-owned [`/deslop`](./skills/deslop/SKILL.md) skill. its rules draw on three MIT-licensed skill sets, credited in [`skills/deslop/CREDITS.md`](./skills/deslop/CREDITS.md).
 - `control-cli` / `control-ui` (also `cursor-team-kit`) → the project-local `verify-<app>` skill generated by [`/create-verification-skill`](./skills/create-verification-skill/SKILL.md).
 - cursor's built-in `/create-skill` → the [authoring-a-skill playbook](./skills/poteto-mode/playbooks/authoring-a-skill.md). if your CLI ships a built-in `/babysit`, the [babysit playbook](./skills/poteto-mode/playbooks/babysit.md) supersedes it for pr-status requests.
-
-- invocation gating works per-CLI, and no skill under `skills/` sets upstream's `disable-model-invocation`, because claude code's Skill tool then refuses the skill even when another pstack skill names it. every gated skill ships `agents/openai.yaml` with `policy.allow_implicit_invocation: false`, which codex honors, so `$skill` still works and implicit triggering is off. on claude code, [`/setup-pstack`](./skills/setup-pstack/SKILL.md) lists the same skills by name only (`skillOverrides` in `~/.claude/settings.json`), so they load when you type `/name` or a pstack skill tells the agent to use them, never from their description. an agent that lists the skills folder can still open one by its folder name.
+- upstream's `disable-model-invocation` flag → a per-CLI gate. each gated skill ships `agents/openai.yaml` with `policy.allow_implicit_invocation: false`, which codex honors. on claude code, [`/setup-pstack`](./skills/setup-pstack/SKILL.md) lists the same skills by name only, so they load when you type `/name` or a pstack skill names them, never from their description.
 
 [PORTING.md](./PORTING.md) has the full substitution map.
 
@@ -286,9 +295,28 @@ your CLI already has a plan mode which works great with pstack. but personally, 
 
 type [`/automate-me`](./skills/automate-me/SKILL.md). it mines your recent transcripts, drafts a `<your-name>-mode` skill from how you've actually worked, and routes through pstack underneath. you keep pstack as the base and end up with your own routing skill alongside `poteto-mode`.
 
-models are configurable too. type [`/setup-pstack`](./skills/setup-pstack/SKILL.md). it detects the models you have access to and writes a small config file mapping each role (code, judgment, the review panels) to a model, user-level at `~/.agents/pstack-models.md`, with an optional per-repo override at `.agents/pstack-models.md`. every skill resolves the layered config through `check-models-config.py --resolve` and falls back to sensible defaults when no line matches, so you override only what you want. a role can pin a reasoning effort with `model@effort`, and `## codex`, `## claude-code`, `## grok`, or `## hermes` sections hold per-CLI picks in the same file. for each role the first match wins, in this order: the per-repo section for your CLI, your section, the per-repo flat line, your flat line, then the shipped default. so a per-repo line written for claude never overrides your `## codex` line for that role. one config serves every CLI. a model a harness can't use just means inherit-parent there, and a claude alias becomes a gpt-6 model on codex and grok-4.7 on grok build.
+models are configurable too. type [`/setup-pstack`](./skills/setup-pstack/SKILL.md). it detects the models you have access to and writes a small config file that maps each role (code, judgment, the review panels) to a model. you override only what you want, and every other role keeps its shipped default.
 
-a config written before the panels shrank to three entries still lists four panel entries. delete those panel lines, including any under `## codex`, or delete the file, then run `/setup-pstack` again. a rerun keeps any role you changed, whether its model, effort, panel list, alias, or harness section.
+```
+# ~/.agents/pstack-models.md
+feature, refactoring: sonnet
+judgment and prose: opus@xhigh
+
+## codex
+feature, refactoring: gpt-6-sol@high
+```
+
+a line is `role: model`, or `role: model@effort` to pin a reasoning effort. a `## codex`, `## claude-code`, `## grok`, or `## hermes` section holds picks for that CLI only, so one file serves every CLI. for each role the first match wins:
+
+1. the per-repo file's section for your CLI (`.agents/pstack-models.md` in the repository)
+2. your file's section for your CLI (`~/.agents/pstack-models.md`)
+3. the per-repo file's flat line
+4. your file's flat line
+5. the shipped default
+
+a model your CLI can't use means that role runs on your session model there. a claude alias becomes a gpt-6 model on codex and grok-4.7 on grok build. the [models config reference](./skills/setup-pstack/references/models-config.md) has the full rules.
+
+a rerun of `/setup-pstack` keeps any role you changed. if your config still lists four entries for a panel, it predates the three-entry panels: delete those panel lines, including any under `## codex`, or delete the file, then run `/setup-pstack` again.
 
 ## automations
 
@@ -298,88 +326,7 @@ to set it up, point your agent at [`FOR_AGENTS.md`](./automations/benny/FOR_AGEN
 
 ## contributor checks
 
-CI uses Python 3.12, Bun 1.4.0, and the runner's preinstalled Node. For the git hooks, create the local virtual environment in the main checkout, install the `skill-ci` command, and install the hooks. The gate selects its interpreter separately, as described below.
-
-```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install --require-hashes -r tools/harness-test-requirements.txt
-uv tool install git+https://github.com/mdsmithaustin/skill-ci.git
-lefthook install
-```
-
-Run the local gate tiers from the repository root:
-
-```sh
-tools/gate-check.sh lint
-tools/gate-check.sh test
-```
-
-The `lint` tier checks cross-suite references, the [mode entry byte budget](./skills/pstack-harness/references/skill-retention.md), personal home paths, the generated subagent bundle, the promise ledger and its canonical form, [live promise evidence freshness](./evals/promises/README.md#keep-live-evidence-aligned-with-changes), the shipped models config, the [context byte budgets per route](./tools/check-route-bytes.py), skill line length (`tools/check-line-words.py`), and skill reference spelling (`tools/test_skill_references.py`). The skill reference spelling scope and exceptions are documented in [PORTING.md](./PORTING.md#substitution-map). `skill-ci check` runs the shared skill checks, as described below. The `test` tier runs the tools, promise, setup-pstack, and pstack-harness unit suites. It installs the poteto-mode script and test dependencies and the pr-recap sketch dependencies with their frozen lockfiles, runs both Bun test suites and poteto-mode's typecheck, then installs the statechart test dependencies with their frozen lockfile and runs the statechart script tests with `node --test` through `bun run test`. The statechart tests are TypeScript, so they need Node 22.18 to 22.x, or Node 23.6 or later. Most lint checks also run in the test tier, against the same committed files. The tools unit suite also runs skill reference spelling, skill line length, the route byte budgets, and the repository mode entry byte-budget check, and it runs the subagent bundle check on a copy of the committed sources. The promise unit suite also audits the promise ledger, checks its canonical form, and runs the strict evidence freshness check. The setup-pstack unit suite also lints the shipped models config. Only the cross-suite reference check and the personal home path check run in the lint tier alone. The script runs every check in the selected tier, prints a PASS or FAIL line for each, and exits nonzero if any check fails. Unit suites and Bun tests must report tests, not a zero-test success.
-
-The statechart suite runs its TLC-dependent tests only when `TLA2TOOLS` names `tla2tools.jar`, and skips them otherwise. `JAVA` names the Java binary and defaults to `java` on `PATH`. The `lint.yml` skills job runs the suite on every pull request. It has no TLC, so it skips those tests. The `statechart-tlc.yml` job runs the suite again with TLC, only when a change touches `skills/statechart/`, `tests/skills/statechart/`, or that workflow. It downloads the jar that `TLC_TOOL` in `skills/statechart/scripts/run.ts` pins, checks its sha256, sets `TLA2TOOLS` to the jar and `JAVA` to the runner's Java of the version `JAVA_TOOL` pins, and fails when no test runs or when a test skips for lack of TLC. The render tests install Pele and Mermaid with npm into `~/.cache/statechart`, so they need the network. That job is not a required check, because a path-filtered workflow that does not run would leave a required check pending.
-
-`python3 tools/check-personal-paths.py` scans the names and current contents of every Git-tracked file for concrete account names below `/Users/<account>` or `/home/<account>`. It scans symlink target spelling without following the link, skips contents containing NUL bytes as binary, and decodes other bytes with UTF-8 replacement. Filenames are checked even for binary files. Exact file-scoped content exceptions cover existing synthetic fixtures. An unused exception fails the default working-tree check used by the gate and CI. Index and pushed-tip modes suppress exact known synthetic matches without requiring every fixture to exist in each snapshot. Diagnostics redact account names and identify the file and line without printing source contents. Line 0 identifies a filename finding. Exit 1 means a personal path was found. Exit 2 means file acquisition or exception validation failed, or no tracked text files were inspected. A successful scan exits 0 and reports the number of tracked text files checked. Pre-push exits 0 without scanning when Git supplies no nondeleted local tips. The required CI `skills` job runs this checker explicitly, alongside the shared skill-ci checks.
-
-The script needs neither mise nor the main checkout's `.venv`. It selects `PSTACK_GATE_PYTHON` when set to a Python executable, then `$HOME/.local/share/mise/installs/python/3.14.7/bin/python3.14`, then `uv` on PATH with Python 3.12. This gate runner choice uses the environment's `HOME`. The native evaluators derive their confined runtime paths from the operating system account database, as documented in [the promise suite README](./evals/promises/README.md#run-the-model-free-checks). The native version pin is deliberate because Python 3.12 fails the native fsmonitor control on the reviewed host. The test tier also needs Bun, Node, `rg`, `jq`, `gh`, and `openssl` on `PATH`. `mise run gate-lint` and `mise run gate-test` wrap the same script.
-
-Install `tools/harness-test-requirements.txt` into the interpreter selected for local checks. Without pytest, its preservation cases skip. CI installs these pinned, hashed dependencies before the harness suite, so those cases execute. To use the environment created above, set `PSTACK_GATE_PYTHON="$PWD/.venv/bin/python"` when running the gate. Dependency installation fails on a nonzero exit. Treat a nonzero harness exit or a zero-test summary as failed verification. A Python 3.9 compatibility probe can skip when that separate interpreter is unavailable.
-
-Regenerate the test dependency lock with `uv pip compile --python-version 3.12 --universal --generate-hashes --no-annotate --no-header --output-file tools/harness-test-requirements.txt tools/harness-test-requirements.in`. A nonzero exit means resolution failed. The lock targets Python 3.12 and newer.
-
-`.no-mistakes.yaml` runs the `lint` tier and then `skill-ci check` as the gate's Lint step. It leaves the Test step to the pipeline's targeted checks, because no-mistakes reserves `commands.test` for targeted validation of the change, not a full suite that mirrors CI. Run the `test` tier yourself before a large change. GitHub CI remains authoritative and additionally runs the Docker oracle and maintained canon suites, the npx installation probe, the Linux worktree-audit job, and, for statechart changes, the statechart TLC job. Those checks stay outside the local gate tiers. CI cancels superseded pull-request runs of `lint.yml`, `skill-checks.yml`, and `statechart-tlc.yml`; pushes to main never cancel. The gate fills PR bodies from `.github/pull_request_template.md` through `pr.template`, omits intent from them, keeps a minimal appendix with the risk line and head attestation, and protects `.github/workflows/**` and `.github/rulesets/**` from automatic repairs.
-
-The repository also enables CI repair for green GitHub PRs that are behind main. No-mistakes carries Review approval only when it proves a pure replay.
-
-To reproduce the Docker suites and installation probe manually, use the commands below. Follow the [application and grader instructions](./evals/canon/README.md) for their prerequisites.
-
-```sh
-docker pull python:3.12-slim@sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36
-(cd evals/verify-commands/oracles && python3 -m unittest -v test_check_plan)
-(cd evals/canon && python3 -m unittest -v)
-.venv/bin/python tools/probe-subagent-install.py
-```
-
-Each command exits nonzero on failure. Each unittest command must report tests, not a zero-test success.
-
-The pre-commit hook runs the cross-suite-reference and personal-path checks with the main checkout's `.venv/bin/python`, from any worktree, and `skill-ci check --fast`, which runs the frontmatter, trigger declaration coverage, content, and staged PII checks. The personal-path pre-commit check uses `--source index` to inspect staged blobs, even when unstaged edits differ. The pre-push hook uses `--source pre-push` with Lefthook stdin forwarding to inspect each nondeleted local tip supplied by Git, and runs the full `skill-ci check`. It scans tip snapshots, not published base history. The default working-tree mode remains the gate and CI interface. For the full skill checks, hook configuration check, and whitespace check:
-
-```sh
-skill-ci check
-lefthook validate
-git diff --check
-```
-
-Each command exits nonzero when its check fails.
-
-For guide-promise checks and general live playbook evals, see the [suite guide](evals/promises/README.md).
-
-Behavioral eval manifests and their oracles live at the repository root under `evals/<skill>/`, never inside a skill directory. `npx skills` copies a skill directory verbatim to every consumer and offers no exclude mechanism, so eval material placed there would ship to everyone who installs the skill. `tools/test_eval_artifacts.py` fails if an `evals` or `eval-runs` directory appears under `skills/`. The same reasoning keeps tests out: they live under `tests/`, mirroring their path under `skills/` (`tests/skills/poteto-mode/scripts/`, `tests/skills/pstack-harness/scripts/`, and `tests/skills/setup-pstack/scripts/`), and the same test fails if a tracked file under `skills/` matches a test-file pattern. The Bun and typecheck scripts in `skills/poteto-mode/scripts/package.json` reach into `tests/`. The `.gitignore` rules `**/evals/**/runs/` and `**/eval-runs/` keep raw run transcripts out of git wherever a run writes them.
-
-`.skill-ci.toml` pins the skill-ci release used by GitHub Actions, the git hooks, the no-mistakes Lint step, the mise tasks, and the manual development comparisons. The `skill-ci` command reads that pin and runs that version from any checkout or worktree, and it needs `uv` on your PATH. `skill-ci check` runs the frontmatter and trigger declaration coverage check, the content check with `tools/skill-content-conventions.json`, and the whole-tree PII scan. `evals_dir` points it at the manifests, so for every `evals/**/shared-benchmark.json` it also runs `skill-benchmark validate --strict-leakage` and then `skill-benchmark audit-manifest --fail-on-blockers --strict-judge`, skipping the audit when the manifest has no cases. It runs the harness that the pinned skill-ci release installs, never whatever `skill-benchmark` is on your PATH.
-
-`mise.toml` adds a one-line task for each check and run command, such as `skill-check` for `skill-ci check`. A mise older than 2026.8.9 asks you to run `mise trust` once.
-
-```sh
-mise run skill-lint
-mise run skill-validate
-mise run skill-audit
-```
-
-Local runs and CI read the same pin, and each run prints `skill-ci <version> (<commit>)` first, so the two logs show the commit they ran. `skill-ci update` moves the pin to the newest release tag.
-
-The pinned skill-ci v1.4.0 runner validates declared `skill_paths`. Both `skill-ci validate` and `skill-ci audit` reject a manifest if an entry does not exist inside the manifest's skill root. `tools/test_eval_artifacts.py` also fails when any manifest under `evals/` names a path that is not a file.
-
-`skill-audit` is stricter than CI on one point. CI skips `audit-manifest` for a manifest with no cases, and the task audits every manifest it finds, so an empty manifest fails locally and passes in CI. Nothing in this repository has one today.
-
-`skill-ci trigger <skill>` and `skill-ci run <skill>` spend model budget on your own logins and never run in CI. Both write to a new directory under `<checkout>.eval-runs/<skill>/`, beside the checkout. Pass `--out` to write under `evals/` instead. skill-ci refuses an output directory inside the skill package.
-
-```sh
-skill-ci run skills/unslop --out evals/unslop/runs/$(date +%Y%m%d-%H%M%S)
-```
-
-`evals_dir` in `.skill-ci.toml` points every command at `evals/`. Delete it and `check`, `validate`, and `audit` search `skills/`, find no manifest, and still exit 0, so `tools/test_eval_artifacts.py` pins its value.
-
-`tools/skill-trigger-cases.json` checks deterministic trigger declaration coverage. It confirms that every shipped skill has a realistic request, literal description anchors, and the expected invocation policy. `implicit_allowed` is false exactly for the skills whose `agents/openai.yaml` sets `allow_implicit_invocation: false`. It does not measure model-routing accuracy.
+PRs are welcome. [CONTRIBUTING.md](./CONTRIBUTING.md#contributor-checks) covers the local gate (`tools/gate-check.sh lint` and `tools/gate-check.sh test`), the git hooks, and how they relate to CI.
 
 ## license
 
