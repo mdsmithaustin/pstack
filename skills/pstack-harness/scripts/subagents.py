@@ -295,7 +295,9 @@ CLEANUP = {
 def render_clauses(args: argparse.Namespace, skills_root: Path) -> str:
     """The clauses every delegate brief must carry. The lead adds scope and judgment after them."""
     lines = read_rule_preamble(skills_root)
-    lines += [f"Read the original task in full before any work: {args.source}. It is the source. Notes after it are the lead's reading."]
+    lines += [f"Read the original task in full before any work: {args.source}. It is the source. Notes after it are the lead's reading, each marked quoted, current behavior, or inferred. "
+             "Build what you can trace to the source or to the file a mark names. "
+             "Report what you cannot trace with the work. Stop without building only when it decides what to build."]
     if args.unattended:
         lines.append("This run is unattended. Do not wait for a human reply. Say so in every brief you write.")
     else:
