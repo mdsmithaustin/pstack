@@ -183,7 +183,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/authoring-a-skill.md",
-     "quote": "Validate the skill: frontmatter has `name` and `description`, referenced files exist, cross-skill links resolve."
+     "quote": "Validate the skill: frontmatter has `name` and `description`, referenced files exist, cross-skill links resolve, and no line runs past 150 words."
     },
     {
      "file": "skills/poteto-mode/playbooks/authoring-a-skill.md",

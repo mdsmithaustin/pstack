@@ -159,6 +159,12 @@ class Worklist(unittest.TestCase):
         self.assertIn("1. **Frame.**", text)
         self.assertNotIn("It has no numbered steps", text)
 
+    def test_a_step_ends_at_the_next_heading(self):
+        close = plan("orchestrate")["steps"][-1]
+        self.assertEqual(close["name"], "Close")
+        self.assertEqual(close["loads"] + close["conditional"] + close["uses"], [])
+        self.assertNotIn("load", run("orchestrate").stdout.split("7. **Close.**")[1].split("gates:")[0])
+
     def test_panels_load_only_on_intensive(self):
         standard = plan("feature", *facts(reach="material:x"))
         designed = next(step for step in standard["steps"] if step["name"] == "Designed")

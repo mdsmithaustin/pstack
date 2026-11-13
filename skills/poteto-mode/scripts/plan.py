@@ -50,18 +50,20 @@ class Once(argparse.Action):
 
 def read_playbook(path):
     """Return (opening prose lines, [(number, text block)], reply line) as the worklist rule splits them."""
-    prose, steps, current, reply = [], [], None, ""
+    prose, steps, current, reply, in_step = [], [], None, "", False
     for line in path.read_text(encoding="utf-8").split("\n"):
         match = STEP.match(line)
         if line.startswith(REPLY):
             reply = line.strip()
         elif match and not reply:
-            current = [match.group(2)]
+            current, in_step = [match.group(2)], True
             steps.append((int(match.group(1)), current))
         elif current is None:
             if line.strip() and not line.startswith("#"):
                 prose.append(line)
-        elif line[:1] in ("", " ", "\t") and not reply:
+        elif line.startswith("#"):
+            in_step = False
+        elif in_step and line[:1] in ("", " ", "\t") and not reply:
             current.append(line.strip())
     return prose, [(number, " ".join(part for part in block if part)) for number, block in steps], reply
 
