@@ -2,12 +2,13 @@
 
 Observed circa 2026-09. Verify these hints against the live session and prefer its tools and help.
 
-Pass `model`. The spawn tool has no effort field, so the agent type carries the effort. Each `pstack-effort-<level>` agent runs at its level and takes the `model` you pass.
+Pass `model`. Pass a resolved effort level as `effort` when the spawn tool lists that parameter, as it does from Claude Code 2.1.292. It applies under `general-purpose` and under a native persona, and it overrides an agent's own effort, measured on 2.1.322. A `fork` ignores it. When the tool lists no `effort`, the agent type carries the level: each `pstack-effort-<level>` agent runs at its level and takes the `model` you pass.
 
 | resolved effort | no persona | a pstack persona |
 |---|---|---|
-| a level, and `pstack-effort-<level>` is in the live agent catalog | `pstack-effort-<level>` | `pstack-effort-<level>`, with the persona's complete briefing at the top of the prompt |
-| a level, but that agent is not in the catalog | `general-purpose` | the persona per the [persona contract](named-roles.md) |
+| a level, and the spawn tool lists `effort` | `general-purpose`, with `effort` | the persona per the [persona contract](named-roles.md), with `effort` |
+| a level, no `effort` parameter, and `pstack-effort-<level>` is in the live agent catalog | `pstack-effort-<level>` | `pstack-effort-<level>`, with the persona's complete briefing at the top of the prompt |
+| a level, and neither carrier | `general-purpose` | the persona per the persona contract |
 | `inherit-parent` | `general-purpose` | the persona per the persona contract |
 
 Always name an agent type, from this table or `fork`. A spawn under any named type other than `fork` starts fresh. Use `fork` only as the [fork restrictions](roles.md#fork-restrictions) allow.
@@ -24,4 +25,8 @@ Only the live catalog proves an agent is loaded. A file on disk does not. A dele
 
 `Task` tool (custom agents from `.claude/agents/` spawn by name); `model` takes short aliases
 
-no per-call field; a `pstack-effort-<level>` agent type carries it (see the [effort table above](#claude-code-adapter)). An `inherit-parent` effort, or a session whose catalog lacks the agent, runs at the session effort (`--effort`, `effortLevel`)
+the `effort` parameter on the spawn when the tool lists it, and otherwise a `pstack-effort-<level>` agent type (see the [effort table above](#claude-code-adapter)). A spawn with an `inherit-parent` effort, or with neither carrier, runs at the session effort (`--effort`, `effortLevel`) only when its model is the session's model. On another model it runs at the level Claude Code keeps for that model, or that model's default, from 2.1.317 and measured on 2.1.322. Report that level as unknown unless you observed it
+
+## Writer isolation
+
+Per the Claude Code worktree docs read on 2026-11-12, a subagent's `isolation: worktree` branches from the repository's default branch unless the `worktree.baseRef` setting is `head`. So whenever a writer must start from any other commit, pushed or not, such as your branch or a parent PR's branch, make its worktree with `git worktree add` at the commit its brief names.

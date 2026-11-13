@@ -715,7 +715,7 @@
   },
   "budget-labels-set-effort": {
    "check": "static",
-   "claim": "The shipped flat lines write no effort except `routine`, which writes `medium`, so roles run at the session effort on Claude Code and Grok Build and the `## codex` section pins its own. `default` keeps them. `unlimited`, `large`, `medium`, and `small` write max, xhigh, high, or medium on every entry that names a model, which overrides the session effort in either direction on Claude Code and Codex. Grok Build's spawn takes no effort, so every role there runs at the session effort.",
+   "claim": "The shipped flat lines write no effort except `routine`, which writes `medium`, so those roles run at the session effort on Grok Build, while the `## claude-code` and `## codex` sections pin their own: medium, high, or xhigh by role on Claude Code. `default` keeps them. `unlimited`, `large`, `medium`, and `small` write max, xhigh, high, or medium on every entry that names a model, which overrides the session effort in either direction on Claude Code and Codex. Grok Build's spawn takes no effort, so every role there runs at the session effort.",
    "evidence": [
     {
      "file": "skills/setup-pstack/examples/pstack-models.md",
@@ -723,7 +723,7 @@
     },
     {
      "file": "skills/setup-pstack/references/models-config.md",
-     "quote": "A line without a usable effort runs at the session effort on Claude Code and Grok Build."
+     "quote": "A line without a usable effort runs at the session effort on Grok Build."
     },
     {
      "file": "skills/setup-pstack/SKILL.md",
@@ -735,11 +735,15 @@
     },
     {
      "file": "skills/setup-pstack/SKILL.md",
-     "quote": "say at the ask that a budget's suffix overrides the session effort in both directions once the effort agents are loaded."
+     "quote": "say at the ask that a budget's suffix overrides the session effort in both directions when the spawn tool takes `effort` or the effort agents are loaded."
     },
     {
      "file": "skills/pstack-harness/references/grok.md",
      "quote": "The spawn takes no effort, so a resolved level runs at the session effort and [role resolution step 5](roles.md#spawn-a-role) reports it."
+    },
+    {
+     "file": "skills/setup-pstack/examples/pstack-models.md",
+     "quote": "## claude-code\nfeature, refactoring: sonnet@medium"
     }
    ],
    "harness_sensitive": false,
@@ -813,16 +817,28 @@
   },
   "claude-effort-applies-via-effort-agents": {
    "check": "live",
-   "claim": "On Claude Code a written @effort applies to a subagent only once the pstack-effort-<level> agents are in the live catalog; before that subagents run at the session effort.",
+   "claim": "On Claude Code a written @effort applies to a subagent through the spawn tool's effort parameter, or through a pstack-effort-<level> agent in the live catalog when the tool has no such parameter; with neither carrier the subagent runs without it.",
    "harness_sensitive": true,
    "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.`; Grade the observed effort of applicable Claude delegates. A Feature record may be compact or full.",
    "owners": [
     "skills/pstack-harness/SKILL.md",
+    "skills/pstack-harness/references/claude-code.md",
+    "skills/pstack-harness/references/named-roles.md",
     "skills/pstack-harness/references/registration.md",
     "skills/pstack-harness/references/subagents/effort-delegate.md",
     "skills/pstack-harness/scripts/subagents.py"
    ],
    "scenario": "feature-run"
+  },
+  "claude-flat-line-beats-shipped-section": {
+   "check": "script",
+   "claim": "On Claude Code a user flat line beats the shipped ## claude-code section, so a file written by an earlier setup run keeps its models and resolves to the effort policy's floor, while a role the user's file leaves unbound takes the shipped section's effort.",
+   "harness_sensitive": false,
+   "owners": [
+    "skills/setup-pstack/scripts/check-models-config.py",
+    "skills/setup-pstack/examples/pstack-models.md",
+    "skills/setup-pstack/references/models-config.md"
+   ]
   },
   "claude-listing-follows-codex-policy": {
    "check": "static",
@@ -5572,15 +5588,6 @@
    ],
    "text": "[`/benchmark-checklist`](../../skills/benchmark-checklist/SKILL.md) asks seven questions and wants evidence from a run for each:"
   },
-  "1a04dbcf5c79": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "claude-effort-applies-via-effort-agents",
-   "sources": [
-    "port"
-   ],
-   "text": "On Claude Code a written effort applies once setup has registered pstack's effort agents."
-  },
   "1a1b38db32ed": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -5617,14 +5624,13 @@
    ],
    "text": "**Correcting the same mistake by hand.** A correction in chat helps one run. `/correct` fixes the repo so no later run repeats it."
   },
-  "1a8bb2d8254d": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "setup-rerun-keeps-changed-roles",
+  "1a7d44ad8ad9": {
+   "class": "context",
+   "file": "07-overnight.md",
    "sources": [
     "port"
    ],
-   "text": "A rerun of `/setup-pstack` keeps any role you changed, whether its model, effort, panel list, alias, or harness section."
+   "text": "On Claude Code, check your permission mode before you leave."
   },
   "1ac6e666f95c": {
    "class": "context",
@@ -7542,6 +7548,14 @@
    ],
    "text": "```text\n/poteto-mode check whether the current client supports resumable uploads. compare the official docs and release notes before we choose it.\n```"
   },
+  "4bbccbce88be": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Interactive sessions start in [auto mode](https://code.claude.com/docs/en/permission-modes), whose classifier blocks a force push, `git reset --hard`, and merging a pull request no human has approved, in subagents too."
+  },
   "4c10623ac386": {
    "class": "context",
    "file": "03-understand.md",
@@ -7758,15 +7772,6 @@
     "port"
    ],
    "text": "It works out what a user touches, how the app launches locally, what can drive it (an existing harness first, otherwise browser and CDP, a PTY, or plain HTTP), what evidence proves behavior, and whether two instances can run side by side."
-  },
-  "543719949e7d": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "port"
-   ],
-   "text": "On Claude Code and Grok Build a role with no written effort runs at your session effort, and on Codex the `## codex` section pins its own."
   },
   "5453f5abe591": {
    "class": "substituted",
@@ -8001,6 +8006,14 @@
     "port"
    ],
    "text": "A skill that checks a property of your code with a model checker, a proof, or another verifier is a formal verification skill, so use [`/create-formal-verification-skill`](../../skills/create-formal-verification-skill/SKILL.md) and [`/maintain-formal-verification-skill`](../../skills/maintain-formal-verification-skill/SKILL.md)."
+  },
+  "5aca202d2617": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port"
+   ],
+   "text": "An approval you type clears a block only when it names the action and its specifics, such as the branch of a force push, and it covers that one action."
   },
   "5b1ba247b639": {
    "class": "promise",
@@ -8389,6 +8402,15 @@
    ],
    "text": "Ask for isolation up front:"
   },
+  "63e199f69510": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "claude-flat-line-beats-shipped-section",
+   "sources": [
+    "port"
+   ],
+   "text": "So on Claude Code those roles keep their models and run at the effort policy's floor, `medium` or `high`, and not at the `xhigh` that the section writes for the hardest roles."
+  },
   "6446cad12faf": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -8602,7 +8624,9 @@
    "file": "01-setup.md",
    "ported_as": [
     "eead1319fd44",
-    "543719949e7d"
+    "f13df52c09ea",
+    "73b6d094eabc",
+    "7368fe56929d"
    ],
    "promise": "budget-labels-set-effort",
    "sources": [
@@ -8988,12 +9012,10 @@
    "text": "```text\ncontinue\n```"
   },
   "71fbd8181c7e": {
-   "class": "substituted",
+   "class": "cursor-only",
    "file": "01-setup.md",
-   "ported_as": [
-    "1a8bb2d8254d"
-   ],
    "promise": "setup-rerun-keeps-changed-roles",
+   "reason": "The port omits this guarantee while setup-rerun-keeps-changed-roles has only a deferred live case.",
    "sources": [
     "upstream"
    ],
@@ -9055,6 +9077,15 @@
    ],
    "text": "The [Research playbook](../../skills/poteto-mode/playbooks/research.md) checks primary sources, versions, and conflicting evidence."
   },
+  "7368fe56929d": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "On Codex the `## codex` section pins its own."
+  },
   "7376b1468875": {
    "class": "context",
    "file": "05-build-and-clean.md",
@@ -9063,6 +9094,15 @@
     "port"
    ],
    "text": "So before review, hand them to fresh eyes:"
+  },
+  "73b6d094eabc": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "On Claude Code the `## claude-code` section pins `medium`, `high`, or `xhigh` by role."
   },
   "73ea518cc68a": {
    "class": "substituted",
@@ -9103,6 +9143,14 @@
     "port"
    ],
    "text": "Changes that didn't help get discarded, not left to ride."
+  },
+  "74e6df630721": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Grok Build skips project skills in a folder it does not trust."
   },
   "750dec6eb607": {
    "class": "context",
@@ -9477,6 +9525,15 @@
    ],
    "text": "The escape hatch lets it stop at a genuine dead end and write up why, which beats eight hours of creative goal reinterpretation."
   },
+  "7f53f9189404": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "claude-effort-applies-via-effort-agents",
+   "sources": [
+    "port"
+   ],
+   "text": "On an older Claude Code it applies once setup has registered pstack's effort agents."
+  },
   "7f5cef2d7c27": {
    "class": "cursor-only",
    "file": "02-poteto-mode.md",
@@ -9728,6 +9785,15 @@
     "upstream"
    ],
    "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) runs `/deslop` on the diff before each commit and applies [`/unslop`](../../skills/unslop/SKILL.md) to the PR description and commit bodies."
+  },
+  "85ed866dd49b": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "claude-flat-line-beats-shipped-section",
+   "sources": [
+    "port"
+   ],
+   "text": "A flat line beats the shipped section."
   },
   "8626c5a5c0eb": {
    "class": "promise",
@@ -10274,6 +10340,14 @@
    ],
    "text": "The agent needs a scripted way to drive your app."
   },
+  "95dc29a1ab4a": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Read the file after the rerun to see what it holds."
+  },
   "962664149230": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -10485,15 +10559,6 @@
     "port"
    ],
    "text": "[`/setup-pstack`](../../skills/setup-pstack/SKILL.md) checks the bundled personas and offers optional native registration for Claude Code or Codex."
-  },
-  "9d40f211b151": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "claude-effort-applies-via-effort-agents",
-   "sources": [
-    "port"
-   ],
-   "text": "Until then subagents run at your session effort."
   },
   "9d93f253961f": {
    "also": [
@@ -11707,6 +11772,15 @@
    ],
    "text": "```text\n/poteto-mode babysit this pr. get it green.\n```"
   },
+  "b7d980a90648": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "claude-effort-applies-via-effort-agents",
+   "sources": [
+    "port"
+   ],
+   "text": "On Claude Code 2.1.292 or later a written effort applies through the spawn tool's own effort parameter."
+  },
   "b7de69594a25": {
    "class": "context",
    "file": "07-overnight.md",
@@ -12545,6 +12619,14 @@
    ],
    "text": "It doesn't load from its description (on Claude Code, once `/setup-pstack` sets the skill listing), so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files."
   },
+  "ceba128ff214": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "A rerun may be needed before a role picks up the new section."
+  },
   "cebef062737c": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -13087,6 +13169,15 @@
    ],
    "text": "To keep `/poteto-mode` on for the whole chat, pick it from the `/` menu with Option+Enter (Mac) or Alt+Enter (Windows) instead of Enter."
   },
+  "dde57968ecd9": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "claude-flat-line-beats-shipped-section",
+   "sources": [
+    "port"
+   ],
+   "text": "If you ran `/setup-pstack` before the `## claude-code` section shipped, your file holds the old shipped table as flat lines."
+  },
   "de22177b43c1": {
    "class": "promise",
    "file": "04-design.md",
@@ -13377,6 +13468,14 @@
    ],
    "text": "[Sequence Work into Verifiable Units](../../skills/principle-sequence-verifiable-units/SKILL.md) ends each small unit in a check before starting the next."
   },
+  "e32504e027c5": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port"
+   ],
+   "text": "After 3 blocks in a row or 20 in total, auto mode goes back to prompting, and nobody answers a prompt overnight."
+  },
   "e39a2b0963f1": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -13499,6 +13598,14 @@
    ],
    "text": "```text\n/poteto-mode check on pr 123. anything outstanding?\n```"
   },
+  "e6c57e856f74": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port"
+   ],
+   "text": "For a queue you want merged, add the pushes and merges you accept to `autoMode.allow` in your settings first, or pick Autopilot-stack and land the PRs yourself."
+  },
   "e6fed9f2f6fe": {
    "class": "promise",
    "file": "09-make-it-yours.md",
@@ -13530,6 +13637,14 @@
     "port"
    ],
    "text": "It reconstructs the branch state and decisions, names the resume point, and verifies inherited claims against the original goal instead of re-deriving everything from scratch."
+  },
+  "e748654c44b7": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Run `/setup-pstack` again to refresh the file."
   },
   "e7dfa803dbe1": {
    "class": "promise",
@@ -13988,6 +14103,15 @@
     "port"
    ],
    "text": "```text\n/interrogate the whole branch, but skeptically. don't change anything yet. no nitpicks unless it's an actual bug or regression in behavior.\n```"
+  },
+  "f13df52c09ea": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "budget-labels-set-effort",
+   "sources": [
+    "port"
+   ],
+   "text": "On Grok Build a role with no written effort runs at your session effort."
   },
   "f15e296b50d6": {
    "class": "promise",

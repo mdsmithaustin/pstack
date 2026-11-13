@@ -56,7 +56,7 @@ Every pstack spawn runs a role from the models config, such as `feature` or `how
 5. **Report execution without dropping an arm.** Apply this step to every spawn, including a `trail reviewer` that normally resolves to `inherit-parent` without a fallback or `step` marker.
    - If the spawn rejects a model, or a spawned arm fails on model availability such as exhausted usage credits, omit the model, let the arm inherit the session model, and report the substitution.
    - Label the verdict and reply `same-model` when the observed reviewer and work models match. When either identity is unknown, say the review may be same-model. For explicitly requested models, call the Skill tool with `arena`, then follow its [required-arm rule](../../arena/SKILL.md#required-arms).
-   - If no field or agent can carry the effort, the effort alone becomes `inherit-parent`. Keep the model and the arm. Say in the reply which role's effort was inherited and why, such as "`how explainer` ran at the session effort because `pstack-effort-xhigh` is not loaded. Run `/setup-pstack` to register it."
+   - If no field or agent can carry the effort, the effort alone becomes `inherit-parent`. Keep the model and the arm. Say in the reply which role's effort was inherited and why, such as "`how explainer` ran at the session effort because the spawn tool takes no effort and `pstack-effort-xhigh` is not loaded. Run `/setup-pstack` to register it."
    - When a persona ran as a briefing in an effort agent's prompt instead of under its native name, say that too.
    - Delegates return resolver notes and actual or inherited model and effort observations to the parent, including substitutions, limitations, and unknown values. The parent relays them in its reply.
 

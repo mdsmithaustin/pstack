@@ -41,6 +41,7 @@ class Arm(NamedTuple):
     model: str
     expected_effort: str
     prompt_prefix: str = ""
+    effort_parameter: str = ""
 
 
 def arm_prompt(arm: Arm, task: str) -> str:
@@ -53,8 +54,9 @@ def spawn_case(project: Path, session_effort: str, arms: list[Arm]) -> dict:
     session_id = str(uuid.uuid4())
     task = "Reply with the single word OK and nothing else."
     instructions = "; ".join(
-        f"one with subagent_type {arm.subagent_type!r}, model {arm.model!r}, description '[{arm.tag}] probe', "
-        f"prompt {arm_prompt(arm, task)!r}"
+        f"one with subagent_type {arm.subagent_type!r}, model {arm.model!r}, "
+        + (f"effort {arm.effort_parameter!r}, " if arm.effort_parameter else "no effort parameter, ")
+        + f"description '[{arm.tag}] probe', prompt {arm_prompt(arm, task)!r}"
         for arm in arms
     )
     prompt = (
@@ -116,6 +118,11 @@ def build_cases(persona_briefing: str) -> list[tuple[str, str, list[Arm]]]:
         ]),
         ("persona-combination", "high", [
             Arm("persona", "pstack-effort-xhigh", "sonnet", "xhigh", persona_briefing),
+        ]),
+        ("per-call-effort", "high", [
+            Arm("percall", "general-purpose", "sonnet", "low", effort_parameter="low"),
+            Arm("percall-persona", "poteto-agent", "sonnet", "xhigh", effort_parameter="xhigh"),
+            Arm("percall-over-agent", "pstack-effort-high", "sonnet", "low", effort_parameter="low"),
         ]),
     ]
 
