@@ -6,23 +6,30 @@ PORTING.md records the reference suites used to choose the limit. Lines inside a
 table rows, block quotes, and headings are not instructions and are not counted.
 """
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 LIMIT = 150
-SKIPPED_LEADS = ("|", "#", ">")
+SKIPPED_LEADS = ("|", ">")
+FENCES = ("```", "~~~")
+HEADING = re.compile(r"#{1,6}( |$)")
 
 
 def long_lines(text, limit=LIMIT):
     """(line number, word count) for each counted line over the limit."""
-    found, fenced = [], False
+    found, fence = [], None
     for number, line in enumerate(text.split("\n"), 1):
         lead = line.lstrip()
-        if lead.startswith("```"):
-            fenced = not fenced
+        if fence is None and lead.startswith(FENCES):
+            fence = lead[:3]
             continue
-        if fenced or lead.startswith(SKIPPED_LEADS):
+        if fence is not None:
+            if lead.startswith(fence):
+                fence = None
+            continue
+        if lead.startswith(SKIPPED_LEADS) or HEADING.match(lead):
             continue
         words = len(line.split())
         if words > limit:

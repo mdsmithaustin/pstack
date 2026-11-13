@@ -26,6 +26,14 @@ class LongLines(unittest.TestCase):
     def test_a_line_after_a_closed_fence_counts_again(self):
         self.assertEqual(check.long_lines("```\ncode\n```\n" + "word " * 151), [(4, 151)])
 
+    def test_a_tilde_fence_is_code_and_only_its_own_marker_closes_it(self):
+        long = "word " * 151
+        self.assertEqual(check.long_lines(f"~~~\n{long}\n```\n{long}\n~~~\n{long}"), [(6, 151)])
+
+    def test_a_line_that_starts_with_an_issue_number_is_not_a_heading(self):
+        long = "word " * 151
+        self.assertEqual(check.long_lines(f"#123 {long}\n####### {long}\n###### {long}"), [(1, 152), (2, 152)])
+
     def test_the_limit_is_a_parameter(self):
         self.assertEqual(check.long_lines("one two three", limit=2), [(1, 3)])
 
