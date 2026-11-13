@@ -233,7 +233,7 @@ help:              /poteto-help which skill should i use to review this branch?
 
 Two named helpers do delegated work. You rarely call them yourself.
 
-- [`poteto-agent`](./agents/poteto-agent.md) does one unit of a playbook step for the main conversation, which runs `/poteto-mode` and owns the plan. It reads `poteto-mode` first, pushes a branch or opens a PR only when its brief says to, and is never resumed across phases.
+- [`poteto-agent`](./agents/poteto-agent.md) does one unit of a playbook step for the main conversation, which runs `/poteto-mode` and owns the plan. Its [persona](./agents/poteto-agent.md) defines what it reads for each role. It pushes a branch or opens a PR only when its brief says to, and is never resumed across phases.
 - [Comment Sicko](./agents/comment-sicko.md) reviews comments, usually through [`/no-comments`](./skills/no-comments/SKILL.md). It edits scoped comments and reports code that should be refactored. It does not write application code.
 
 Both ship inside the installed `pstack-harness` skill, so they work without registration. [`/setup-pstack`](./skills/setup-pstack/SKILL.md) can also register them as native agents on Claude Code and Codex. The [persona contract](./skills/pstack-harness/references/named-roles.md) says which form a spawn uses, and the [registration reference](./skills/pstack-harness/references/registration.md) covers the files and their states.
