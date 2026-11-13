@@ -476,6 +476,17 @@ class ModelsResolverPromises(ResolverSandbox):
         (self.home / ".agents" / "pstack-models.md").unlink()
         self.assertEqual(self.resolve("claude-code", "hardest tasks")[0]["source"], "skill default ## claude-code")
 
+    def test_claude_flat_line_beats_shipped_section(self):
+        self.write_user("feature, refactoring: opus\n")
+        unbound = self.resolve("claude-code", "hardest tasks", "arena runners")
+        self.assertEqual([a["source"] for a in unbound], ["skill default ## claude-code"] * 4)
+        self.assertEqual(unbound[0]["effort"], "xhigh")
+        self.assertEqual([a["effort"] for a in unbound[1:]], ["xhigh", "high", "high"])
+        self.write_user("hardest tasks: opus\narena runners: fable, opus, sonnet\n")
+        flat = self.resolve("claude-code", "hardest tasks", "arena runners")
+        self.assertEqual([a["source"] for a in flat], ["user flat"] * 4)
+        self.assertEqual([a["effort"] for a in flat], ["high", "medium", "medium", "medium"])
+
     def test_resolver_resolves_roles(self):
         self.write_workspace("feature: haiku\n")
         self.write_user("feature: opus\nbug-fix: opus@xhigh\nswarm workers: sonnet\n")

@@ -830,6 +830,16 @@
    ],
    "scenario": "feature-run"
   },
+  "claude-flat-line-beats-shipped-section": {
+   "check": "script",
+   "claim": "On Claude Code a user flat line beats the shipped ## claude-code section, so a file written by an earlier setup run keeps its models and resolves to the effort policy's floor, while a role the user's file leaves unbound takes the shipped section's effort.",
+   "harness_sensitive": false,
+   "owners": [
+    "skills/setup-pstack/scripts/check-models-config.py",
+    "skills/setup-pstack/examples/pstack-models.md",
+    "skills/setup-pstack/references/models-config.md"
+   ]
+  },
   "claude-listing-follows-codex-policy": {
    "check": "static",
    "claim": "setup-pstack's listing step gives Claude Code exactly the skills whose agents/openai.yaml sets allow_implicit_invocation: false, the gate Codex honors as installed, and no skill under skills/ sets disable-model-invocation.",
@@ -8401,6 +8411,15 @@
    ],
    "text": "Ask for isolation up front:"
   },
+  "63e199f69510": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "claude-flat-line-beats-shipped-section",
+   "sources": [
+    "port"
+   ],
+   "text": "So on Claude Code those roles keep their models and run at the effort policy's floor, `medium` or `high`, and not at the `xhigh` that the section writes for the hardest roles."
+  },
   "6446cad12faf": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -9778,6 +9797,15 @@
    ],
    "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) runs `/deslop` on the diff before each commit and applies [`/unslop`](../../skills/unslop/SKILL.md) to the PR description and commit bodies."
   },
+  "85ed866dd49b": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "claude-flat-line-beats-shipped-section",
+   "sources": [
+    "port"
+   ],
+   "text": "A flat line beats the shipped section."
+  },
   "8626c5a5c0eb": {
    "class": "promise",
    "file": "04-design.md",
@@ -10322,6 +10350,14 @@
     "port"
    ],
    "text": "The agent needs a scripted way to drive your app."
+  },
+  "95dc29a1ab4a": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Read the file after the rerun to see what it holds."
   },
   "962664149230": {
    "class": "context",
@@ -12594,6 +12630,14 @@
    ],
    "text": "It doesn't load from its description (on Claude Code, once `/setup-pstack` sets the skill listing), so type `/typescript-best-practices` when a task touches `.ts` or `.tsx` files."
   },
+  "ceba128ff214": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "A rerun may be needed before a role picks up the new section."
+  },
   "cebef062737c": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -13136,6 +13180,15 @@
    ],
    "text": "To keep `/poteto-mode` on for the whole chat, pick it from the `/` menu with Option+Enter (Mac) or Alt+Enter (Windows) instead of Enter."
   },
+  "dde57968ecd9": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "claude-flat-line-beats-shipped-section",
+   "sources": [
+    "port"
+   ],
+   "text": "If you ran `/setup-pstack` before the `## claude-code` section shipped, your file holds the old shipped table as flat lines."
+  },
   "de22177b43c1": {
    "class": "promise",
    "file": "04-design.md",
@@ -13595,6 +13648,14 @@
     "port"
    ],
    "text": "It reconstructs the branch state and decisions, names the resume point, and verifies inherited claims against the original goal instead of re-deriving everything from scratch."
+  },
+  "e748654c44b7": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Run `/setup-pstack` again to refresh the file."
   },
   "e7dfa803dbe1": {
    "class": "promise",
