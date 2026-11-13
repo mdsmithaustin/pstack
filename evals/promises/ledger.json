@@ -9128,6 +9128,14 @@
    ],
    "text": "Changes that didn't help get discarded, not left to ride."
   },
+  "74e6df630721": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Grok Build skips project skills in a folder it does not trust."
+  },
   "750dec6eb607": {
    "class": "context",
    "file": "02-poteto-mode.md",
