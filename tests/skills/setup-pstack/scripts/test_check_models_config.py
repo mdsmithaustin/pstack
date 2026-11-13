@@ -142,7 +142,7 @@ class ErrorRules(unittest.TestCase):
         self.assertEqual(findings, [(2, "notice", "gpt-6-sol@ultra pins an expensive tier")])
 
     def test_none_is_refused_on_the_releases_that_reject_it(self):
-        for model in ("gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"):
+        for model in ("gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"):
             with self.subTest(model=model):
                 _, findings = cmc.parse(f"bug-fix: {model}@none\n")
                 self.assertEqual(
@@ -174,14 +174,14 @@ class ClaudeCodeSectionEfforts(unittest.TestCase):
         text = "default: auto@none\n"
         sections, findings = cmc.parse(text)
         self.assertEqual(errors_of(findings), [])
-        self.assertTrue(any(n[2] == "Claude Code cannot use none or ultra, so it runs `default` at the session effort" for n in notices_of(findings)))
+        self.assertTrue(any(n[2] == "Claude Code cannot use none or ultra, so `default` falls back to the effort policy there" for n in notices_of(findings)))
         self.assertEqual(sections[""]["default"], [("auto", "none")])
 
     def test_flat_none_overridden_by_claude_code_section_is_not_a_notice(self):
         text = "default: auto@none\n\n## claude-code\ndefault: auto@high\n"
         sections, findings = cmc.parse(text)
         self.assertEqual(errors_of(findings), [])
-        self.assertFalse(any(n[2] == "Claude Code cannot use none or ultra, so it runs `default` at the session effort" for n in notices_of(findings)))
+        self.assertFalse(any(n[2] == "Claude Code cannot use none or ultra, so `default` falls back to the effort policy there" for n in notices_of(findings)))
         self.assertEqual(sections[""]["default"], [("auto", "none")])
         self.assertEqual(sections["claude-code"]["default"], [("auto", "high")])
 
@@ -191,8 +191,8 @@ class ClaudeCodeSectionEfforts(unittest.TestCase):
         self.assertEqual(errors_of(findings), [])
         notices = [n[2] for n in notices_of(findings)]
         self.assertEqual(len(notices), 2)
-        self.assertIn("Claude Code cannot use none or ultra, so it runs `default` at the session effort", notices)
-        self.assertIn("Claude Code cannot use none or ultra, so it runs `trail reviewer` at the session effort", notices)
+        self.assertIn("Claude Code cannot use none or ultra, so `default` falls back to the effort policy there", notices)
+        self.assertIn("Claude Code cannot use none or ultra, so `trail reviewer` falls back to the effort policy there", notices)
 
     def test_grok_section_rejects_ultra(self):
         text = "## grok\ntrail reviewer: grok-4.6@ultra\n"
@@ -401,7 +401,7 @@ class Resolve(ResolveRunner, unittest.TestCase):
                 arm("architect runners", "opus", "xhigh", "user flat", 2),
                 arm("architect runners", "sonnet", "high", "user flat", 3),
                 arm("default", "inherit-parent", "inherit-parent", "user flat"),
-                arm("swarm workers", "sonnet", "inherit-parent", "skill default"),
+                arm("swarm workers", "sonnet", "high", "skill default ## claude-code"),
             ],
         )
 
@@ -411,7 +411,7 @@ class Resolve(ResolveRunner, unittest.TestCase):
             return arm
 
         self.assertEqual(routine("claude-code"), {
-            "role": "routine", "arm": 1, "model": "sonnet", "effort": "medium", "source": "skill default",
+            "role": "routine", "arm": 1, "model": "sonnet", "effort": "medium", "source": "skill default ## claude-code",
         })
         self.assertEqual(routine("codex"), {
             "role": "routine", "arm": 1, "model": "gpt-6-luna", "effort": "medium", "source": "skill default ## codex",
@@ -446,7 +446,7 @@ class Resolve(ResolveRunner, unittest.TestCase):
     def test_entry_is_atomic_across_layers(self):
         self.assertEqual(
             self.resolve("claude-code", "feature", user=USER_FILE, workspace="feature, refactoring: opus\n"),
-            [{"role": "feature", "arm": 1, "model": "opus", "effort": "inherit-parent", "source": "workspace flat"}],
+            [{"role": "feature", "arm": 1, "model": "opus", "effort": "medium", "source": "workspace flat"}],
         )
 
     def test_user_section_beats_workspace_flat(self):
@@ -493,11 +493,11 @@ class Resolve(ResolveRunner, unittest.TestCase):
             },
         )
 
-    def test_unusable_effort_inherits_but_keeps_model(self):
+    def test_unusable_effort_takes_the_claude_floor_and_keeps_the_model(self):
         layers = [Layer("user flat", {"feature": [("sonnet", "none")]})]
         self.assertEqual(
             [arm.to_json() for arm in cmc.resolve_role("feature", "claude-code", layers)],
-            ['{"role": "feature", "arm": 1, "model": "sonnet", "effort": "inherit-parent",'
+            ['{"role": "feature", "arm": 1, "model": "sonnet", "effort": "medium",'
              ' "source": "user flat", "notes": ["effort none is not usable on claude-code"]}'],
         )
 
@@ -541,8 +541,8 @@ class Resolve(ResolveRunner, unittest.TestCase):
         self.assertEqual(
             arms,
             [
-                {"role": "arena runners", "arm": 1, "model": "opus", "effort": "inherit-parent", "source": "workspace flat"},
-                {"role": "arena runners", "arm": 2, "model": "sonnet", "effort": "inherit-parent", "source": "workspace flat"},
+                {"role": "arena runners", "arm": 1, "model": "opus", "effort": "medium", "source": "workspace flat"},
+                {"role": "arena runners", "arm": 2, "model": "sonnet", "effort": "medium", "source": "workspace flat"},
             ],
         )
 
@@ -567,7 +567,8 @@ class Resolve(ResolveRunner, unittest.TestCase):
             if arm["role"] not in roles:
                 roles.append(arm["role"])
         self.assertEqual(roles, sorted(cmc.ROLES))
-        self.assertEqual({arm["source"] for arm in arms}, {"skill default"})
+        self.assertEqual({arm["source"] for arm in arms}, {"skill default", "skill default ## claude-code"})
+        self.assertEqual([arm["role"] for arm in arms if arm["source"] == "skill default"], ["default"])
         self.assertEqual(len([a for a in arms if a["role"] == "arena runners"]), 3)
 
     def test_codex_reads_the_shipped_default_section_before_its_flat_lines(self):
@@ -588,7 +589,7 @@ class Resolve(ResolveRunner, unittest.TestCase):
         [feature] = self.resolve("claude-code", "feature")
         self.assertEqual(
             feature,
-            {"role": "feature", "arm": 1, "model": "sonnet", "effort": "inherit-parent", "source": "skill default"},
+            {"role": "feature", "arm": 1, "model": "sonnet", "effort": "medium", "source": "skill default ## claude-code"},
         )
 
 
@@ -873,6 +874,23 @@ class TrailReviewerStep(ReviewerRunner, unittest.TestCase):
             },
         )
 
+    def test_terra_work_steps_up_to_sol_and_never_down_to_luna(self):
+        catalog = catalog_json("gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna")
+        user = "## codex\ntrail reviewer: gpt-6.1-terra@high\nfeature: gpt-6.1-sol\nroutine: gpt-6-luna\n"
+        self.assertEqual(
+            self.reviewer("codex", "gpt-6.1-terra@high", user=user, codex_catalog=catalog),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "gpt-6.1-sol", "effort": "high", "source": "user ## codex",
+                "notes": ["trail reviewer matched work model gpt-6.1-terra; stepped up to gpt-6.1-sol"], "step": "up",
+            },
+        )
+
+    def test_sol_work_without_astra_steps_down_to_terra_before_luna(self):
+        catalog = catalog_json("gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna")
+        user = "## codex\ntrail reviewer: gpt-6.1-sol@high\nfeature: gpt-6.1-terra\nroutine: gpt-6-luna\n"
+        arm = self.reviewer("codex", "gpt-6.1-sol@high", user=user, codex_catalog=catalog)
+        self.assertEqual((arm["model"], arm["step"]), ("gpt-6.1-terra", "down"))
+
     def test_claude_steps_down_when_the_config_never_names_a_higher_tier(self):
         self.assertEqual(
             self.reviewer("claude-code", "opus@xhigh"),
@@ -930,7 +948,7 @@ class TrailReviewerStep(ReviewerRunner, unittest.TestCase):
         self.assertEqual(
             self.reviewer("claude-code", "opus@xhigh", user=None),
             {
-                "role": "trail reviewer", "arm": 1, "model": "fable", "effort": "high", "source": "skill default",
+                "role": "trail reviewer", "arm": 1, "model": "fable", "effort": "high", "source": "skill default ## claude-code",
                 "notes": ["trail reviewer matched work model opus; stepped up to fable"], "step": "up",
             },
         )
@@ -993,9 +1011,9 @@ class TrailReviewerStep(ReviewerRunner, unittest.TestCase):
         arm = self.reviewer("claude-code", "opus@inherit-parent", user=user)
         self.assertEqual((arm["model"], arm["effort"]), ("sonnet", "high"))
 
-    def test_no_effort_anywhere_keeps_the_session_effort(self):
+    def test_a_work_model_without_an_effort_steps_from_the_shipped_reviewer_effort(self):
         arm = self.reviewer("claude-code", "opus", user=None)
-        self.assertEqual((arm["model"], arm["effort"], arm["step"]), ("fable", cmc.INHERIT, "up"))
+        self.assertEqual((arm["model"], arm["effort"], arm["step"]), ("fable", "high", "up"))
 
     def test_a_claude_alias_work_model_translates_on_codex(self):
         user = "## codex\ntrail reviewer: gpt-6-sol@high\nswarm workers: gpt-6-astra@high\n"
@@ -1551,7 +1569,7 @@ class ShippedDefaultLeak(ResolveRunner, unittest.TestCase):
 
     def test_a_role_the_partial_config_omits_names_itself_and_the_fix(self):
         [arm] = self.resolve("claude-code", "hardest tasks", user="feature, refactoring: sonnet\n")
-        self.assertEqual(arm["source"], "skill default")
+        self.assertEqual(arm["source"], "skill default ## claude-code")
         self.assertEqual(
             arm["notes"],
             [

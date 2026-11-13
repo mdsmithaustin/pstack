@@ -783,10 +783,12 @@ def spawns(events, session_dir, evidence):
         given = event["input"]
         meta, meta_path, relative = metas.get(event["id"], ({}, None, None))
         agent_type = given.get("subagent_type") or meta.get("agentType")
-        effort = agent_type.removeprefix("pstack-effort-") if agent_type and agent_type.startswith("pstack-effort-") else None
+        agent_effort = agent_type.removeprefix("pstack-effort-") if agent_type and agent_type.startswith("pstack-effort-") else None
+        effort = given.get("effort") or agent_effort
+        carrier = "parameter" if given.get("effort") else "agent" if agent_effort else None
         prompt = given.get("prompt", "")
-        persona = agent_type if agent_type and not effort else None
-        if effort:
+        persona = agent_type if agent_type and not agent_effort else None
+        if agent_effort:
             persona = next((p for p in ("poteto-agent", "comment-sicko") if p in prompt[:2000]), None)
         transcript = Path(str(meta_path).removesuffix(".meta.json") + ".jsonl") if meta_path else None
         child_path = Path(str(relative).removesuffix(".meta.json") + ".jsonl") if relative else None
@@ -794,7 +796,7 @@ def spawns(events, session_dir, evidence):
         reply = first_reply(child) if child else None
         line = PERSONA_LINE.search(reply or "")
         found.append({"seq": event["seq"], "turn": event["turn"], "tool": event["name"], "subagent_type": agent_type, "persona": persona,
-                      "model": given.get("model") or meta.get("model"), "effort": effort, "prompt_head": prompt[:300],
+                      "model": given.get("model") or meta.get("model"), "effort": effort, "x_effort_carrier": carrier, "prompt_head": prompt[:300],
                       "transcript": str(transcript) if transcript else None,
                       "observed": observed(child) if child else None,
                       "x_child_first_reply": reply[:200] if reply else None,
