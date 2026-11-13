@@ -81,6 +81,8 @@ The contract above drives one task to one finish condition. Some nights hold mor
 
 On a base branch with a merge queue, owners stop at merge-ready, and the final reply lists those PRs as open operator gates.
 
+On Claude Code, check your permission mode before you leave. Interactive sessions start in [auto mode](https://code.claude.com/docs/en/permission-modes), whose classifier blocks a force push, `git reset --hard`, and merging a pull request no human has approved, in subagents too. An approval you type clears a block only when it names the action and its specifics, such as the branch of a force push, and it covers that one action. After 3 blocks in a row or 20 in total, auto mode goes back to prompting, and nobody answers a prompt overnight. For a queue you want merged, add the pushes and merges you accept to `autoMode.allow` in your settings first, or pick Autopilot-stack and land the PRs yourself.
+
 [Autopilot-stack](../../skills/poteto-mode/playbooks/autopilot-stack.md) is Autopilot-full without the merge. You wake up to verified PRs, each with its verdict, and you review and land them yourself. A PR stacks only on a PR it builds on. Pick it over Autopilot-full when you want your own eyes on the work before anything merges:
 
 ```text

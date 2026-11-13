@@ -5617,6 +5617,14 @@
    ],
    "text": "**Correcting the same mistake by hand.** A correction in chat helps one run. `/correct` fixes the repo so no later run repeats it."
   },
+  "1a7d44ad8ad9": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port"
+   ],
+   "text": "On Claude Code, check your permission mode before you leave."
+  },
   "1a8bb2d8254d": {
    "class": "promise",
    "file": "01-setup.md",
@@ -7542,6 +7550,14 @@
    ],
    "text": "```text\n/poteto-mode check whether the current client supports resumable uploads. compare the official docs and release notes before we choose it.\n```"
   },
+  "4bbccbce88be": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Interactive sessions start in [auto mode](https://code.claude.com/docs/en/permission-modes), whose classifier blocks a force push, `git reset --hard`, and merging a pull request no human has approved, in subagents too."
+  },
   "4c10623ac386": {
    "class": "context",
    "file": "03-understand.md",
@@ -8001,6 +8017,14 @@
     "port"
    ],
    "text": "A skill that checks a property of your code with a model checker, a proof, or another verifier is a formal verification skill, so use [`/create-formal-verification-skill`](../../skills/create-formal-verification-skill/SKILL.md) and [`/maintain-formal-verification-skill`](../../skills/maintain-formal-verification-skill/SKILL.md)."
+  },
+  "5aca202d2617": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port"
+   ],
+   "text": "An approval you type clears a block only when it names the action and its specifics, such as the branch of a force push, and it covers that one action."
   },
   "5b1ba247b639": {
    "class": "promise",
@@ -9103,6 +9127,14 @@
     "port"
    ],
    "text": "Changes that didn't help get discarded, not left to ride."
+  },
+  "74e6df630721": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "Grok Build skips project skills in a folder it does not trust."
   },
   "750dec6eb607": {
    "class": "context",
@@ -13377,6 +13409,14 @@
    ],
    "text": "[Sequence Work into Verifiable Units](../../skills/principle-sequence-verifiable-units/SKILL.md) ends each small unit in a check before starting the next."
   },
+  "e32504e027c5": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port"
+   ],
+   "text": "After 3 blocks in a row or 20 in total, auto mode goes back to prompting, and nobody answers a prompt overnight."
+  },
   "e39a2b0963f1": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -13498,6 +13538,14 @@
     "port"
    ],
    "text": "```text\n/poteto-mode check on pr 123. anything outstanding?\n```"
+  },
+  "e6c57e856f74": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port"
+   ],
+   "text": "For a queue you want merged, add the pushes and merges you accept to `autoMode.allow` in your settings first, or pick Autopilot-stack and land the PRs yourself."
   },
   "e6fed9f2f6fe": {
    "class": "promise",

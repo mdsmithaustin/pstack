@@ -21,3 +21,7 @@ Only the live catalog proves an agent is loaded. A file on disk does not. A dele
 `Task` tool (custom agents from `.claude/agents/` spawn by name); `model` takes short aliases
 
 no per-call field; a `pstack-effort-<level>` agent type carries it (see the [effort table above](#claude-code-adapter)). An `inherit-parent` effort, or a session whose catalog lacks the agent, runs at the session effort (`--effort`, `effortLevel`)
+
+## Writer isolation
+
+Per the Claude Code worktree docs read on 2026-11-12, a subagent's `isolation: worktree` branches from the repository's default branch unless the `worktree.baseRef` setting is `head`. So whenever a writer must start from any other commit, pushed or not, such as your branch or a parent PR's branch, make its worktree with `git worktree add` at the commit its brief names.
