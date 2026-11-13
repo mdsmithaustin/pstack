@@ -34,7 +34,8 @@ An arm or exact model requested for this task remains an obligation. If it canno
 After all Phase B candidates complete, choose one arm of the `arena cross-judge pool` role. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section to resolve it. Its default pool is `fable`, `opus`, `sonnet`.
 - Spawn one read-only judge subagent. The judge never runs on the parent's model.
 - Try the pool's entries in pool order, first those from a model family other than the parent's, then those on a different capability tier of the parent's family. An `auto` or `inherit-parent` entry is the parent model, so it never judges. An arm that **Spawn a role** moves onto the session model after a rejection is the parent model too, so move to the next entry.
-- If no entry runs on another model, skip the judge, pick the base alone in Phase D, and say so. If you do not know the parent's model, try the pool's entries in pool order and say that the model check did not run.
+- If no entry runs on another model, skip the judge, pick the base alone in Phase D, and say so.
+- If you do not know the parent's model, try the pool's entries in pool order and say that the model check did not run.
 - The judge sees the rubric and the candidates by path label, scores each criterion, and recommends a base with rationale. It runs in parallel with your reading in Phase D.
 
 ## Phase D: Pick a base

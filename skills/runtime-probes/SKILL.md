@@ -19,7 +19,8 @@ Name the scope, the surface, and the stop predicate, in that order.
 
 **Stop predicate.** Bound execution before it starts. Open-ended live exploration needs a task- or project-supplied budget and consequence floor. Report those two limits separately, preserving supplied values and naming either one that is absent.
 - A caller-supplied finite action list is already bounded when its invocation count and termination condition or timeout are explicit. Never treat probes you selected or their count as a task-supplied budget, invocation limit, or finite authorization; a plan cannot supply its own execution limits.
-- If an executable run is not bounded, stop and ask for the missing limit instead of inventing one or substituting different work. A plan for an unavailable runtime may proceed, but it must say which execution limits are still absent.
+- If an executable run is not bounded, stop and ask for the missing limit instead of inventing one or substituting different work.
+- A plan for an unavailable runtime may proceed, but it must say which execution limits are still absent.
 - The budget caps the search; the consequence floor defines which effects merit continued investigation and promotion. When a loop-governance suite is installed, hand it the outer loop and keep this skill as the method that loop runs.
 
 Keep one runtime-probes-owned record outside the tree, with one row per probe. Each row names the entry point, category, probe, status, and either its observation and evidence IDs or the reason it did not run. A completed invocation needs its own evidence ID; a count is not evidence. If writes are forbidden, keep the same facts in the reply instead of creating the file. Call the Skill tool with `show-me-your-work` separately for its decision log.

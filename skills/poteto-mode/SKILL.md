@@ -32,7 +32,9 @@ The plan is not the worklist. Call the Skill tool with `pstack-harness` to choos
 The endpoint the user or host states governs. Without one, the plan prints the default.
 - Up to that endpoint, run the commit, push, and PR steps without being asked. Each preserve failure needs a code fix or the playbook's allowed reason before the commit, per [preservation modes](references/delegation.md#preservation-modes). In an existing repository, commit on a branch off trunk. Never commit credential files such as `.env`, or the user's own notes and data they did not ask to version.
 - Skip a step only where its own text allows it, the user says no, it lies past the endpoint, or the project lacks what it needs, such as a git remote, and keep it in the list with a one-line `skipped: <reason>`. The reason says why the outcome does not apply, never what the route costs. A skip waives only the actions its reason rules out.
-- When the budget trips, change the approach. Another review pass needs a named unresolved concern. Principles and Autonomy govern design and scope.
+- When the budget trips, change the approach.
+- Another review pass needs a named unresolved concern.
+- Principles and Autonomy govern design and scope.
 
 For a large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, call the Skill tool with `figure-it-out` even when a narrower playbook like Feature fits. Call the Skill tool with `figure-it-out` whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead.
 
