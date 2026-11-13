@@ -7,7 +7,7 @@ This repository is an independent community port. It is not affiliated with, mai
 For this port's agreed goals, evidence standards, and remaining measurement gaps,
 see the [suite outcomes and evaluation contract](./evals/framework.md).
 
-The introduction below is reproduced from upstream in Poteto's voice. Further down, a section written in lowercase first person is also hers. Sentence-case sections are this port's.
+The introduction below is reproduced from upstream in Poteto's voice. Her other first-person sections, such as "just use `/poteto-mode`" and "examples", keep her wording. Sections that explain what this port changes are this port's.
 
 i'm [poteto](https://x.com/poteto). i'm not a president or ceo, but i've worked with millions of lines of code at Meta, Netflix, and Cursor. i'm also on the react core team where i help build and maintain react compiler.
 
@@ -26,11 +26,11 @@ fork it. improve it. make it yours. PRs are welcome!
 Upstream pstack is a Cursor plugin. This port keeps Poteto's workflows and goes further in six places. [PORTING.md](./PORTING.md) records every change.
 
 - **Four CLIs from one install.** The suite runs in Claude Code, Codex, Hermes, and Grok Build. [`/pstack-harness`](./skills/pstack-harness/SKILL.md) maps each workflow step (spawn, wait, ask, track, loop) to the CLI you are in. One [models config](#make-it-yours) sets a model and a reasoning effort for each role, with a section for each CLI.
-- **Six skills that upstream pstack does not ship.** [`/deslop`](./skills/deslop/SKILL.md), [`/pr-recap`](./skills/pr-recap/SKILL.md), [`/documentation-impact`](./skills/documentation-impact/SKILL.md), [`/verify-commands`](./skills/verify-commands/SKILL.md), [`/spec-probes`](./skills/spec-probes/SKILL.md), and [`/runtime-probes`](./skills/runtime-probes/SKILL.md).
+- **Besides `/pstack-harness`, six skills that upstream pstack does not ship.** [`/deslop`](./skills/deslop/SKILL.md), [`/pr-recap`](./skills/pr-recap/SKILL.md), [`/documentation-impact`](./skills/documentation-impact/SKILL.md), [`/verify-commands`](./skills/verify-commands/SKILL.md), [`/spec-probes`](./skills/spec-probes/SKILL.md), and [`/runtime-probes`](./skills/runtime-probes/SKILL.md).
 - **Two more playbooks.** [Research](./skills/poteto-mode/playbooks/research.md) gathers outside evidence for a decision. [Code review](./skills/poteto-mode/playbooks/code-review.md) reviews someone else's branch without editing it.
 - **Routes sized to risk.** Bug fix, feature, refactoring, and perf work record five risk facts, and a [plan script](./skills/poteto-mode/scripts/plan.py) picks a lightweight, standard, or intensive [route](./skills/poteto-mode/references/routes.md). The same facts give the same route on every CLI.
-- **Stricter shipping.** A [PR watcher](./skills/poteto-mode/scripts/watch-pr/README.md) handles any review bot and PRs that have no CI. Merges go through a merge gate, and a merge always needs its own [authorization](./skills/poteto-mode/references/authorization.md).
-- **Promises that are checked.** Each sentence in the [guide](./docs/guide/README.md) that promises a behavior is tracked in a [ledger](./evals/promises/README.md) and tied to a static, install, or live check. The [evaluation contract](./evals/framework.md) says what is still unmeasured.
+- **Stricter shipping.** A PR watcher, described in the [babysit](./skills/poteto-mode/playbooks/babysit.md) and [shipping](./skills/poteto-mode/playbooks/shipping.md) playbooks, handles any review bot and PRs that have no CI. Merges go through a merge gate, and a merge always needs its own [authorization](./skills/poteto-mode/references/routes.md#endpoint).
+- **Promises that are checked.** Each sentence in the [guide](./docs/guide/README.md) that promises a behavior is tracked in a [ledger](./evals/promises/README.md) and tied to a static, script, install, or live check. The [evaluation contract](./evals/framework.md) says what is still unmeasured.
 
 ## install
 
@@ -122,7 +122,7 @@ the mode's [Playbooks section](./skills/poteto-mode/SKILL.md#playbooks) also own
 
 ## skills
 
-[`/poteto-mode`](./skills/poteto-mode/SKILL.md) runs most of these for you when a step needs them (`how`, `why`, `architect`, `arena`, `swarm`, `interrogate`, `deslop`, `unslop`, `no-comments`, `technical-writing`, `poteto-tdd`, and the principles). the table below is for when you want one directly. most skills load only when you type their name or the mode calls them. [`/poteto-help`](./skills/poteto-help/SKILL.md#fix-a-run-that-went-wrong) lists the few that also load from your words.
+[`/poteto-mode`](./skills/poteto-mode/SKILL.md) runs most of these for you when a step needs them (`how`, `why`, `architect`, `arena`, `swarm`, `interrogate`, `deslop`, `unslop`, `no-comments`, `technical-writing`, `poteto-tdd`, and the principles). the table below is for when you want one directly. on codex, and on claude code once `/setup-pstack` sets the skill listing, most skills load only when you type their name or another pstack skill calls them. [`/poteto-help`](./skills/poteto-help/SKILL.md#fix-a-run-that-went-wrong) lists the few that also load from your words.
 
 ```
 /how do we cancel runs? do we have an n+1 when we look up every run to cancel?
@@ -138,7 +138,7 @@ the mode's [Playbooks section](./skills/poteto-mode/SKILL.md#playbooks) also own
 | skill | use it when |
 |---|---|
 | [`/poteto-mode`](./skills/poteto-mode/SKILL.md) | default entry point for any non-trivial task. |
-| [`/poteto-help`](./skills/poteto-help/SKILL.md) | you're new to pstack, or unsure which skill, playbook, or principle fits. finds out what you're trying to do, answers that part, and hands you a prompt to type. |
+| [`/poteto-help`](./skills/poteto-help/SKILL.md) | you're new to pstack, or unsure which skill, playbook, or principle fits. finds out what you're trying to do, answers that part, and hands you a prompt to type. it doesn't load from its description (on claude code, once `/setup-pstack` sets the skill listing), so type `/poteto-help`. |
 | [`/in-your-own-words`](./skills/in-your-own-words/SKILL.md) | you want the agent to play back your goal and the problem before it starts. |
 | [`/sharpen`](./skills/sharpen/SKILL.md) | you want a prompt made deeper, not bigger, before you send it. hands back the rewritten prompt and leaves your choices open. doesn't do the task. |
 | [`/how`](./skills/how/SKILL.md) | you want a walkthrough of how a subsystem works. |
