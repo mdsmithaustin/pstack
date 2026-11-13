@@ -5632,15 +5632,6 @@
    ],
    "text": "On Claude Code, check your permission mode before you leave."
   },
-  "1a8bb2d8254d": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "setup-rerun-keeps-changed-roles",
-   "sources": [
-    "port"
-   ],
-   "text": "A rerun of `/setup-pstack` keeps any role you changed, whether its model, effort, panel list, alias, or harness section."
-  },
   "1ac6e666f95c": {
    "class": "context",
    "file": "05-build-and-clean.md",
@@ -9021,12 +9012,10 @@
    "text": "```text\ncontinue\n```"
   },
   "71fbd8181c7e": {
-   "class": "substituted",
+   "class": "cursor-only",
    "file": "01-setup.md",
-   "ported_as": [
-    "1a8bb2d8254d"
-   ],
    "promise": "setup-rerun-keeps-changed-roles",
+   "reason": "The port omits this guarantee while setup-rerun-keeps-changed-roles has only a deferred live case.",
    "sources": [
     "upstream"
    ],
