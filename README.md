@@ -7,7 +7,7 @@ This repository is an independent community port. It is not affiliated with, mai
 For this port's agreed goals, evidence standards, and remaining measurement gaps,
 see the [suite outcomes and evaluation contract](./evals/framework.md).
 
-The lowercase first-person text is Poteto's, from upstream. This port reworded the lines that named Cursor and added lines of its own, some in the same lowercase style, including in the intro, "just use `/poteto-mode`", "examples", and "make it yours". [PORTING.md](./PORTING.md) records the changes.
+This README mixes Poteto's upstream first-person text with this port's edits and additions. This port reworded the lines that named Cursor and added lines of its own, some in the same lowercase style, including in the intro, "just use `/poteto-mode`", "examples", and "make it yours". [PORTING.md](./PORTING.md) records the changes.
 
 i'm [poteto](https://x.com/poteto). i'm not a president or ceo, but i've worked with millions of lines of code at Meta, Netflix, and Cursor. i'm also on the react core team where i help build and maintain react compiler.
 
