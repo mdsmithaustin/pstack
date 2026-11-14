@@ -2414,6 +2414,64 @@ class RoutedSkillLoads(unittest.TestCase):
                 self.assertEqual(result["evidence"][-1], "routing decision: read arena/SKILL.md at seq 10")
 
 
+class ModeRecoversAfterCompaction(unittest.TestCase):
+    case = load_case("feature-compact-midrun")
+    entry, recovery = "poteto-mode/SKILL.md", "poteto-mode/references/recovery.md"
+
+    def grade(self, events, compactions, **extra):
+        return grade("mode-recovers-after-compaction", minimal(events=events, harness="codex", x_compactions=compactions, **extra), self.case)
+
+    def cat(self, seq, rel):
+        return shell(seq, f"cat .agents/skills/{rel}")
+
+    def write(self, seq):
+        return [{"seq": seq, "kind": "tool_call", "name": "apply_patch", "input": {"patch": "*** Update File: tally/__main__.py\n"}}]
+
+    def test_the_entry_and_recovery_read_before_the_next_write_pass(self):
+        events = self.cat(4, self.entry) + self.cat(6, self.recovery) + self.write(8)
+        result = self.grade(events, [{"turn": 0, "source": "rollout", "seq": 4, "pre_tokens": 59000, "post_tokens": 20000, "kept_skill_bodies": 0}])
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+        window = result["measures"]["windows"][0]
+        self.assertEqual((window["pre_tokens"], window["post_tokens"], window["reads_before_action"]), (59000, 20000, [self.entry, self.recovery]))
+
+    def test_a_write_before_either_read_fails_and_names_the_window(self):
+        for events, missing in ((self.write(4) + self.cat(5, self.entry) + self.cat(7, self.recovery), f"{self.entry}, {self.recovery}"),
+                                (self.cat(4, self.entry) + self.write(6), self.recovery)):
+            with self.subTest(missing=missing):
+                result = self.grade(events, [{"turn": 0, "source": "rollout", "seq": 4}])
+                self.assertEqual(result["verdict"], FAIL)
+                self.assertTrue(result["failures"][0].endswith(f"before reading {missing}"), result["failures"])
+
+    def test_a_read_before_the_boundary_or_in_an_earlier_window_does_not_count(self):
+        events = self.cat(0, self.entry) + self.cat(2, self.recovery) + self.write(5) + self.cat(8, self.entry) + self.cat(10, self.recovery) + self.write(13)
+        result = self.grade(events, [{"turn": 0, "source": "rollout", "seq": 4}, {"turn": 0, "source": "rollout", "seq": 12}])
+        self.assertEqual((result["verdict"], len(result["failures"])), (FAIL, 2))
+
+    def test_a_read_plan_call_that_names_the_entry_is_not_a_read(self):
+        events = shell(4, f"python3 .agents/skills/pstack-harness/scripts/read-plan.py .agents/skills/{self.entry}") + self.cat(6, self.recovery) + self.write(8)
+        result = self.grade(events, [{"turn": 0, "source": "rollout", "seq": 4}])
+        self.assertEqual(result["verdict"], FAIL)
+
+    def test_no_compaction_no_due_window_and_no_entry_are_inconclusive(self):
+        self.assertEqual(self.grade(self.write(1), [])["verdict"], INCONCLUSIVE)
+        self.assertEqual(self.grade(self.cat(4, self.entry), [{"turn": 0, "source": "rollout", "seq": 4}])["verdict"], INCONCLUSIVE)
+        late = self.grade(self.cat(4, self.entry) + self.cat(6, self.recovery) + self.write(8), [{"turn": 0, "source": "rollout", "seq": 4}], entry=None)
+        self.assertEqual(late["verdict"], INCONCLUSIVE)
+
+    def test_a_reattached_entry_counts_but_recovery_still_needs_a_read(self):
+        boundary = {"turn": 0, "source": "stream", "seq": 4, "reattached_skills": [{"name": "poteto-mode", "bytes": 7904}, {"name": "how", "bytes": 3045}]}
+        result = self.grade(self.write(4), [boundary])
+        self.assertEqual((result["verdict"], result["failures"][0].split("before reading ")[1]), (FAIL, self.recovery))
+        window = result["measures"]["windows"][0]
+        self.assertEqual((window["reattached_skills"], window["reattached_bytes"]), (["poteto-mode", "how"], 10949))
+        self.assertEqual(self.grade(self.cat(4, self.recovery) + self.write(6), [boundary])["verdict"], PASS)
+
+    def test_a_compaction_without_a_position_starts_at_its_turn(self):
+        events = in_turn(0, self.write(0)) + in_turn(1, self.cat(2, self.entry) + self.cat(4, self.recovery) + self.write(6))
+        result = self.grade(events, [{"turn": 1, "source": "stream"}])
+        self.assertEqual(result["verdict"], PASS)
+
+
 class RoutedSkillLoadsAfterCompaction(unittest.TestCase):
     case = load_case("name-only-route-after-compact")
 

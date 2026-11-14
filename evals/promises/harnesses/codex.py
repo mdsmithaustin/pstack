@@ -131,7 +131,8 @@ def turn(run, text, index):
         resume = ["resume"]
     if text.strip() == COMPACT and not index:
         raise ValueError("a /compact turn needs an earlier turn to compact")
-    compact = ["-c", f"model_auto_compact_token_limit={COMPACT_TOKEN_LIMIT}"] if text.strip() == COMPACT else []
+    limit = COMPACT_TOKEN_LIMIT if text.strip() == COMPACT else run.case.get("env", {}).get("auto_compact_token_limit")
+    compact = ["-c", f"model_auto_compact_token_limit={int(limit)}"] if limit else []
     tail = ["--json", "-o", str(last), "--", *([previous] if index else []), prompt]
     argv = [launch["path"], "exec", *resume, *config_flags(run), *compact, *tail]
     record = live.execute(argv, run.project, child_env(run.root), run.timeout_s, stream, errors)
@@ -478,6 +479,7 @@ def harvest_rollout(data, prompts=None):
     cwd = Path(meta.get("cwd") or ".")
     names, plan_calls, spawn_by_call = {}, [], {}
     turn, upcoming, started = 0, list(enumerate(prompts or [])), -1
+    window_tokens = None
 
     def add(event):
         event["seq"] = len(events)
@@ -493,10 +495,16 @@ def harvest_rollout(data, prompts=None):
         if kind == "event_msg" and payload.get("type") == "task_started":
             started += 1
         if kind == "compacted":
+            kept = [text_of(item.get("content")) for item in payload.get("replacement_history") or []
+                    if isinstance(item, dict) and item.get("type") == "message"]
             compacted.append({"turn": max(started, turn) if prompts is not None else None, "ordinal": record.get("ordinal"),
-                              "source": "rollout"})
+                              "source": "rollout", "seq": len(events), "pre_tokens": window_tokens, "post_tokens": None,
+                              "kept_skill_bodies": sum(bool(SKILL_INJECTION.match(text)) for text in kept)})
         if kind == "event_msg" and payload.get("type") == "token_count":
             usage = (payload.get("info") or {}).get("total_token_usage") or usage
+            window_tokens = ((payload.get("info") or {}).get("last_token_usage") or {}).get("input_tokens") or window_tokens
+            if compacted and compacted[-1]["post_tokens"] is None and window_tokens != compacted[-1]["pre_tokens"]:
+                compacted[-1]["post_tokens"] = window_tokens
         if kind == "response_item":
             ptype = payload.get("type")
             if ptype == "message":
