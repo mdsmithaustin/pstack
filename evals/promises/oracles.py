@@ -4218,15 +4218,18 @@ def mode_recovers_after_compaction(view):
         return inconclusive("the trace shows no compaction with a position in the lead's events")
     planners = {call.get("seq") for call in view.tool_calls
                 if any("read-plan.py" in value for value in (call.get("input") or {}).values() if isinstance(value, str))}
-    reads = [(seq, rel) for seq, rel in view.event_reads() if seq not in planners]
-    if view.trace.get("entry") != "injected" and not any(seq < windows[0][1] and rel == RECOVERY_READS[0] for seq, rel in reads):
+    returned = {call.get("seq"): answer for call in view.tool_calls
+                if (answer := view.results_for(call)) is not None and answer.get("ok") is True}
+    reads = [(seq, returned[seq]["seq"], rel) for seq, rel in view.event_reads()
+             if seq not in planners and seq in returned]
+    if view.trace.get("entry") != "injected" and not any(done < windows[0][1] and rel == RECOVERY_READS[0] for _, done, rel in reads):
         return inconclusive("the mode entry was not in the lead's context before the first compaction")
     governed = sorted([(seq, f"wrote {path}") for seq, path, _ in view.project_edits()]
                       + [(s.get("seq") or 0, "spawned a delegate") for s in view.spawns])
     failures, evidence, measured = [], [], []
     for index, (compaction, start, end) in enumerate(windows, 1):
         action = next(((seq, what) for seq, what in governed if start <= seq < end), None)
-        inside = [(seq, rel) for seq, rel in reads if start <= seq < end]
+        inside = [(done, rel) for seq, done, rel in reads if start <= seq <= done < end]
         before = [rel for seq, rel in inside if action is None or seq < action[0]]
         reattached = compaction.get("reattached_skills") or []
         held = {f"{skill['name']}/SKILL.md" for skill in reattached}

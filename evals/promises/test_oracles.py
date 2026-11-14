@@ -2442,6 +2442,20 @@ class ModeRecoversAfterCompaction(unittest.TestCase):
                 self.assertEqual(result["verdict"], FAIL)
                 self.assertTrue(result["failures"][0].endswith(f"before reading {missing}"), result["failures"])
 
+    def test_recovery_reads_must_return_successfully_before_the_action(self):
+        for outcome in ("failed", "missing", "late"):
+            with self.subTest(outcome=outcome):
+                events = self.cat(4, self.entry) + self.cat(6, self.recovery)
+                if outcome == "failed":
+                    events[-1]["ok"] = False
+                elif outcome == "missing":
+                    events.pop()
+                else:
+                    events[-1]["seq"] = 9
+                result = self.grade(events + self.write(8), [{"turn": 0, "seq": 4}])
+                self.assertEqual(result["verdict"], FAIL)
+                self.assertIn(self.recovery, result["failures"][0])
+
     def test_a_read_before_the_boundary_or_in_an_earlier_window_does_not_count(self):
         events = self.cat(0, self.entry) + self.cat(2, self.recovery) + self.write(5) + self.cat(8, self.entry) + self.cat(10, self.recovery) + self.write(13)
         result = self.grade(events, [{"turn": 0, "source": "rollout", "seq": 4}, {"turn": 0, "source": "rollout", "seq": 12}])
@@ -2457,6 +2471,14 @@ class ModeRecoversAfterCompaction(unittest.TestCase):
         self.assertEqual(self.grade(self.cat(4, self.entry), [{"turn": 0, "source": "rollout", "seq": 4}])["verdict"], INCONCLUSIVE)
         late = self.grade(self.cat(4, self.entry) + self.cat(6, self.recovery) + self.write(8), [{"turn": 0, "source": "rollout", "seq": 4}], entry=None)
         self.assertEqual(late["verdict"], INCONCLUSIVE)
+
+    def test_a_spawn_requires_recovery_but_a_commit_alone_does_not(self):
+        boundary = [{"turn": 0, "seq": 4}]
+        spawn = [{"seq": 8, "tool": "spawn_agent"}]
+        self.assertEqual(self.grade([], boundary, spawns=spawn)["verdict"], FAIL)
+        self.assertEqual(self.grade(self.cat(4, self.entry) + self.cat(6, self.recovery), boundary,
+                                    spawns=spawn)["verdict"], PASS)
+        self.assertEqual(self.grade(shell(4, "git commit -m 'checkpoint'"), boundary)["verdict"], INCONCLUSIVE)
 
     def test_a_reattached_entry_counts_but_recovery_still_needs_a_read(self):
         boundary = {"turn": 0, "source": "stream", "seq": 4, "reattached_skills": [{"name": "poteto-mode", "bytes": 7904}, {"name": "how", "bytes": 3045}]}
