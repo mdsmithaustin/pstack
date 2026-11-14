@@ -4194,6 +4194,66 @@ def routed_skill_loads_after_compaction(view):
     return result
 
 
+RECOVERY_READS = ("poteto-mode/SKILL.md", "poteto-mode/references/recovery.md")
+
+
+def compaction_windows(view):
+    """One (compaction, first seq, end seq) per compaction, where the window runs to the next compaction."""
+    starts = []
+    for compaction in view.trace.get("x_compactions") or []:
+        seq = compaction.get("seq")
+        if seq is None and isinstance(compaction.get("turn"), int):
+            seq = min((e["seq"] for e in view.events if e.get("turn", -1) >= compaction["turn"]), default=None)
+        if seq is not None:
+            starts.append((seq, compaction))
+    starts.sort(key=lambda start: start[0])
+    ends = [start[0] for start in starts[1:]] + [float("inf")]
+    return [(compaction, seq, end) for (seq, compaction), end in zip(starts, ends)]
+
+
+@oracle("mode-recovers-after-compaction")
+def mode_recovers_after_compaction(view):
+    windows = compaction_windows(view)
+    if not windows:
+        return inconclusive("the trace shows no compaction with a position in the lead's events")
+    planners = {call.get("seq") for call in view.tool_calls
+                if any("read-plan.py" in value for value in (call.get("input") or {}).values() if isinstance(value, str))}
+    reads = [(seq, rel) for seq, rel in view.event_reads() if seq not in planners]
+    if view.trace.get("entry") != "injected" and not any(seq < windows[0][1] and rel == RECOVERY_READS[0] for seq, rel in reads):
+        return inconclusive("the mode entry was not in the lead's context before the first compaction")
+    governed = sorted([(seq, f"wrote {path}") for seq, path, _ in view.project_edits()]
+                      + [(s.get("seq") or 0, "spawned a delegate") for s in view.spawns])
+    failures, evidence, measured = [], [], []
+    for index, (compaction, start, end) in enumerate(windows, 1):
+        action = next(((seq, what) for seq, what in governed if start <= seq < end), None)
+        inside = [(seq, rel) for seq, rel in reads if start <= seq < end]
+        before = [rel for seq, rel in inside if action is None or seq < action[0]]
+        reattached = compaction.get("reattached_skills") or []
+        held = {f"{skill['name']}/SKILL.md" for skill in reattached}
+        rels = [rel for _, rel in inside]
+        measured.append({"window": index, "pre_tokens": compaction.get("pre_tokens"), "post_tokens": compaction.get("post_tokens"),
+                         "kept_skill_bodies": compaction.get("kept_skill_bodies"),
+                         "reattached_skills": [skill["name"] for skill in reattached],
+                         "reattached_bytes": sum(skill.get("bytes") or 0 for skill in reattached),
+                         "governed_action_seq": action[0] if action else None,
+                         "reads_before_action": list(dict.fromkeys(before)),
+                         "reads_in_window": list(dict.fromkeys(rels)),
+                         "repeated_in_window": sorted({rel for rel in rels if rels.count(rel) > 1})})
+        if action is None:
+            evidence.append(f"window {index}: no project write or spawn, so recovery never came due")
+            continue
+        missing = [rel for rel in RECOVERY_READS if rel not in before and rel not in held]
+        evidence.append(f"window {index}: the lead {action[1]} at seq {action[0]} after reading {list(dict.fromkeys(before))[:6]}")
+        if missing:
+            failures.append(f"window {index}: the lead {action[1]} at seq {action[0]} before reading {', '.join(missing)}")
+    measures = {"windows": measured}
+    if failures:
+        return verdict(FAIL, failures, evidence, measures=measures)
+    if all(m["governed_action_seq"] is None for m in measured):
+        return inconclusive("no compaction window holds a project write or spawn", *evidence, measures=measures)
+    return verdict(PASS, (), evidence, measures=measures)
+
+
 def prompt_named(texts, names):
     named = set()
     for name in names:

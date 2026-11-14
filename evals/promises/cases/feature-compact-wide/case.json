@@ -1,0 +1,28 @@
+{
+ "promises": [
+  "mode-recovers-after-compaction"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "this command needs a --json flag. keep the text output byte-identical and verify both forms. use the standard route."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "expect": {
+  "playbook": "feature",
+  "implementation_paths": [
+   "tally/*.py"
+  ],
+  "loads_before_code": [
+   "spec-probes"
+  ]
+ },
+ "note": "The mid-run compaction case with twice the auto-compact limit, so recovery reads take a smaller share of each window. Same turn and fixture as feature-compact-midrun.",
+ "env": {
+  "todo_tools": true,
+  "auto_compact_token_limit": 120000
+ }
+}

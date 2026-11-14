@@ -139,10 +139,10 @@ class Compaction(unittest.TestCase):
                 message("user", "/compact"), message("assistant", "Compacted.")]
         data = "".join(json.dumps(r) + "\n" for r in rows).encode()
         lead = codex.harvest_rollout(data, ["what does relay do?", "/compact"])
-        self.assertEqual(lead["compactions"], [{"turn": 1, "ordinal": 33, "source": "rollout"}])
+        self.assertEqual(lead["compactions"], [{"turn": 1, "ordinal": 33, "source": "rollout", "seq": 2, "pre_tokens": None, "post_tokens": None, "kept_skill_bodies": 0}])
         self.assertEqual([(e["turn"], e["kind"]) for e in lead["events"] if e["kind"] in ("user", "text")],
                          [(0, "user"), (0, "text"), (1, "user"), (1, "text")])
-        self.assertEqual(codex.harvest_rollout(data)["compactions"], [{"turn": None, "ordinal": 33, "source": "rollout"}])
+        self.assertEqual(codex.harvest_rollout(data)["compactions"], [{"turn": None, "ordinal": 33, "source": "rollout", "seq": 1, "pre_tokens": None, "post_tokens": None, "kept_skill_bodies": 0}])
 
 
 class CopyInto(unittest.TestCase):
