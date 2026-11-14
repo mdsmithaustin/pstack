@@ -13,7 +13,7 @@ Once this whole entry is in your context, do not read its file again, except to 
 
 ## Recover after compaction or truncation
 
-After a known compaction, context summary, or truncation notice, read this entry on its own, then read and apply [recovery](references/recovery.md) before the next governed action. It restores the active playbook and step from the worklist, requires complete returned guidance, and names the exact missing file when guidance is unavailable.
+When your context holds a summary of earlier work or a truncation notice, follow [recovery](references/recovery.md) before your next project write, commit, or spawn. It rebuilds the current step from the worklist with `plan.py --step`.
 
 ## Playbooks
 

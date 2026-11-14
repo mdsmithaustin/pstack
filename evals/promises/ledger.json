@@ -2321,9 +2321,9 @@
   },
   "mode-recovers-after-compaction": {
    "check": "live",
-   "claim": "After a compaction, the lead reads the poteto-mode entry and its recovery reference before its next project write or spawn.",
+   "claim": "After a compaction, the lead has the poteto-mode entry and the current playbook step's text before its next project write or spawn.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/poteto-mode this command needs a --json flag. keep the text output byte-identical and verify both forms. use the standard route.`; Codex runs under `model_auto_compact_token_limit=60000`, so it compacts on its own mid-run. Each compaction opens a window that runs to the next one. Fail when a window's first project write or spawn comes before a returned read of the entry and of `references/recovery.md` inside that window; a `read-plan.py` call that names a file is not a read of it. Inconclusive with no positioned compaction, no window that holds a write or spawn, or no entry in context before the first compaction. Measures per window: context tokens before and after, skill bodies the compacted history kept, and the guidance read.",
+   "live_case": "tally fixture; prompt `/poteto-mode this command needs a --json flag. keep the text output byte-identical and verify both forms. use the standard route.`; the case's auto-compact limit makes the harness compact on its own mid-run. Each compaction opens a window that runs to the next one. Fail when a window's first project write or spawn comes before both of these returned inside that window: the entry, by a read or by Claude Code attaching it again, and the current step's text, by a `plan.py <playbook> --step` call or a read of the playbook file. A `read-plan.py` call that names a file is not a read of it. Inconclusive with no positioned compaction, no window that holds a write or spawn, no entry in context before the first compaction, or no `expect.playbook`. Measures per window: context tokens before and after, skill bodies kept or attached again, the source of the step text, whether `references/recovery.md` was read, and the guidance read.",
    "owners": [
     "skills/poteto-mode/SKILL.md",
     "skills/poteto-mode/references/recovery.md"

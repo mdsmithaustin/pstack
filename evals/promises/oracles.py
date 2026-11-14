@@ -4194,7 +4194,7 @@ def routed_skill_loads_after_compaction(view):
     return result
 
 
-RECOVERY_READS = ("poteto-mode/SKILL.md", "poteto-mode/references/recovery.md")
+MODE_ENTRY, RECOVERY_REFERENCE = "poteto-mode/SKILL.md", "poteto-mode/references/recovery.md"
 
 
 def compaction_windows(view):
@@ -4216,13 +4216,17 @@ def mode_recovers_after_compaction(view):
     windows = compaction_windows(view)
     if not windows:
         return inconclusive("the trace shows no compaction with a position in the lead's events")
+    playbook = plan_playbook(view)
+    if not playbook:
+        return inconclusive("case names no expect.playbook, so the current step's text cannot be identified")
+    step_prints = [call for call in plan_calls(view, playbook) if call["steps"] and call["ok"] is True and call["returned"] is not None]
     planners = {call.get("seq") for call in view.tool_calls
                 if any("read-plan.py" in value for value in (call.get("input") or {}).values() if isinstance(value, str))}
     returned = {call.get("seq"): answer for call in view.tool_calls
                 if (answer := view.results_for(call)) is not None and answer.get("ok") is True}
     reads = [(seq, returned[seq]["seq"], rel) for seq, rel in view.event_reads()
              if seq not in planners and seq in returned]
-    if view.trace.get("entry") != "injected" and not any(done < windows[0][1] and rel == RECOVERY_READS[0] for _, done, rel in reads):
+    if view.trace.get("entry") != "injected" and not any(done < windows[0][1] and rel == MODE_ENTRY for _, done, rel in reads):
         return inconclusive("the mode entry was not in the lead's context before the first compaction")
     governed = sorted([(seq, f"wrote {path}") for seq, path, _ in view.project_edits()]
                       + [(s.get("seq") or 0, "spawned a delegate") for s in view.spawns])
@@ -4233,22 +4237,26 @@ def mode_recovers_after_compaction(view):
         before = [rel for seq, rel in inside if action is None or seq < action[0]]
         reattached = compaction.get("reattached_skills") or []
         held = {f"{skill['name']}/SKILL.md" for skill in reattached}
+        printed = [call for call in step_prints if start <= call["seq"] and call["returned"] < end
+                   and (action is None or call["returned"] < action[0])]
+        step_text = "plan --step" if printed else "playbook read" if f"poteto-mode/playbooks/{playbook}.md" in before else None
         rels = [rel for _, rel in inside]
         measured.append({"window": index, "pre_tokens": compaction.get("pre_tokens"), "post_tokens": compaction.get("post_tokens"),
                          "kept_skill_bodies": compaction.get("kept_skill_bodies"),
                          "reattached_skills": [skill["name"] for skill in reattached],
                          "reattached_bytes": sum(skill.get("bytes") or 0 for skill in reattached),
                          "governed_action_seq": action[0] if action else None,
+                         "step_text": step_text, "recovery_read": RECOVERY_REFERENCE in before,
                          "reads_before_action": list(dict.fromkeys(before)),
                          "reads_in_window": list(dict.fromkeys(rels)),
                          "repeated_in_window": sorted({rel for rel in rels if rels.count(rel) > 1})})
         if action is None:
             evidence.append(f"window {index}: no project write or spawn, so recovery never came due")
             continue
-        missing = [rel for rel in RECOVERY_READS if rel not in before and rel not in held]
-        evidence.append(f"window {index}: the lead {action[1]} at seq {action[0]} after reading {list(dict.fromkeys(before))[:6]}")
+        missing = ([] if MODE_ENTRY in before or MODE_ENTRY in held else ["the mode entry"]) + ([] if step_text else ["the current step's text"])
+        evidence.append(f"window {index}: the lead {action[1]} at seq {action[0]} with step text from {step_text} after reading {list(dict.fromkeys(before))[:6]}")
         if missing:
-            failures.append(f"window {index}: the lead {action[1]} at seq {action[0]} before reading {', '.join(missing)}")
+            failures.append(f"window {index}: the lead {action[1]} at seq {action[0]} before {' and '.join(missing)} returned")
     measures = {"windows": measured}
     if failures:
         return verdict(FAIL, failures, evidence, measures=measures)
