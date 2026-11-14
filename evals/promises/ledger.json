@@ -2319,6 +2319,17 @@
     "skills/poteto-mode/scripts/watch-pr/verdict.ts"
    ]
   },
+  "mode-recovers-after-compaction": {
+   "check": "live",
+   "claim": "After a compaction, the lead reads the poteto-mode entry and its recovery reference before its next project write or spawn.",
+   "harness_sensitive": true,
+   "live_case": "tally fixture; prompt `/poteto-mode this command needs a --json flag. keep the text output byte-identical and verify both forms. use the standard route.`; Codex runs under `model_auto_compact_token_limit=60000`, so it compacts on its own mid-run. Each compaction opens a window that runs to the next one. Fail when a window's first project write or spawn comes before a returned read of the entry and of `references/recovery.md` inside that window; a `read-plan.py` call that names a file is not a read of it. Inconclusive with no positioned compaction, no window that holds a write or spawn, or no entry in context before the first compaction. Measures per window: context tokens before and after, skill bodies the compacted history kept, and the guidance read.",
+   "owners": [
+    "skills/poteto-mode/SKILL.md",
+    "skills/poteto-mode/references/recovery.md"
+   ],
+   "scenario": "feature-compact-midrun"
+  },
   "models-config-grammar-model-at-effort": {
    "check": "script",
    "claim": "A role line may be `model` or `model@effort` (for example `sonnet@high`) and the resolver returns that effort for the role.",
@@ -5985,8 +5996,9 @@
    "text": "Give each PR a verification swarm before it merges, and let Autopilot-stack or Autopilot-full carry the queue."
   },
   "2366d0b35765": {
-   "class": "context",
+   "class": "promise",
    "file": "01-setup.md",
+   "promise": "mode-recovers-after-compaction",
    "sources": [
     "port"
    ],

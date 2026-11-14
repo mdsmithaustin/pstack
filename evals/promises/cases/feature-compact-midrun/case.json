@@ -1,0 +1,29 @@
+{
+ "promises": [
+  "mode-recovers-after-compaction",
+  "plan-step-loads-arrive-with-step"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "this command needs a --json flag. keep the text output byte-identical and verify both forms. use the standard route."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "expect": {
+  "playbook": "feature",
+  "implementation_paths": [
+   "tally/*.py"
+  ],
+  "loads_before_code": [
+   "spec-probes"
+  ]
+ },
+ "note": "Codex compacts on its own mid-run under a small auto-compact limit, so the lead crosses several native compaction boundaries inside one Feature run on the standard route.",
+ "env": {
+  "todo_tools": true,
+  "auto_compact_token_limit": 60000
+ }
+}

@@ -343,6 +343,8 @@ def child_env(run):
            "NPM_CONFIG_CACHE": str(paths.cache / "npm")}
     if run.case.get("env", {}).get("todo_tools"):
         env["CLAUDE_CODE_ENABLE_TODO_TOOLS"] = "1"
+    if limit := run.case.get("env", {}).get("auto_compact_token_limit"):
+        env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] = str(int(limit))
     return env
 
 
@@ -683,7 +685,7 @@ def tag_turns(rows):
     return tagged
 
 
-def lead_events(rows):
+def lead_events(rows, boundaries=None):
     events = []
     names = {}
 
@@ -692,6 +694,8 @@ def lead_events(rows):
 
     for turn, entry in tag_turns(rows):
         kind = entry.get("type")
+        if boundaries is not None and kind == "system" and entry.get("subtype") == "compact_boundary":
+            boundaries.append(len(events))
         if kind not in ("assistant", "user"):
             continue
         if is_prompt(entry):
@@ -829,12 +833,32 @@ def injected_base(rows):
     return None
 
 
-def compactions(streams):
-    return [{"turn": index, "trigger": (row.get("compact_metadata") or {}).get("trigger"),
-             "pre_tokens": (row.get("compact_metadata") or {}).get("pre_tokens"),
-             "post_tokens": (row.get("compact_metadata") or {}).get("post_tokens"), "source": "stream"}
-            for index, rows in enumerate(streams) for row in rows
-            if row.get("type") == "system" and row.get("subtype") == "compact_boundary"]
+def reattached_skills(rows):
+    """For each compaction boundary in the session rows, the skills Claude Code attached again after it, as (name, bytes)."""
+    out = []
+    for row in rows:
+        if row.get("type") == "system" and row.get("subtype") == "compact_boundary":
+            out.append(None)
+        attachment = row.get("attachment") or {}
+        if out and out[-1] is None and row.get("type") == "attachment" and attachment.get("type") == "invoked_skills":
+            out[-1] = [{"name": skill.get("name"), "bytes": len((skill.get("content") or "").encode())}
+                       for skill in attachment.get("skills") or [] if isinstance(skill, dict)]
+    return out
+
+
+def compactions(streams, boundaries=(), reattached=()):
+    found = [{"turn": index, "trigger": (row.get("compact_metadata") or {}).get("trigger"),
+              "pre_tokens": (row.get("compact_metadata") or {}).get("pre_tokens"),
+              "post_tokens": (row.get("compact_metadata") or {}).get("post_tokens"), "source": "stream"}
+             for index, rows in enumerate(streams) for row in rows
+             if row.get("type") == "system" and row.get("subtype") == "compact_boundary"]
+    if len(found) == len(boundaries):
+        for compaction, seq in zip(found, boundaries):
+            compaction["seq"] = seq
+    if len(found) == len(reattached):
+        for compaction, skills in zip(found, reattached):
+            compaction["reattached_skills"] = skills
+    return found
 
 
 def skill_calls(events):
@@ -874,7 +898,8 @@ def harvest(run):
     streams = [_stream_rows(prepared.paths.root if prepared else run.root, i) for i in range(len(turns))]
     init = next((e for s in streams for e in s if e.get("subtype") == "init"), {})
     results = [next((e for e in reversed(s) if e.get("type") == "result"), {}) for s in streams]
-    events = lead_events(rows)
+    boundaries = []
+    events = lead_events(rows, boundaries)
     reads_by = {"lead": files_read(rows, cwd)}
     child_skills = {}
     for path in delegates:
@@ -925,7 +950,7 @@ def harvest(run):
         "x_entry_base_dir": injected_base(rows),
         "x_files_read_by": reads_by,
         "x_child_skill_calls": child_skills,
-        "x_compactions": compactions(streams),
+        "x_compactions": compactions(streams, boundaries, reattached_skills(rows)),
         "x_skill_listing": run_record(prepared.paths.root if prepared else run.root, LISTING_RECORD),
         "x_cost_usd": round(sum(r.get("total_cost_usd") or 0 for r in results), 4),
         "x_deferred_tools": next((e["attachment"].get("addedNames") for e in rows if e.get("type") == "attachment"
