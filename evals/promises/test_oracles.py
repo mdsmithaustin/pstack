@@ -2458,6 +2458,17 @@ class TriggerSkillLoadsAfterCompaction(unittest.TestCase):
         result = self.grade(script + shell(7, "cat /tmp/run/bench.py") + self.load(9) + shell(12, "python3 /tmp/run/bench.py"), [{"turn": 0, "seq": 4}])
         self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
         self.assertIn("seq 12", result["evidence"][0])
+        helper = self.grade(script + self.load(9) + shell(10, "python3 .agents/skills/pstack-harness/scripts/read-plan.py /tmp/run/bench.py")
+                            + shell(12, "python3 -u /tmp/run/bench.py"), [{"turn": 0, "seq": 4}])
+        self.assertIn("seq 12", helper["evidence"][0])
+
+    def test_a_shell_command_that_writes_a_timing_script_is_not_the_measurement(self):
+        write = "python3 -c 'from pathlib import Path\nPath(\"/tmp/run/bench.py\").write_text(\"import time\\nt = time.perf_counter()\")'"
+        for writer in (write, "cat > /tmp/run/bench.py <<'PY'\nimport time\nt = time.perf_counter()\nPY"):
+            with self.subTest(writer=writer[:20]):
+                result = self.grade(shell(6, writer) + self.load(8) + shell(12, "python3 /tmp/run/bench.py"), [{"turn": 0, "seq": 4}])
+                self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+                self.assertIn("seq 12", result["evidence"][0])
 
     def test_timing_calls_in_a_script_count_as_a_measurement(self):
         script = "python3 - <<'PY'\nimport time\nt = time.perf_counter()\nPY"

@@ -6,7 +6,8 @@
  "fixture": "tally",
  "entry": "poteto-mode",
  "turns": [
-  "add a --json flag to this command, keep the text output byte-identical, and check both forms. then time the json path against the text path and report how much faster or slower it is. use the standard route."
+  "add a --json flag to this command, keep the text output byte-identical, and check both forms. use the standard route.",
+  "now time the json path against the text path and report how much faster or slower it is."
  ],
  "timeout_s": {
   "default": 2400,
@@ -21,7 +22,7 @@
    "skill": "benchmark-checklist"
   }
  },
- "note": "The benchmark ask comes after the feature work, so a small auto-compact limit usually puts a compaction between the run's start and its first timing measurement. benchmark-checklist is named only by the task triggers, never by the Feature plan.",
+ "note": "The timing ask arrives only in the second turn, after the first turn's feature work has usually compacted under the small auto-compact limit, so the run cannot carry the ask from its opening prompt. benchmark-checklist is named only by the task triggers, never by the Feature plan.",
  "env": {
   "todo_tools": true,
   "auto_compact_token_limit": 60000

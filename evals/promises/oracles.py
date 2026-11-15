@@ -4267,6 +4267,7 @@ def mode_recovers_after_compaction(view):
 
 
 MEASUREMENT = re.compile(r"(?:^|[;&|(]|\n)\s*(?:/usr/bin/)?time\s+[\w./-]|\btimeit\b|\bhyperfine\b|\bperf_counter(?:_ns)?\b|\btime\.(?:monotonic|time)(?:_ns)?\(")
+SCRIPT_WRITE = re.compile(r"""([^\s"'\\(]+\.py)\\*["']?\s*\)\s*\.write_text\(|(?:>|\btee\s+)\s*\\*["']?([^\s"'\\;&|]+\.py)\b""")
 
 
 def timing_scripts(view):
@@ -4292,9 +4293,15 @@ def trigger_skill_loads_after_compaction(view):
     if not windows:
         return inconclusive("the trace shows no compaction with a position in the lead's events")
     scripts = timing_scripts(view)
-    measured = [(seq, command) for seq, command, _, _ in view.commands()
-                if MEASUREMENT.search(command)
-                or any(re.search(rf"\bpython3?\b[^|;&\n]*\b{re.escape(name)}\b", command) for name in scripts)]
+    measured = []
+    for seq, command, _, _ in view.commands():
+        written = [path for match in SCRIPT_WRITE.findall(command) for path in match if path]
+        if written:
+            if MEASUREMENT.search(command):
+                scripts.update(os.path.basename(path) for path in written)
+            continue
+        if MEASUREMENT.search(command) or any(re.search(rf"\bpython3?(?:\s+-\w+)*\s+(?:\S*/)?{re.escape(name)}\b", command) for name in scripts):
+            measured.append((seq, command))
     if not measured:
         return inconclusive("the lead ran no timing measurement")
     seq, command = measured[0]
