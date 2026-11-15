@@ -2414,6 +2414,55 @@ class RoutedSkillLoads(unittest.TestCase):
                 self.assertEqual(result["evidence"][-1], "routing decision: read arena/SKILL.md at seq 10")
 
 
+class TriggerSkillLoadsAfterCompaction(unittest.TestCase):
+    case = load_case("feature-compact-benchmark")
+    bench = "time python3 -m tally sample.txt --json"
+
+    def grade(self, events, compactions, harness="codex"):
+        project = installed_skill(self, "benchmark-checklist", 20)
+        return grade("trigger-skill-loads-after-compaction", minimal(events=events, harness=harness, x_compactions=compactions), self.case, project)
+
+    def load(self, seq, ok=True):
+        return shell(seq, "cat .agents/skills/benchmark-checklist/SKILL.md", ok=ok)
+
+    def test_a_load_after_the_compaction_and_before_the_measurement_passes(self):
+        result = self.grade(self.load(6) + shell(9, self.bench), [{"turn": 0, "seq": 4}])
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+
+    def test_a_load_only_before_the_compaction_fails(self):
+        result = self.grade(self.load(1) + shell(9, self.bench), [{"turn": 0, "seq": 4}])
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("without loading benchmark-checklist after the compaction at seq 4", result["failures"][0])
+
+    def test_a_failed_load_or_one_returning_after_the_measurement_does_not_count(self):
+        late = self.load(6)
+        late[1]["seq"] = 11
+        for events in (self.load(6, ok=False) + shell(9, self.bench), late + shell(9, self.bench)):
+            with self.subTest(events=events[1]):
+                self.assertEqual(self.grade(events, [{"turn": 0, "seq": 4}])["verdict"], FAIL)
+
+    def test_a_skill_the_harness_attached_again_counts(self):
+        result = self.grade(shell(9, "time python3 -m tally sample.txt"), [{"turn": 0, "seq": 4, "reattached_skills": [{"name": "benchmark-checklist", "bytes": 900}]}], harness="claude-code")
+        self.assertEqual(result["verdict"], PASS)
+
+    def test_no_measurement_or_a_measurement_before_any_compaction_is_inconclusive(self):
+        for events in (self.load(6) + shell(9, 'git commit -m "save time on parsing"'), shell(1, self.bench) + self.load(6)):
+            with self.subTest(events=events[0]["input"]):
+                self.assertEqual(self.grade(events, [{"turn": 0, "seq": 4}])["verdict"], INCONCLUSIVE)
+
+    def test_running_a_timing_script_the_lead_wrote_counts_and_reading_it_does_not(self):
+        script = [{"seq": 2, "kind": "tool_call", "name": "apply_patch", "id": "p2",
+                   "input": {"patch": "*** Begin Patch\n*** Add File: /tmp/run/bench.py\n+import time\n+t = time.perf_counter()\n*** End Patch"}}]
+        read_only = self.grade(script + shell(7, "cat /tmp/run/bench.py"), [{"turn": 0, "seq": 4}])
+        self.assertEqual(read_only["verdict"], INCONCLUSIVE)
+        result = self.grade(script + shell(7, "cat /tmp/run/bench.py") + self.load(9) + shell(12, "python3 /tmp/run/bench.py"), [{"turn": 0, "seq": 4}])
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+        self.assertIn("seq 12", result["evidence"][0])
+
+    def test_timing_calls_in_a_script_count_as_a_measurement(self):
+        script = "python3 - <<'PY'\nimport time\nt = time.perf_counter()\nPY"
+        self.assertEqual(self.grade(shell(9, script), [{"turn": 0, "seq": 4}])["verdict"], FAIL)
+
 class ModeRecoversAfterCompaction(unittest.TestCase):
     case = load_case("feature-compact-midrun")
     entry, recovery, playbook = "poteto-mode/SKILL.md", "poteto-mode/references/recovery.md", "poteto-mode/playbooks/feature.md"

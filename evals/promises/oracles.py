@@ -4265,6 +4265,55 @@ def mode_recovers_after_compaction(view):
     return verdict(PASS, (), evidence, measures=measures)
 
 
+
+MEASUREMENT = re.compile(r"(?:^|[;&|(]|\n)\s*(?:/usr/bin/)?time\s+[\w./-]|\btimeit\b|\bhyperfine\b|\bperf_counter(?:_ns)?\b|\btime\.(?:monotonic|time)(?:_ns)?\(")
+
+
+def timing_scripts(view):
+    """Base names of files the lead wrote with an edit tool whose content makes a timing call."""
+    names = set()
+    for call in view.tool_calls:
+        given = call.get("input") or {}
+        if call.get("name") not in EDIT_TOOLS or not MEASUREMENT.search(json.dumps(given).replace("\\n", "\n")):
+            continue
+        paths = [given[f] for f in PATH_FIELDS if isinstance(given.get(f), str)] + list(given.get("changes") or ())
+        patch = given.get("patch") or given.get("input") or ""
+        if isinstance(patch, str):
+            paths += re.findall(r"\*\*\* (?:Update|Add) File: (\S+)", patch)
+        names.update(os.path.basename(path) for path in paths if path.endswith(".py"))
+    return names
+
+
+@oracle("trigger-skill-loads-after-compaction")
+def trigger_skill_loads_after_compaction(view):
+    """The case's expect.trigger skill loads inside the compaction window of its first trigger action, before that action."""
+    skill = ((view.case.get("expect") or {}).get("trigger") or {}).get("skill", "benchmark-checklist")
+    windows = compaction_windows(view)
+    if not windows:
+        return inconclusive("the trace shows no compaction with a position in the lead's events")
+    scripts = timing_scripts(view)
+    measured = [(seq, command) for seq, command, _, _ in view.commands()
+                if MEASUREMENT.search(command)
+                or any(re.search(rf"\bpython3?\b[^|;&\n]*\b{re.escape(name)}\b", command) for name in scripts)]
+    if not measured:
+        return inconclusive("the lead ran no timing measurement")
+    seq, command = measured[0]
+    window = next(((index, compaction, start) for index, (compaction, start, end) in enumerate(windows, 1) if start <= seq < end), None)
+    returned = {call.get("seq"): answer["seq"] for call in view.tool_calls if (answer := view.results_for(call)) is not None}
+    loads = [(returned[a[0]], a[1]) for a in load_attempts(view, skill, by_return=True)
+             if a[2] is True and allowed_load(view, a) and a[0] in returned]
+    evidence = [f"first timing measurement at seq {seq}: {command[:160]!r}",
+                f"{skill} loads by the lead: {[(a[0], a[1]) for a in loads]}"]
+    if window is None:
+        return inconclusive(f"the first timing measurement at seq {seq} came before the first compaction", *evidence)
+    index, compaction, start = window
+    if skill in {held["name"] for held in compaction.get("reattached_skills") or []}:
+        return passed(f"window {index}: the harness attached {skill} again at the compaction before the measurement", *evidence)
+    inside = [a for a in loads if start <= a[0] < seq]
+    if inside:
+        return passed(f"window {index}: {skill} loaded at seq {inside[0][0]} before the measurement at seq {seq}", *evidence)
+    return failed(f"window {index}: the lead ran a timing measurement at seq {seq} without loading {skill} after the compaction at seq {start}", *evidence)
+
 def prompt_named(texts, names):
     named = set()
     for name in names:

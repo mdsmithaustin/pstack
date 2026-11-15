@@ -4346,6 +4346,17 @@
    ],
    "scenario": "technical-writing-run"
   },
+  "trigger-skill-loads-after-compaction": {
+   "check": "live",
+   "claim": "After a compaction, the lead loads a skill named only by the task triggers again before the action that triggers it.",
+   "harness_sensitive": true,
+   "live_case": "tally fixture; prompt `/poteto-mode add a --json flag to this command, keep the text output byte-identical, and check both forms. then time the json path against the text path and report how much faster or slower it is. use the standard route.`; the case's auto-compact limit makes the harness compact on its own mid-run. The first timing measurement falls in some compaction window. A measurement is a shell command with `time`, `timeit`, `hyperfine`, `perf_counter`, `time.monotonic`, or `time.time`, or a `python` run of a `.py` file the lead wrote with one of those calls. Fail when `benchmark-checklist` did not return a load inside that window before the measurement, unless Claude Code attached it again at that compaction. Inconclusive with no positioned compaction, no measurement, or a measurement before the first compaction.",
+   "owners": [
+    "skills/poteto-mode/references/recovery.md",
+    "skills/poteto-mode/references/task-triggers.md"
+   ],
+   "scenario": "feature-compact-benchmark"
+  },
   "triggered-principle-loads-before-code": {
    "check": "live",
    "claim": "When a poteto-mode task trigger names a principle for the work at hand, the lead loads that principle's skill before it writes code or hands code-writing to a delegate.",
@@ -5996,6 +6007,9 @@
    "text": "Give each PR a verification swarm before it merges, and let Autopilot-stack or Autopilot-full carry the queue."
   },
   "2366d0b35765": {
+   "also": [
+    "trigger-skill-loads-after-compaction"
+   ],
    "class": "promise",
    "file": "01-setup.md",
    "promise": "mode-recovers-after-compaction",
