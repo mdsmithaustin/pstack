@@ -2434,6 +2434,13 @@ class TriggerSkillLoadsAfterCompaction(unittest.TestCase):
         self.assertEqual(result["verdict"], FAIL)
         self.assertIn("without loading benchmark-checklist after the compaction at seq 4", result["failures"][0])
 
+    def test_a_turn_number_without_a_compaction_position_is_inconclusive(self):
+        events = self.load(6) + shell(9, self.bench)
+        for event in events:
+            event["turn"] = 0
+        result = self.grade(events, [{"turn": 0}])
+        self.assertEqual(result["verdict"], INCONCLUSIVE)
+
     def test_a_failed_load_or_one_returning_after_the_measurement_does_not_count(self):
         late = self.load(6)
         late[1]["seq"] = 11
@@ -2502,6 +2509,44 @@ class ModeRecoversAfterCompaction(unittest.TestCase):
     def test_a_whole_playbook_read_also_supplies_the_step(self):
         result = self.grade(self.cat(4, self.entry) + self.cat(6, self.playbook) + self.write(8), [{"turn": 0, "seq": 4}])
         self.assertEqual((result["verdict"], result["measures"]["windows"][0]["step_text"]), (PASS, "playbook read"))
+
+    def route(self, seq, playbook):
+        events = shell(seq, f"python3 .agents/skills/poteto-mode/scripts/plan.py {playbook} --harness codex")
+        events[-1]["output_head"] = f"playbook: {playbook} (skills/poteto-mode/playbooks/{playbook}.md)\nroute: standard\n"
+        return events
+
+    def test_recovery_uses_the_routed_playbook_for_each_window(self):
+        # Recovery requires the active procedure, even when a follow-up changes it.
+        for route_seq in (10, 14):
+            for whole in (False, True):
+                with self.subTest(route_seq=route_seq, whole=whole):
+                    recovered = (self.cat(16, "poteto-mode/playbooks/investigation.md") if whole else
+                                 shell(16, "python3 .agents/skills/poteto-mode/scripts/plan.py investigation --step 3 --harness codex"))
+                    events = (self.cat(4, self.entry) + self.step(6) + self.write(8)
+                              + self.route(route_seq, "investigation") + self.cat(12, self.entry) + recovered)
+                    result = self.grade(events, [{"seq": 4}, {"seq": 12}], spawns=[{"seq": 18, "tool": "spawn_agent"}])
+                    self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+
+    def test_old_playbook_step_cannot_recover_a_new_route(self):
+        events = self.route(2, "investigation") + self.cat(4, self.entry) + self.step(6) + self.write(8)
+        result = self.grade(events, [{"seq": 4}])
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertTrue(result["failures"][0].endswith(self.no_step))
+
+    def test_unsuccessful_or_later_routing_does_not_change_recovery(self):
+        for outcome in ("failed", "missing", "late", "pending"):
+            with self.subTest(outcome=outcome):
+                route = self.route(2, "investigation")
+                if outcome == "failed":
+                    route[-1]["ok"] = False
+                elif outcome == "missing":
+                    route.pop()
+                elif outcome == "late":
+                    route[-1]["seq"] = 9
+                else:
+                    route[-1]["output_head"] = route[-1]["output_head"].replace("standard", "pending")
+                events = route + self.cat(4, self.entry) + self.step(6) + self.write(8)
+                self.assertEqual(self.grade(events, [{"seq": 4}])["verdict"], PASS)
 
     def test_reading_recovery_alone_does_not_supply_the_step(self):
         result = self.grade(self.cat(4, self.entry) + self.cat(6, self.recovery) + self.write(8), [{"turn": 0, "seq": 4}])

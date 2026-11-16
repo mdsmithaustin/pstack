@@ -4219,7 +4219,10 @@ def mode_recovers_after_compaction(view):
     playbook = plan_playbook(view)
     if not playbook:
         return inconclusive("case names no expect.playbook, so the current step's text cannot be identified")
-    step_prints = [call for call in plan_calls(view, playbook) if call["steps"] and call["ok"] is True and call["returned"] is not None]
+    calls_by_playbook = {name: plan_calls(view, name) for name in all_playbooks(view.skills_root)}
+    routes = sorted((call["returned"], name) for name, calls in calls_by_playbook.items() for call in calls
+                    if call["prints_plan"] and call["ok"] is True and call["returned"] is not None
+                    and call["route"] not in (None, "pending"))
     planners = {call.get("seq") for call in view.tool_calls
                 if any("read-plan.py" in value for value in (call.get("input") or {}).values() if isinstance(value, str))}
     returned = {call.get("seq"): answer for call in view.tool_calls
@@ -4233,13 +4236,16 @@ def mode_recovers_after_compaction(view):
     failures, evidence, measured = [], [], []
     for index, (compaction, start, end) in enumerate(windows, 1):
         action = next(((seq, what) for seq, what in governed if start <= seq < end), None)
+        active = next((name for done, name in reversed(routes) if done < (action[0] if action else end)), playbook)
+        step_prints = [call for call in calls_by_playbook.get(active, [])
+                       if call["steps"] and call["ok"] is True and call["returned"] is not None]
         inside = [(done, rel) for seq, done, rel in reads if start <= seq <= done < end]
         before = [rel for seq, rel in inside if action is None or seq < action[0]]
         reattached = compaction.get("reattached_skills") or []
         held = {f"{skill['name']}/SKILL.md" for skill in reattached}
         printed = [call for call in step_prints if start <= call["seq"] and call["returned"] < end
                    and (action is None or call["returned"] < action[0])]
-        step_text = "plan --step" if printed else "playbook read" if f"poteto-mode/playbooks/{playbook}.md" in before else None
+        step_text = "plan --step" if printed else "playbook read" if f"poteto-mode/playbooks/{active}.md" in before else None
         rels = [rel for _, rel in inside]
         measured.append({"window": index, "pre_tokens": compaction.get("pre_tokens"), "post_tokens": compaction.get("post_tokens"),
                          "kept_skill_bodies": compaction.get("kept_skill_bodies"),
@@ -4289,6 +4295,8 @@ def timing_scripts(view):
 def trigger_skill_loads_after_compaction(view):
     """The case's expect.trigger skill loads inside the compaction window of its first trigger action, before that action."""
     skill = ((view.case.get("expect") or {}).get("trigger") or {}).get("skill", "benchmark-checklist")
+    if any(compaction.get("seq") is None for compaction in view.trace.get("x_compactions") or []):
+        return inconclusive("the trace contains a compaction without a position in the lead's events")
     windows = compaction_windows(view)
     if not windows:
         return inconclusive("the trace shows no compaction with a position in the lead's events")
