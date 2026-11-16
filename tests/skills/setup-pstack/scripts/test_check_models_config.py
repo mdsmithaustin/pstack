@@ -1891,3 +1891,122 @@ class ResolveExitCodes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BedrockModelIds(ReviewerRunner, unittest.TestCase):
+    def test_a_bedrock_inference_profile_id_maps_to_its_alias(self):
+        expected = self.reviewer("claude-code", "opus@high")
+        for work_model in (
+            "global.anthropic.claude-opus-5-5@high",
+            "us.anthropic.claude-opus-5-5@high",
+            "anthropic.claude-opus-4-1-20250805-v1:0@high",
+            "us.anthropic.claude-opus-4-1-20250805-v1:0@high",
+        ):
+            with self.subTest(work_model=work_model):
+                self.assertEqual(self.reviewer("claude-code", work_model), expected)
+
+    def test_a_bedrock_id_is_a_valid_lead_model(self):
+        arms = self.resolve("claude-code", "arena runners", lead_model="global.anthropic.claude-opus-5-5")
+        self.assertEqual(arms, self.resolve("claude-code", "arena runners", lead_model="opus"))
+
+    def test_a_bedrock_id_for_another_vendor_still_exits_2(self):
+        result = self.rejected("claude-code", "global.meta.llama3-1-70b-instruct-v1:0")
+        self.assertEqual(result.returncode, 2)
+
+    def rejected(self, harness, work_model):
+        with tempfile.TemporaryDirectory() as tmp:
+            return run_script([
+                "--resolve", "--harness", harness, "--project", tmp,
+                "--user-file", str(Path(tmp) / "none.md"), "--work-model", work_model, "trail reviewer",
+            ])
+
+
+class WorkspaceFlatLineShadow(ResolveRunner, unittest.TestCase):
+    USER = "## claude-code\nfeature: sonnet@high\n"
+
+    def test_a_workspace_flat_line_under_a_user_section_gets_a_shadow_note(self):
+        [arm] = self.resolve("claude-code", "feature", user=self.USER, workspace="feature: opus@high\n")
+        self.assertEqual(arm["source"], "user ## claude-code")
+        self.assertEqual(arm["model"], "sonnet")
+        self.assertEqual(
+            arm["notes"],
+            [
+                "workspace flat line for feature is shadowed by user ## claude-code; "
+                "write it under ## claude-code in the workspace file to override"
+            ],
+        )
+
+    def test_a_workspace_section_line_wins_with_no_note(self):
+        [arm] = self.resolve("claude-code", "feature", user=self.USER, workspace="## claude-code\nfeature: opus@high\n")
+        self.assertEqual((arm["source"], arm["model"]), ("workspace ## claude-code", "opus"))
+        self.assertNotIn("notes", arm)
+
+    def test_a_workspace_flat_line_that_wins_gets_no_note(self):
+        [arm] = self.resolve("claude-code", "feature", user="feature: sonnet@high\n", workspace="feature: opus@high\n")
+        self.assertEqual(arm["source"], "workspace flat")
+        self.assertNotIn("notes", arm)
+
+    def test_a_flat_line_for_a_role_the_section_does_not_bind_gets_no_note(self):
+        [arm] = self.resolve("claude-code", "refactoring", user=self.USER, workspace="refactoring: opus@high\n")
+        self.assertEqual(arm["source"], "workspace flat")
+        self.assertNotIn("notes", arm)
+
+
+class LintUnusableEntries(unittest.TestCase):
+    def test_a_claude_code_section_value_must_be_an_alias(self):
+        text = "## claude-code\nfeature: claude-opus-5-5@high\nbug-fix: Opus@xhigh\nhow explorer: opus@high\ndefault: auto\n"
+        _, findings = cmc.parse(text)
+        alias_list = "fable, opus, sonnet, haiku"
+        self.assertEqual(
+            errors_of(findings),
+            [
+                (2, "error", f"model 'claude-opus-5-5' is not a Claude Code alias ({alias_list})"),
+                (3, "error", f"model 'Opus' is not a Claude Code alias ({alias_list})"),
+            ],
+        )
+
+    def test_a_flat_line_keeps_accepting_any_model_name(self):
+        _, findings = cmc.parse("feature: claude-opus-5-5@high\n")
+        self.assertEqual(findings, [])
+
+    LISTED = {"gpt-6.1-sol": frozenset({"high"}), "gpt-6-luna": frozenset({"high"})}
+
+    def test_a_codex_slug_missing_from_a_readable_list_is_a_notice(self):
+        text = "## codex\nfeature: gpt-7-sol@high\nhow explorer: gpt-6.1-sol@high\n"
+        _, findings = cmc.parse(text, self.LISTED)
+        self.assertEqual(errors_of(findings), [])
+        self.assertEqual(
+            notices_of(findings), [(2, "notice", "gpt-7-sol is not in this Codex's model list")],
+        )
+
+    def test_a_codex_slug_gets_no_notice_when_the_list_is_unreadable(self):
+        _, findings = cmc.parse("## codex\nfeature: gpt-7-sol@high\n")
+        self.assertEqual(findings, [])
+
+    def test_the_lint_command_reads_the_codex_list(self):
+        catalog = catalog_json("gpt-6.1-sol")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "models.md"
+            path.write_text("## codex\nfeature: gpt-7-sol@high\n", encoding="utf-8")
+            result = run_script([str(path)], catalog)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(": notice: gpt-7-sol is not in this Codex's model list", result.stdout)
+
+
+class CodexUnlistedSlug(ReviewerRunner, unittest.TestCase):
+    CATALOG = catalog_json("gpt-6.1-sol", "gpt-6-luna")
+    USER = "## codex\nfeature: gpt-7-sol@high\nhow explorer: gpt-6-astra@high\ntrail reviewer: gpt-6.1-sol@xhigh\n"
+
+    def test_the_resolver_notes_a_slug_missing_from_a_readable_list(self):
+        [arm] = self.resolve("codex", "feature", user=self.USER, codex_catalog=self.CATALOG)
+        self.assertEqual(arm["model"], "gpt-7-sol")
+        self.assertEqual(arm["notes"], ["gpt-7-sol is not in this Codex's model list"])
+
+    def test_no_note_when_the_list_is_unreadable(self):
+        [arm] = self.resolve("codex", "feature", user=self.USER)
+        self.assertNotIn("notes", arm)
+
+    def test_the_trail_reviewer_never_steps_onto_an_unlisted_slug(self):
+        arm = self.reviewer("codex", "gpt-6.1-sol@high", user=self.USER, codex_catalog=self.CATALOG)
+        self.assertNotEqual(arm["model"], "gpt-6-astra")
+        self.assertNotIn("astra", " ".join(arm.get("notes", [])))
