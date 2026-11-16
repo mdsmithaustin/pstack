@@ -2481,6 +2481,45 @@ class TriggerSkillLoadsAfterCompaction(unittest.TestCase):
         script = "python3 - <<'PY'\nimport time\nt = time.perf_counter()\nPY"
         self.assertEqual(self.grade(shell(9, script), [{"turn": 0, "seq": 4}])["verdict"], FAIL)
 
+    def test_a_command_that_only_names_a_timing_tool_is_not_a_measurement(self):
+        # Each names a timing tool or call without running a timing measurement, so the later timed run is graded.
+        for inert in ("which hyperfine", "command -v hyperfine", "hyperfine --version", "brew install hyperfine",
+                      "pip show hyperfine", "rg -n 'perf_counter|timeit' .", "/usr/bin/time --version",
+                      'git commit -m "add --json flag\n\ntime the json path later"',
+                      "python3 -c 'p = Path(\"/tmp/run/bench.py\")\np.write_text(\"import time\\nt = time.perf_counter()\")'",
+                      "python3 -c 'open(\"/tmp/run/b.py\", \"w\").write(\"import timeit\\ntimeit.timeit()\")'"):
+            with self.subTest(inert=inert[:30]):
+                result = self.grade(shell(6, inert) + self.load(8) + shell(12, self.bench), [{"turn": 0, "seq": 4}])
+                self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+                self.assertIn("seq 12", result["evidence"][0])
+
+    def test_each_timing_form_is_the_measurement(self):
+        # Each runs a timing measurement before the load, so the window fails on it.
+        forms = ("for i in 1 2 3; do time python3 -m tally sample.txt --json >/dev/null; done",
+                 "{ time python3 -m tally sample.txt; } 2>&1", "bash -lc 'time python3 -m tally sample.txt'",
+                 "TIMEFORMAT=%R time python3 -m tally sample.txt", "hyperfine --warmup 3 'python3 -m tally sample.txt'",
+                 "python3 -m timeit -s 'import tally' 'tally'", "python3 -c 'import time; t = time.perf_counter()'",
+                 "cat > /tmp/run/bench.py <<'PY'\nimport time\nt = time.perf_counter()\nPY\npython3.12 /tmp/run/bench.py",
+                 "printf 'import time\\nt = time.monotonic()\\n' > /tmp/run/bench.py && uv run /tmp/run/bench.py",
+                 "bash <<'SH'\ntime python3 -m tally sample.txt\nSH")
+        for form in forms:
+            with self.subTest(form=form[:30]):
+                result = self.grade(shell(6, form) + self.load(8) + shell(12, self.bench), [{"turn": 0, "seq": 4}])
+                self.assertEqual(result["verdict"], FAIL)
+                self.assertIn("seq 6", result["evidence"][0])
+
+    def test_unparseable_python_that_names_a_timing_call_is_inconclusive(self):
+        result = self.grade(shell(6, "python3 -c 'import time; t = time.perf_counter('") + self.load(8) + shell(12, self.bench), [{"turn": 0, "seq": 4}])
+        self.assertEqual(result["verdict"], INCONCLUSIVE)
+
+    def test_a_read_of_unknown_extent_or_missing_reattach_data_is_inconclusive(self):
+        partial = shell(6, "cat .agents/skills/benchmark-checklist/SKILL.md | head -n \"$N\"")
+        self.assertEqual(self.grade(partial + shell(9, self.bench), [{"turn": 0, "seq": 4}])["verdict"], INCONCLUSIVE)
+        unknown = self.grade(shell(9, self.bench), [{"turn": 0, "seq": 4, "reattached_skills": None}], harness="claude-code")
+        self.assertEqual(unknown["verdict"], INCONCLUSIVE)
+        known = self.grade(shell(9, self.bench), [{"turn": 0, "seq": 4, "reattached_skills": []}], harness="claude-code")
+        self.assertEqual(known["verdict"], FAIL)
+
 class ModeRecoversAfterCompaction(unittest.TestCase):
     case = load_case("feature-compact-midrun")
     entry, recovery, playbook = "poteto-mode/SKILL.md", "poteto-mode/references/recovery.md", "poteto-mode/playbooks/feature.md"

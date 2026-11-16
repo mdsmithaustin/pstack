@@ -1,3 +1,4 @@
+import ast
 import bisect
 import json
 import os
@@ -4272,8 +4273,143 @@ def mode_recovers_after_compaction(view):
 
 
 
-MEASUREMENT = re.compile(r"(?:^|[;&|(]|\n)\s*(?:/usr/bin/)?time\s+[\w./-]|\btimeit\b|\bhyperfine\b|\bperf_counter(?:_ns)?\b|\btime\.(?:monotonic|time)(?:_ns)?\(")
-SCRIPT_WRITE = re.compile(r"""([^\s"'\\(]+\.py)\\*["']?\s*\)\s*\.write_text\(|(?:>|\btee\s+)\s*\\*["']?([^\s"'\\;&|]+\.py)\b""")
+TIMING_TOKEN = re.compile(r"\btimeit\b|\bhyperfine\b|\bperf_counter(?:_ns)?\b|\bmonotonic(?:_ns)?\b|\btime\.time(?:_ns)?\(")
+SCRIPT_WRITE = re.compile(r"""([^\s"'\\(]+\.py)\\*["']?\s*\)\s*\.write_text\(|(?:>|\btee\s+)\s*\\*["']?([^\s"'\;&|]+\.py)\b""")
+PYTHON_NAME = re.compile(r"(?:python(?:\d+(?:\.\d+)*)?|pypy3?)$")
+PYTHON_VALUE_OPTIONS = {"-X", "-W", "-Q"}
+RUNNERS = {"uv", "poetry", "pipenv", "pdm", "rye", "hatch"}
+RUNNER_VALUE_OPTIONS = {"--with", "--python", "-p", "--project", "--directory", "--extra", "--group", "--env-file", "--package", "-e", "--env"}
+TIME_WRAPPERS = {"time", "gtime"}
+TIMING_CALLS = {"perf_counter", "perf_counter_ns", "monotonic", "monotonic_ns"}
+
+
+def python_timing(code):
+    """(times, writes): whether code calls a timing function, and the .py base names it writes with timing text inside.
+    times is None when the code does not parse but names a timing call."""
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError):
+        return (None if TIMING_TOKEN.search(code) else False), set()
+    from_time = {alias.asname or alias.name for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module == "time"
+                 for alias in node.names}
+    from_timeit = {alias.asname or alias.name for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module == "timeit"
+                   for alias in node.names}
+    times, writes = False, False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Attribute):
+            owner = func.value.id if isinstance(func.value, ast.Name) else None
+            times = times or func.attr in TIMING_CALLS or (owner == "time" and func.attr in ("time", "time_ns")) or owner == "timeit"
+            writes = writes or func.attr in ("write_text", "write")
+        elif isinstance(func, ast.Name):
+            times = times or func.id in TIMING_CALLS | from_timeit or (func.id in ("time", "time_ns") and func.id in from_time)
+            writes = writes or func.id == "open"
+    texts = [node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, str)]
+    scripts = set()
+    if writes and any(TIMING_TOKEN.search(text) for text in texts):
+        scripts = {os.path.basename(text) for text in texts if re.fullmatch(r"[^\s'\"]+\.py", text)}
+    return times, scripts
+
+
+def timed_argvs(command):
+    """(argv, timed) for each simple command in a shell string, nested shells included; timed when a `time` wrapper ran it."""
+    outer, inner = split_substitutions(strip_heredocs(command))
+    for text in inner:
+        yield from timed_argvs(text)
+    for segment, masked, _ in walk_segments(outer):
+        start = 0
+        for cut in [*PIPE_OR_BACKGROUND.finditer(masked), None]:
+            end = cut.start() if cut else len(segment)
+            argv = argv_of(command_position(segment[start:end], masked[start:end]))
+            start = cut.end() if cut else end
+            timed = False
+            while argv and (ENV_ASSIGN.match(argv[0]) or os.path.basename(argv[0]) in ("env", "command", "exec", "nohup", "sudo", "nice")):
+                argv = argv[1:]
+            if argv and os.path.basename(argv[0]) in TIME_WRAPPERS:
+                timed = True
+            argv = bare_command(argv)
+            if not argv:
+                continue
+            yield argv, timed
+            payload = shell_payload(argv)
+            if payload:
+                yield from (((inner_argv, timed or inner_timed)) for inner_argv, inner_timed in timed_argvs(payload))
+
+
+def python_run(argv):
+    """(kind, value) for a python argv: ("module", name) for -m, ("code", text) for -c, ("script", path) with '-' for stdin.
+    None when argv does not run python."""
+    if argv and os.path.basename(argv[0]) in RUNNERS and "run" in argv[1:3]:
+        rest = argv[argv.index("run") + 1:]
+        while rest and rest[0].startswith("-"):
+            rest = rest[2:] if rest[0] in RUNNER_VALUE_OPTIONS else rest[1:]
+        if rest and rest[0].endswith(".py"):
+            return "script", rest[0]
+        argv = rest
+    if not argv:
+        return None
+    name = os.path.basename(argv[0])
+    if name.endswith(".py"):
+        return "script", argv[0]
+    if not PYTHON_NAME.fullmatch(name):
+        return None
+    args = argv[1:]
+    while args:
+        word = args[0]
+        if word == "-m":
+            return "module", (args[1] if len(args) > 1 else "")
+        if re.fullmatch(r"-[A-Za-z]*c", word):
+            return "code", (args[1] if len(args) > 1 else "")
+        if word in PYTHON_VALUE_OPTIONS:
+            args = args[2:]
+        elif word.startswith("-") and word != "-":
+            args = args[1:]
+        else:
+            return "script", word
+    return "script", "-"
+
+
+def measurement(command, scripts):
+    """'measure' when the command runs a timing measurement, 'unclear' when it may and the grader cannot tell, else None.
+    Adds the .py files the command writes with timing calls inside to scripts first, so a write-then-run call counts."""
+    written = [path for match in SCRIPT_WRITE.findall(command) for path in match if path]
+    if written and TIMING_TOKEN.search(command):
+        scripts.update(os.path.basename(path) for path in written)
+    found, piped = None, []
+    for header, body in heredoc_bodies(command):
+        for argv, _ in timed_argvs(header):
+            if os.path.basename(argv[0]) in SHELL_NAMES and len(argv) == 1:
+                found = measurement(body, scripts) or found
+                if found == "measure":
+                    return found
+            elif python_run(argv) == ("script", "-"):
+                piped.append(body)
+    for argv, timed in timed_argvs(command):
+        name = os.path.basename(argv[0])
+        if timed or (name == "hyperfine" and any(not arg.startswith("-") for arg in argv[1:])):
+            return "measure"
+        run = python_run(argv)
+        if run is None:
+            continue
+        kind, value = run
+        if kind == "module":
+            if value == "timeit":
+                return "measure"
+            continue
+        if kind == "script" and value != "-":
+            if os.path.basename(value) in scripts:
+                return "measure"
+            continue
+        for text in ([value] if kind == "code" else piped):
+            times, writes = python_timing(text)
+            scripts.update(writes)
+            if times:
+                return "measure"
+            if times is None:
+                found = "unclear"
+    return found
 
 
 def timing_scripts(view):
@@ -4281,7 +4417,7 @@ def timing_scripts(view):
     names = set()
     for call in view.tool_calls:
         given = call.get("input") or {}
-        if call.get("name") not in EDIT_TOOLS or not MEASUREMENT.search(json.dumps(given).replace("\\n", "\n")):
+        if call.get("name") not in EDIT_TOOLS or not TIMING_TOKEN.search(json.dumps(given).replace("\\n", "\n")):
             continue
         paths = [given[f] for f in PATH_FIELDS if isinstance(given.get(f), str)] + list(given.get("changes") or ())
         patch = given.get("patch") or given.get("input") or ""
@@ -4301,18 +4437,12 @@ def trigger_skill_loads_after_compaction(view):
     if not windows:
         return inconclusive("the trace shows no compaction with a position in the lead's events")
     scripts = timing_scripts(view)
-    measured = []
-    for seq, command, _, _ in view.commands():
-        written = [path for match in SCRIPT_WRITE.findall(command) for path in match if path]
-        if written:
-            if MEASUREMENT.search(command):
-                scripts.update(os.path.basename(path) for path in written)
-            continue
-        if MEASUREMENT.search(command) or any(re.search(rf"\bpython3?(?:\s+-\w+)*\s+(?:\S*/)?{re.escape(name)}\b", command) for name in scripts):
-            measured.append((seq, command))
-    if not measured:
+    first = next(((seq, command, kind) for seq, command, _, _ in view.commands() if (kind := measurement(command, scripts))), None)
+    if first is None:
         return inconclusive("the lead ran no timing measurement")
-    seq, command = measured[0]
+    seq, command, kind = first
+    if kind == "unclear":
+        return inconclusive(f"the command at seq {seq} may time something, but its Python code does not parse: {command[:160]!r}")
     window = next(((index, compaction, start) for index, (compaction, start, end) in enumerate(windows, 1) if start <= seq < end), None)
     returned = {call.get("seq"): answer["seq"] for call in view.tool_calls if (answer := view.results_for(call)) is not None}
     loads = [(returned[a[0]], a[1]) for a in load_attempts(view, skill, by_return=True)
@@ -4327,6 +4457,12 @@ def trigger_skill_loads_after_compaction(view):
     inside = [a for a in loads if start <= a[0] < seq]
     if inside:
         return passed(f"window {index}: {skill} loaded at seq {inside[0][0]} before the measurement at seq {seq}", *evidence)
+    partial = [a for a in load_attempts(view, skill, by_return=True) if a[1] == "read-unknown" and a[2] is True
+               and start <= returned.get(a[0], float("inf")) < seq]
+    if partial:
+        return inconclusive(f"window {index}: the lead read {skill} at seq {partial[0][0]}, but the grader cannot tell how much of it", *evidence)
+    if view.harness == "claude-code" and compaction.get("reattached_skills") is None:
+        return inconclusive(f"window {index}: the trace does not record which skills Claude Code attached again at the compaction", *evidence)
     return failed(f"window {index}: the lead ran a timing measurement at seq {seq} without loading {skill} after the compaction at seq {start}", *evidence)
 
 def prompt_named(texts, names):
