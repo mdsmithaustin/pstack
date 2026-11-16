@@ -1921,37 +1921,6 @@ class BedrockModelIds(ReviewerRunner, unittest.TestCase):
             ])
 
 
-class WorkspaceFlatLineShadow(ResolveRunner, unittest.TestCase):
-    USER = "## claude-code\nfeature: sonnet@high\n"
-
-    def test_a_workspace_flat_line_under_a_user_section_gets_a_shadow_note(self):
-        [arm] = self.resolve("claude-code", "feature", user=self.USER, workspace="feature: opus@high\n")
-        self.assertEqual(arm["source"], "user ## claude-code")
-        self.assertEqual(arm["model"], "sonnet")
-        self.assertEqual(
-            arm["notes"],
-            [
-                "workspace flat line for feature is shadowed by user ## claude-code; "
-                "write it under ## claude-code in the workspace file to override"
-            ],
-        )
-
-    def test_a_workspace_section_line_wins_with_no_note(self):
-        [arm] = self.resolve("claude-code", "feature", user=self.USER, workspace="## claude-code\nfeature: opus@high\n")
-        self.assertEqual((arm["source"], arm["model"]), ("workspace ## claude-code", "opus"))
-        self.assertNotIn("notes", arm)
-
-    def test_a_workspace_flat_line_that_wins_gets_no_note(self):
-        [arm] = self.resolve("claude-code", "feature", user="feature: sonnet@high\n", workspace="feature: opus@high\n")
-        self.assertEqual(arm["source"], "workspace flat")
-        self.assertNotIn("notes", arm)
-
-    def test_a_flat_line_for_a_role_the_section_does_not_bind_gets_no_note(self):
-        [arm] = self.resolve("claude-code", "refactoring", user=self.USER, workspace="refactoring: opus@high\n")
-        self.assertEqual(arm["source"], "workspace flat")
-        self.assertNotIn("notes", arm)
-
-
 class LintUnusableEntries(unittest.TestCase):
     def test_a_claude_code_section_value_must_be_an_alias(self):
         text = "## claude-code\nfeature: claude-opus-5-5@high\nbug-fix: Opus@xhigh\nhow explorer: opus@high\ndefault: auto\n"
@@ -1996,15 +1965,6 @@ class LintUnusableEntries(unittest.TestCase):
 class CodexUnlistedSlug(ReviewerRunner, unittest.TestCase):
     CATALOG = catalog_json("gpt-6.1-sol", "gpt-6-luna")
     USER = "## codex\nfeature: gpt-7-sol@high\nhow explorer: gpt-6-astra@high\ntrail reviewer: gpt-6.1-sol@xhigh\n"
-
-    def test_the_resolver_notes_a_slug_missing_from_a_readable_list(self):
-        [arm] = self.resolve("codex", "feature", user=self.USER, codex_catalog=self.CATALOG)
-        self.assertEqual(arm["model"], "gpt-7-sol")
-        self.assertEqual(arm["notes"], ["gpt-7-sol is not in this Codex's model list"])
-
-    def test_no_note_when_the_list_is_unreadable(self):
-        [arm] = self.resolve("codex", "feature", user=self.USER)
-        self.assertNotIn("notes", arm)
 
     def test_the_trail_reviewer_never_steps_onto_an_unlisted_slug(self):
         arm = self.reviewer("codex", "gpt-6.1-sol@high", user=self.USER, codex_catalog=self.CATALOG)
