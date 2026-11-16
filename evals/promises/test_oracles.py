@@ -2508,6 +2508,36 @@ class TriggerSkillLoadsAfterCompaction(unittest.TestCase):
                 self.assertEqual(result["verdict"], FAIL)
                 self.assertIn("seq 6", result["evidence"][0])
 
+    def test_more_timing_forms_are_the_measurement(self):
+        forms = ("time (for i in 1 2 3; do python3 -m tally sample.txt; done)", "time -p { python3 -m tally sample.txt; }",
+                 "timeout 60 time python3 -m tally sample.txt", "# baseline first\ntime python3 -m tally sample.txt",
+                 "python3 -c 'import time as t; s = t.time()'", "python3 -c 'from time import perf_counter as now; s = now()'")
+        for form in forms:
+            with self.subTest(form=form[:30]):
+                result = self.grade(shell(6, form) + self.load(8) + shell(12, self.bench), [{"turn": 0, "seq": 4}])
+                self.assertEqual(result["verdict"], FAIL)
+                self.assertIn("seq 6", result["evidence"][0])
+
+    def test_a_script_counts_only_after_timing_code_reaches_that_file(self):
+        def patch(seq, files):
+            body = "".join(f"*** Add File: /tmp/run/{name}\n+{text}\n" for name, text in files)
+            return [{"seq": seq, "kind": "tool_call", "name": "apply_patch", "id": f"p{seq}", "input": {"patch": f"*** Begin Patch\n{body}*** End Patch"}}]
+        later = patch(2, [("bench.py", "print(1)")]) + shell(6, "python3 /tmp/run/bench.py") + self.load(8) \
+            + patch(10, [("bench.py", "import time; t = time.perf_counter()")]) + shell(12, "python3 /tmp/run/bench.py")
+        sibling = patch(2, [("helper.py", "print(1)"), ("bench.py", "import time; t = time.perf_counter()")]) \
+            + shell(6, "python3 /tmp/run/helper.py") + self.load(8) + shell(12, "python3 /tmp/run/bench.py")
+        shell_sibling = shell(2, "cat > /tmp/run/helper.py <<'PY'\nprint(1)\nPY\ncat > /tmp/run/bench.py <<'PY'\nimport time\nt = time.perf_counter()\nPY") \
+            + shell(6, "python3 /tmp/run/helper.py") + self.load(8) + shell(12, "python3 /tmp/run/bench.py")
+        for name, events in (("later", later), ("sibling", sibling), ("shell sibling", shell_sibling)):
+            with self.subTest(name=name):
+                result = self.grade(events, [{"turn": 0, "seq": 4}])
+                self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+                self.assertIn("seq 12", result["evidence"][0])
+
+    def test_timeit_help_is_not_a_measurement(self):
+        result = self.grade(shell(6, "python3 -m timeit -h") + self.load(8) + shell(12, self.bench), [{"turn": 0, "seq": 4}])
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+
     def test_unparseable_python_that_names_a_timing_call_is_inconclusive(self):
         result = self.grade(shell(6, "python3 -c 'import time; t = time.perf_counter('") + self.load(8) + shell(12, self.bench), [{"turn": 0, "seq": 4}])
         self.assertEqual(result["verdict"], INCONCLUSIVE)
@@ -2515,8 +2545,12 @@ class TriggerSkillLoadsAfterCompaction(unittest.TestCase):
     def test_a_read_of_unknown_extent_or_missing_reattach_data_is_inconclusive(self):
         partial = shell(6, "cat .agents/skills/benchmark-checklist/SKILL.md | head -n \"$N\"")
         self.assertEqual(self.grade(partial + shell(9, self.bench), [{"turn": 0, "seq": 4}])["verdict"], INCONCLUSIVE)
-        unknown = self.grade(shell(9, self.bench), [{"turn": 0, "seq": 4, "reattached_skills": None}], harness="claude-code")
+        invoked = [{"seq": 1, "kind": "tool_call", "name": "Skill", "id": "s1", "input": {"skill": "benchmark-checklist"}},
+                   {"seq": 2, "kind": "tool_result", "id": "s1", "ok": True, "output_head": "Launching skill: benchmark-checklist"}]
+        unknown = self.grade(invoked + shell(9, self.bench), [{"turn": 0, "seq": 4, "reattached_skills": None}], harness="claude-code")
         self.assertEqual(unknown["verdict"], INCONCLUSIVE)
+        never = self.grade(shell(9, self.bench), [{"turn": 0, "seq": 4, "reattached_skills": None}], harness="claude-code")
+        self.assertEqual(never["verdict"], FAIL)
         known = self.grade(shell(9, self.bench), [{"turn": 0, "seq": 4, "reattached_skills": []}], harness="claude-code")
         self.assertEqual(known["verdict"], FAIL)
 

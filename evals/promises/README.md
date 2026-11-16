@@ -149,13 +149,13 @@ For `mode-recovers-after-compaction`, each window ends at the next compaction. T
 
 The oracle parses shell commands and recognizes these timing forms:
 
-- A `time` or `gtime` wrapper running a command, or `hyperfine` with a command argument.
-- `python -m timeit`, or Python code supplied through `-c` or a stdin heredoc that calls `perf_counter`, `time.monotonic`, `time.time`, their `_ns` variants, or `timeit`. Python call detection uses the AST, so timing names inside string literals do not count.
-- A run of a `.py` file the lead wrote with timing code. Versioned Python executables such as `python3.12`, direct script execution, and the `uv`, `poetry`, `pipenv`, `pdm`, `rye`, and `hatch` `run` forms are recognized.
+- A `time` or `gtime` wrapper running a command or a `( ... )` or `{ ...; }` group, including under `timeout`, or `hyperfine` with a command argument.
+- `python -m timeit`, or Python code supplied through `-c` or a stdin heredoc that calls `perf_counter`, `time.monotonic`, `time.time`, their `_ns` variants, or `timeit`. Python call detection uses the AST and follows import aliases, so timing names inside string literals do not count. `python -m timeit -h` is a lookup.
+- A run of a `.py` file the lead wrote with timing code, counted from the edit or command that put timing code into that file. Versioned Python executables such as `python3.12`, direct script execution, and the `uv`, `poetry`, `pipenv`, `pdm`, `rye`, and `hatch` `run` forms are recognized.
 
-The shell parsing includes loops, brace groups, command substitutions, nested shells such as `bash -c`, and heredocs fed to a shell. Writing and running a timing script in one tool call counts. Looking up, installing, searching for, reading, or merely writing a timing tool or script does not count. These are the supported timing forms, not a general detector for Node, `pyperf`, or subprocess-launched timing inside Python.
+The shell parsing includes loops, brace groups, command substitutions, nested shells such as `bash -c`, and heredocs fed to a shell. Writing and running a timing script in one tool call counts. Looking up, installing, searching for, reading, or merely writing a timing tool or script does not count. A measurement counts whether or not its command succeeded. These are the supported timing forms, not a general detector for Node, `pyperf`, or subprocess-launched timing inside Python.
 
-The result is `INCONCLUSIVE` when there is no positioned compaction, any compaction lacks a position, no measurement is recognized, or the first measurement precedes the first compaction. It is also inconclusive when the first possible measurement names a timing call in Python that does not parse. If no qualifying load is established, a successful skill read of unknown extent in the window before the measurement, or missing Claude Code `reattached_skills` data for that window, makes the result inconclusive rather than a failure.
+The result is `INCONCLUSIVE` when there is no positioned compaction, any compaction lacks a position, no measurement is recognized, or the first measurement precedes the first compaction. It is also inconclusive when the first possible measurement names a timing call in Python that does not parse. If no qualifying load is established, a successful skill read of unknown extent in the window before the measurement, or missing Claude Code `reattached_skills` data for that window's compaction after the skill had loaded earlier, makes the result inconclusive rather than a failure.
 
 ### Delegate context on Codex
 

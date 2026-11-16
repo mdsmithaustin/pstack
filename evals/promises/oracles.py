@@ -4290,21 +4290,22 @@ def python_timing(code):
         tree = ast.parse(code)
     except (SyntaxError, ValueError):
         return (None if TIMING_TOKEN.search(code) else False), set()
-    from_time = {alias.asname or alias.name for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module == "time"
-                 for alias in node.names}
-    from_timeit = {alias.asname or alias.name for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module == "timeit"
-                   for alias in node.names}
+    imported = {(alias.asname or alias.name): (node.module, alias.name) for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+                for alias in node.names}
+    modules = {"time": "time", "timeit": "timeit"} | {(alias.asname or alias.name): alias.name for node in ast.walk(tree)
+                                                      if isinstance(node, ast.Import) for alias in node.names}
     times, writes = False, False
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
         if isinstance(func, ast.Attribute):
-            owner = func.value.id if isinstance(func.value, ast.Name) else None
+            owner = modules.get(func.value.id) if isinstance(func.value, ast.Name) else None
             times = times or func.attr in TIMING_CALLS or (owner == "time" and func.attr in ("time", "time_ns")) or owner == "timeit"
             writes = writes or func.attr in ("write_text", "write")
         elif isinstance(func, ast.Name):
-            times = times or func.id in TIMING_CALLS | from_timeit or (func.id in ("time", "time_ns") and func.id in from_time)
+            module, name = imported.get(func.id, (None, func.id))
+            times = times or name in TIMING_CALLS or module == "timeit" or (module == "time" and name in ("time", "time_ns"))
             writes = writes or func.id == "open"
     texts = [node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, str)]
     scripts = set()
@@ -4315,7 +4316,7 @@ def python_timing(code):
 
 def timed_argvs(command):
     """(argv, timed) for each simple command in a shell string, nested shells included; timed when a `time` wrapper ran it."""
-    outer, inner = split_substitutions(strip_heredocs(command))
+    outer, inner = split_substitutions(re.sub(r"(?m)^\s*#.*$", "", strip_heredocs(command)))
     for text in inner:
         yield from timed_argvs(text)
     for segment, masked, _ in walk_segments(outer):
@@ -4325,10 +4326,15 @@ def timed_argvs(command):
             argv = argv_of(command_position(segment[start:end], masked[start:end]))
             start = cut.end() if cut else end
             timed = False
-            while argv and (ENV_ASSIGN.match(argv[0]) or os.path.basename(argv[0]) in ("env", "command", "exec", "nohup", "sudo", "nice")):
+            while argv and (ENV_ASSIGN.match(argv[0]) or os.path.basename(argv[0]) in ("env", "command", "exec", "nohup", "sudo", "nice", "timeout")):
                 argv = argv[1:]
+                while argv and (argv[0].startswith("-") or re.fullmatch(r"[\d.]+[smhd]?", argv[0])):
+                    argv = argv[1:]
             if argv and os.path.basename(argv[0]) in TIME_WRAPPERS:
                 timed = True
+                if set(argv[1:]) <= {"-p"}:
+                    yield ["("], True  # `time ( ... )` or `time { ...; }`: the shell times the group that follows
+                    continue
             argv = bare_command(argv)
             if not argv:
                 continue
@@ -4374,11 +4380,15 @@ def python_run(argv):
 def measurement(command, scripts):
     """'measure' when the command runs a timing measurement, 'unclear' when it may and the grader cannot tell, else None.
     Adds the .py files the command writes with timing calls inside to scripts first, so a write-then-run call counts."""
-    written = [path for match in SCRIPT_WRITE.findall(command) for path in match if path]
-    if written and TIMING_TOKEN.search(command):
-        scripts.update(os.path.basename(path) for path in written)
+    bodies = heredoc_bodies(command)
+    for match in SCRIPT_WRITE.finditer(command):
+        path = match.group(1) or match.group(2)
+        line = command[command.rfind("\n", 0, match.start()) + 1:command.find("\n", match.end()) % (len(command) + 1)]
+        text = next((body for header, body in bodies if header == line), line)
+        if TIMING_TOKEN.search(text):
+            scripts.add(os.path.basename(path))
     found, piped = None, []
-    for header, body in heredoc_bodies(command):
+    for header, body in bodies:
         for argv, _ in timed_argvs(header):
             if os.path.basename(argv[0]) in SHELL_NAMES and len(argv) == 1:
                 found = measurement(body, scripts) or found
@@ -4395,7 +4405,7 @@ def measurement(command, scripts):
             continue
         kind, value = run
         if kind == "module":
-            if value == "timeit":
+            if value == "timeit" and not {"-h", "--help"} & set(argv):
                 return "measure"
             continue
         if kind == "script" and value != "-":
@@ -4412,19 +4422,22 @@ def measurement(command, scripts):
     return found
 
 
-def timing_scripts(view):
-    """Base names of files the lead wrote with an edit tool whose content makes a timing call."""
-    names = set()
-    for call in view.tool_calls:
-        given = call.get("input") or {}
-        if call.get("name") not in EDIT_TOOLS or not TIMING_TOKEN.search(json.dumps(given).replace("\\n", "\n")):
-            continue
-        paths = [given[f] for f in PATH_FIELDS if isinstance(given.get(f), str)] + list(given.get("changes") or ())
-        patch = given.get("patch") or given.get("input") or ""
-        if isinstance(patch, str):
-            paths += re.findall(r"\*\*\* (?:Update|Add) File: (\S+)", patch)
-        names.update(os.path.basename(path) for path in paths if path.endswith(".py"))
-    return names
+def edited_timing_scripts(call):
+    """Base names of the .py files one edit-tool call writes with timing text in that file's own content."""
+    given = call.get("input") or {}
+    if call.get("name") not in EDIT_TOOLS:
+        return set()
+    patch = given.get("patch") or given.get("input") or ""
+    if isinstance(patch, str) and "*** " in patch:
+        parts = re.split(r"^\*\*\* (?:Update|Add) File: (\S+)$", patch, flags=re.M)
+        return {os.path.basename(path) for path, body in zip(parts[1::2], parts[2::2]) if path.endswith(".py") and TIMING_TOKEN.search(body)}
+    changes = given.get("changes")
+    if isinstance(changes, dict):
+        return {os.path.basename(path) for path, change in changes.items()
+                if path.endswith(".py") and TIMING_TOKEN.search(json.dumps(change).replace("\\n", "\n"))}
+    paths = [given[f] for f in PATH_FIELDS if isinstance(given.get(f), str)]
+    content = json.dumps({k: v for k, v in given.items() if k not in PATH_FIELDS}).replace("\\n", "\n")
+    return {os.path.basename(path) for path in paths if path.endswith(".py") and TIMING_TOKEN.search(content)}
 
 
 @oracle("trigger-skill-loads-after-compaction")
@@ -4436,8 +4449,15 @@ def trigger_skill_loads_after_compaction(view):
     windows = compaction_windows(view)
     if not windows:
         return inconclusive("the trace shows no compaction with a position in the lead's events")
-    scripts = timing_scripts(view)
-    first = next(((seq, command, kind) for seq, command, _, _ in view.commands() if (kind := measurement(command, scripts))), None)
+    scripts, first = set(), None
+    steps = [(call.get("seq"), 0, call) for call in view.tool_calls if call.get("name") in EDIT_TOOLS and call.get("seq") is not None]
+    steps += [(seq, 1, command) for seq, command, _, _ in view.commands()]
+    for seq, is_command, item in sorted(steps, key=lambda step: (step[0], step[1])):
+        if not is_command:
+            scripts |= edited_timing_scripts(item)
+        elif kind := measurement(item, scripts):
+            first = (seq, item, kind)
+            break
     if first is None:
         return inconclusive("the lead ran no timing measurement")
     seq, command, kind = first
@@ -4461,7 +4481,7 @@ def trigger_skill_loads_after_compaction(view):
                and start <= returned.get(a[0], float("inf")) < seq]
     if partial:
         return inconclusive(f"window {index}: the lead read {skill} at seq {partial[0][0]}, but the grader cannot tell how much of it", *evidence)
-    if view.harness == "claude-code" and compaction.get("reattached_skills") is None:
+    if view.harness == "claude-code" and compaction.get("reattached_skills") is None and any(a[0] < start for a in loads):
         return inconclusive(f"window {index}: the trace does not record which skills Claude Code attached again at the compaction", *evidence)
     return failed(f"window {index}: the lead ran a timing measurement at seq {seq} without loading {skill} after the compaction at seq {start}", *evidence)
 
