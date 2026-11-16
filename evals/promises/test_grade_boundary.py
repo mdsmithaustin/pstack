@@ -17,7 +17,7 @@ from unittest import mock
 import live
 import oracles
 import grade_boundary
-from grade_boundary import GradeRefused, _Root, _Controller, _authorize_fixture, _authorize_retained, _before_turns, _seal
+from grade_boundary import GradeRefused, _Root, _Controller, _approved_trees, _authorize_fixture, _authorize_retained, _before_turns, _seal, _snapshot
 
 NATIVE = (platform.system(), platform.release(), platform.machine()) == ("Darwin", "25.6.0", "arm64")
 
@@ -240,6 +240,33 @@ class ControllerBoundary(BoundaryFixtures):
         for name in ("link.txt", "hard.txt", "../../outside/read-marker.txt"):
             with self.subTest(name=name), self.assertRaises(GradeRefused):
                 root.read(name)
+
+    def cloned_state(self):
+        self.repository()
+        scratch = self.root / "tmp"
+        scratch.mkdir()
+        live.git_run(scratch, "clone", "-q", str(self.project), "copy", capture_output=True)
+        self.assertTrue([p for p in (self.project / ".git" / "objects").rglob("*") if p.is_file() and p.stat().st_nlink > 1])
+        return {"project": _snapshot(self.project), "worktrees": [], "git": _snapshot(self.project / ".git"),
+                "allocations": [_snapshot(self.project.parent), _snapshot(scratch)]}
+
+    def test_a_local_clone_inside_the_run_allocations_is_approved(self):
+        state = self.cloned_state()
+        (self.root / "tmp" / "escape").symlink_to(self.outside)
+        self.assertEqual([tree["path"] for tree in _approved_trees(state)], [str(self.project)])
+
+    def test_a_hard_link_with_a_name_outside_the_run_allocations_refuses(self):
+        state = self.cloned_state()
+        os.link(self.read_marker, self.project / "hard.txt")
+        with self.assertRaises(GradeRefused) as refused:
+            _approved_trees(state)
+        self.assertEqual(refused.exception.receipt["reason"], "unsafe_link")
+        shared = next(p for p in (self.project / ".git" / "objects").rglob("*") if p.is_file() and p.stat().st_nlink > 1)
+        os.unlink(self.project / "hard.txt")
+        os.link(shared, self.outside / "third-name")
+        with self.assertRaises(GradeRefused) as refused:
+            _approved_trees(state)
+        self.assertEqual(refused.exception.receipt["reason"], "unsafe_link")
 
     def test_controller_publication_rejects_output_substitution(self):
         root = _Root.open(self.root)
