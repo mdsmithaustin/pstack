@@ -2731,6 +2731,13 @@ class ModeRecoversAfterCompaction(unittest.TestCase):
         self.assertIn("the mode entry", result["failures"][0])
         self.assertTrue(result["measures"]["windows"][0]["recovery_read"])
 
+    def test_read_plan_does_not_hide_a_later_read_of_the_same_file(self):
+        entry = f".agents/skills/{self.entry}"
+        command = f"python3 .agents/skills/pstack-harness/scripts/read-plan.py {entry} --max-output-tokens 10000 && cat {entry}"
+        events = shell(4, command) + self.step(6) + self.write(8)
+        result = self.grade(events, [{"turn": 0, "seq": 4}])
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+
 
 class RoutedSkillLoadsAfterCompaction(unittest.TestCase):
     case = load_case("name-only-route-after-compact")

@@ -4216,8 +4216,11 @@ def compaction_windows(view):
 
 def files_only_planned(call):
     command = str((call.get("input") or {}).get(SHELL_TOOLS[call["name"]]) or "")
-    named = [argv for argv in simple_commands(command) if any(os.path.basename(word) == "read-plan.py" for word in argv)]
-    return {rel for argv in named for path in resolved_shell_paths(shlex.join(argv)) if (rel := skill_rel(path))}
+    planned, read = set(), set()
+    for argv in simple_commands(command):
+        paths = planned if any(os.path.basename(word) == "read-plan.py" for word in argv) else read
+        paths.update(rel for path in resolved_shell_paths(shlex.join(argv)) if (rel := skill_rel(path)))
+    return planned - read
 
 
 @oracle("mode-recovers-after-compaction")
