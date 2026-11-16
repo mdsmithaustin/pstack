@@ -6,7 +6,7 @@ routing policy, so the answer is the same on every model and harness. Steps and
 their outcome sentences come from the playbook file, which owns them. Gates, panels,
 and the flags of code-changing playbooks come from routes.json beside the mode entry.
 
-With --step N it prints the full text of one step instead, for the moment that step starts.
+With --step N it prints the full text of one step and the route's gates instead, for the moment that step starts.
 
 Exit 2 means a usage error, such as an unknown playbook, a missing step, or a lowered route.
 """
@@ -124,8 +124,33 @@ def render_step(args, manifest):
     elif tiered and args.route == "standard":
         panels = ", ".join(f"`{name}`" for name in manifest["panels"])
         out += [f"Standard route: the panels ({panels}) stay unloaded. Where this step names one, compare the options yourself and record them.", ""]
-    out += [text, "", regime(args.playbook, manifest), "Mark the item completed only with its evidence."]
+    out += [text, ""]
+    if args.harness != "claude-code":
+        out += [f"On this harness, \"Call the Skill tool with `<name>`\" means: {load_phrase('<name>', args.harness)}.", ""]
+    gates = route_gates(manifest, args.playbook, args.route if tiered else "standard")
+    out += ["gates, which still bind:", *render_gates(gates, args.harness), ""]
+    out += [regime(args.playbook, manifest), "Mark the item completed only with its evidence."]
     return "\n".join(out)
+
+
+def route_gates(manifest, playbook, route):
+    changes_code = manifest["playbooks"].get(playbook, {}).get("changes_code", False)
+    gates = []
+    for gate in manifest["gates"]:
+        if gate["applies"] == "code" and not changes_code:
+            continue
+        gates.append({"id": gate["id"], "skill": gate.get("skill"), "run": gate.get("run"), "when": gate_timing(gate, route)})
+    return gates
+
+
+def gate_timing(gate, route):
+    when = gate["when"]
+    return when.get(route) or when.get("all") or "; ".join(f"{name}: {text}" for name, text in when.items())
+
+
+def render_gates(gates, harness):
+    return [f"- {gate['id']}: {load_phrase(gate['skill'], harness) if gate['skill'] else 'run `' + gate['run'] + '`'}, {gate['when']}."
+            for gate in gates]
 
 
 def step_name(text):
@@ -264,12 +289,7 @@ def build(args, manifest, endpoint=None):
                         "conditional": conditional, "uses": uses, "held_for_intensive": held, "skipped": skips.get(step_name(text)),
                         "runs_pr": changes_code and bool(RUN_PR.search(text))})
 
-    gates = []
-    for gate in manifest["gates"]:
-        if gate["applies"] == "code" and not changes_code:
-            continue
-        when = gate["when"].get(route) or gate["when"]["all"]
-        gates.append({"id": gate["id"], "skill": gate.get("skill"), "run": gate.get("run"), "when": when})
+    gates = route_gates(manifest, args.playbook, route)
     return {
         "playbook": args.playbook, "file": display_path(path), "full_read": any(line.startswith(FULL_READ) for line in prose),
         "regime": regime(args.playbook, manifest),
@@ -346,9 +366,7 @@ def render(plan, harness):
         out.append("If new evidence makes a fact material or unknown, rerun this script and expand the worklist before further edits.")
     out.append("")
     out.append("gates:")
-    for gate in plan["gates"]:
-        action = load_phrase(gate["skill"], harness) if gate["skill"] else f"run `{gate['run']}`"
-        out.append(f"- {gate['id']}: {action}, {gate['when']}.")
+    out += render_gates(plan["gates"], harness)
     if plan["scrutiny"]:
         out.append("")
         out.append("independent scrutiny: " + plan["scrutiny"])
@@ -363,6 +381,8 @@ def render(plan, harness):
     if plan["steps"]:
         route = f" --route {plan['route']}" if plan["tiered"] else ""
         out.append(f"When a step starts, print its full text: rerun this script as `{plan['playbook']} --step <number>{route}`.")
+        if plan["lightweight_worklist"]:
+            out.append("Item numbers are not step numbers: when an item starts, print each step number in its parentheses.")
     out.append("Another review pass needs a named unresolved concern.")
     return "\n".join(out)
 
@@ -377,7 +397,7 @@ def main(argv=None):
     parser.add_argument("--user-route", choices=ROUTES, help="The route the user asked for, in either direction")
     parser.add_argument("--raise-to", choices=ROUTES, help="A higher route the lead chooses, with --reason")
     parser.add_argument("--reason", help="Why the lead raises the route")
-    parser.add_argument("--step", type=int, metavar="N", help="Print the full text of step N and nothing else")
+    parser.add_argument("--step", type=int, metavar="N", help="Print the full text of step N and the route's gates")
     parser.add_argument("--route", choices=ROUTES, help="With --step on a routed playbook, the route the plan printed")
     parser.add_argument("--harness", choices=("claude-code", "codex", "grok", "hermes", "other"), default="other")
     parser.add_argument("--project", type=Path, default=Path.cwd(), help="Repository to inspect for a remote")

@@ -144,6 +144,19 @@ class Compaction(unittest.TestCase):
                          [(0, "user"), (0, "text"), (1, "user"), (1, "text")])
         self.assertEqual(codex.harvest_rollout(data)["compactions"], [{"turn": None, "ordinal": 33, "source": "rollout", "seq": 1, "pre_tokens": None, "post_tokens": None, "kept_skill_bodies": 0}])
 
+    def test_the_compaction_record_carries_token_counts_and_kept_skill_bodies(self):
+        def tokens(n):
+            return {"type": "event_msg", "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": n}}}}
+        kept = [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "<skill>\n<name>how</name>\n<path>/s/how/SKILL.md</path>\nbody"}]},
+                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "a plain summary"}]}]
+        rows = [{"type": "session_meta", "payload": {"cwd": "/w", "id": "thread-1"}},
+                {"type": "event_msg", "payload": {"type": "task_started"}}, tokens(41000), tokens(59000),
+                {"type": "compacted", "ordinal": 7, "payload": {"message": "", "replacement_history": kept}},
+                tokens(59000), tokens(20500), tokens(23000)]
+        data = "".join(json.dumps(r) + "\n" for r in rows).encode()
+        self.assertEqual(codex.harvest_rollout(data)["compactions"],
+                         [{"turn": None, "ordinal": 7, "source": "rollout", "seq": 0, "pre_tokens": 59000, "post_tokens": 20500, "kept_skill_bodies": 1}])
+
 
 class CopyInto(unittest.TestCase):
     def setUp(self):

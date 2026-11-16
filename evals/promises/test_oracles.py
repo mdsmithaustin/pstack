@@ -2700,10 +2700,36 @@ class ModeRecoversAfterCompaction(unittest.TestCase):
         self.assertEqual((window["reattached_skills"], window["reattached_bytes"]), (["poteto-mode", "how"], 10949))
         self.assertEqual(self.grade(self.step(4) + self.write(6), [boundary])["verdict"], PASS)
 
-    def test_a_compaction_without_a_position_starts_at_its_turn(self):
-        events = in_turn(0, self.write(0)) + in_turn(1, self.cat(2, self.entry) + self.step(4) + self.write(6))
-        result = self.grade(events, [{"turn": 1, "source": "stream"}])
+    def test_a_compaction_without_a_position_starts_at_its_compact_turn(self):
+        events = in_turn(0, self.write(0)) + in_turn(2, self.cat(2, self.entry) + self.step(4) + self.write(6))
+        case = {**self.case, "turns": ["build it", "/compact", "keep going"]}
+        trace = minimal(events=events, harness="claude-code", x_compactions=[{"turn": 1, "trigger": "manual", "source": "stream"}])
+        result = grade("mode-recovers-after-compaction", trace, case)
         self.assertEqual(result["verdict"], PASS)
+        self.assertTrue(result["measures"]["windows"][0]["positioned"])
+
+    def test_a_mid_turn_compaction_without_a_position_cannot_fail(self):
+        events = in_turn(0, self.cat(0, self.entry) + self.write(2) + self.cat(5, self.entry) + self.cat(6, self.recovery) + self.write(8))
+        for compactions in ([{"turn": 0, "trigger": "auto", "source": "stream"}],
+                            [{"turn": 0, "trigger": "auto", "source": "stream", "seq": 4}, {"turn": 0, "trigger": "auto", "source": "stream"}]):
+            with self.subTest(compactions=compactions):
+                result = self.grade(events, compactions)
+                self.assertNotEqual(result["verdict"], FAIL, result["failures"])
+                self.assertFalse(result["measures"]["windows"][-1]["positioned"])
+        positioned = self.grade(events, [{"turn": 0, "trigger": "auto", "source": "stream", "seq": 4}])
+        self.assertEqual(positioned["verdict"], FAIL)
+
+    def test_read_plan_excludes_only_its_own_arguments(self):
+        plan = "python3 .agents/skills/pstack-harness/scripts/read-plan.py feature"
+        events = shell(4, f"{plan} && cat .agents/skills/{self.entry} .agents/skills/{self.recovery}") + self.step(6) + self.write(8)
+        result = self.grade(events, [{"turn": 0, "source": "rollout", "seq": 4}])
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+        self.assertTrue(result["measures"]["windows"][0]["recovery_read"])
+        named = shell(4, f"{plan} .agents/skills/{self.entry} && cat .agents/skills/{self.recovery}") + self.step(6) + self.write(8)
+        result = self.grade(named, [{"turn": 0, "source": "rollout", "seq": 4}])
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("the mode entry", result["failures"][0])
+        self.assertTrue(result["measures"]["windows"][0]["recovery_read"])
 
 
 class RoutedSkillLoadsAfterCompaction(unittest.TestCase):
