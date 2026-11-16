@@ -4319,21 +4319,26 @@ def timed_argvs(command):
     outer, inner = split_substitutions(re.sub(r"(?m)^\s*#.*$", "", strip_heredocs(command)))
     for text in inner:
         yield from timed_argvs(text)
-    for segment, masked, _ in walk_segments(outer):
+    for segment, masked in shell_segments(outer):
         start = 0
-        for cut in [*PIPE_OR_BACKGROUND.finditer(masked), None]:
+        for cut in [*re.finditer(r"[()]|" + PIPE_OR_BACKGROUND.pattern, masked), None]:
             end = cut.start() if cut else len(segment)
             argv = argv_of(command_position(segment[start:end], masked[start:end]))
             start = cut.end() if cut else end
             timed = False
             while argv and (ENV_ASSIGN.match(argv[0]) or os.path.basename(argv[0]) in ("env", "command", "exec", "nohup", "sudo", "nice", "timeout")):
+                wrapper = os.path.basename(argv[0])
                 argv = argv[1:]
                 while argv and (argv[0].startswith("-") or re.fullmatch(r"[\d.]+[smhd]?", argv[0])):
+                    if wrapper == "command" and re.fullmatch(r"-[pvV]*[vV][pvV]*", argv[0]):
+                        argv = []
+                        break
                     argv = argv[1:]
             if argv and os.path.basename(argv[0]) in TIME_WRAPPERS:
                 timed = True
                 if set(argv[1:]) <= {"-p"}:
-                    yield ["("], True  # `time ( ... )` or `time { ...; }`: the shell times the group that follows
+                    if cut and cut.group() == "(":
+                        yield ["("], True
                     continue
             argv = bare_command(argv)
             if not argv:

@@ -2508,8 +2508,23 @@ class TriggerSkillLoadsAfterCompaction(unittest.TestCase):
                 self.assertEqual(result["verdict"], FAIL)
                 self.assertIn("seq 6", result["evidence"][0])
 
+    def test_timing_lookups_and_bare_wrappers_do_not_start_measurement(self):
+        for tool in ("time", "gtime"):
+            for inert in (f"command -v {tool}", f"command -V {tool}", f"command -pv {tool}",
+                          f"command -v {tool} || brew install coreutils", tool, f"{tool} -p",
+                          f"env command -v {tool}", f"bash -c 'command -V {tool}'",
+                          f"echo $(command -v {tool})", f"bash <<'SH'\ncommand -v {tool}\nSH",
+                          f"{tool}; (echo ready)", f"{tool} | cat"):
+                with self.subTest(inert=inert):
+                    result = self.grade(shell(6, inert) + self.load(8) + shell(12, self.bench), [{"turn": 0, "seq": 4}])
+                    self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+                    self.assertIn("seq 12", result["evidence"][0])
+
     def test_more_timing_forms_are_the_measurement(self):
         forms = ("time (for i in 1 2 3; do python3 -m tally sample.txt; done)", "time -p { python3 -m tally sample.txt; }",
+                 "time -p (python3 -m tally sample.txt)", "time { python3 -m tally sample.txt; }",
+                 "command -p time python3 -m tally sample.txt", "command python3 -v -m timeit '1 + 1'",
+                 "env gtime python3 -m tally sample.txt", "bash -c 'time (python3 -m tally sample.txt)'",
                  "timeout 60 time python3 -m tally sample.txt", "# baseline first\ntime python3 -m tally sample.txt",
                  "python3 -c 'import time as t; s = t.time()'", "python3 -c 'from time import perf_counter as now; s = now()'")
         for form in forms:
