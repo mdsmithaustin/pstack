@@ -287,6 +287,30 @@ class OneStep(unittest.TestCase):
             self.assertNotIn("Lightweight route", lightweight.stdout, name)
             self.assertNotIn("stay unloaded", standard.stdout, name)
 
+    def test_step_prints_the_route_gates_for_recovery(self):
+        standard = run("feature", "--step", "6", "--route", "standard", "--harness", "claude-code").stdout
+        intensive = run("feature", "--step", "6", "--route", "intensive", "--harness", "claude-code").stdout
+        for gate in ("- preserve: run", "- documentation: Call the Skill tool with `documentation-impact`", "- comments: Call the Skill tool with `no-comments`"):
+            self.assertIn(gate, standard)
+        self.assertIn("- cleanup: Call the Skill tool with `deslop`, before each push or published head.", standard)
+        self.assertIn("- cleanup: Call the Skill tool with `deslop`, before every commit or amend.", intensive)
+        unrouted = run("feature", "--step", "6", "--harness", "claude-code").stdout
+        self.assertIn("standard: before each push or published head; intensive: before every commit or amend", unrouted)
+        investigation = run("investigation", "--step", "1").stdout
+        self.assertIn("- preserve: run", investigation)
+        self.assertNotIn("deslop", investigation)
+
+    def test_step_maps_the_skill_tool_phrase_off_claude_code(self):
+        codex = run("feature", "--step", "6", "--route", "standard", "--harness", "codex").stdout
+        self.assertIn('means: read "${PSTACK_SKILLS_ROOT:?}/<name>/SKILL.md" in full.', codex)
+        self.assertIn('- documentation: read "${PSTACK_SKILLS_ROOT:?}/documentation-impact/SKILL.md" in full', codex)
+        self.assertNotIn("On this harness", run("feature", "--step", "6", "--route", "standard", "--harness", "claude-code").stdout)
+
+    def test_lightweight_plan_says_item_numbers_are_not_step_numbers(self):
+        hint = "Item numbers are not step numbers"
+        self.assertIn(hint, run("feature", *LOW).stdout)
+        self.assertNotIn(hint, run("feature", *facts(reach="material:x")).stdout)
+
     def test_missing_step_and_unknown_playbook_are_usage_errors(self):
         self.assertEqual(run("bug-fix", "--step", "9").returncode, 2)
         self.assertEqual(run("nope", "--step", "1").returncode, 2)

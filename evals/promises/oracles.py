@@ -4199,17 +4199,28 @@ MODE_ENTRY, RECOVERY_REFERENCE = "poteto-mode/SKILL.md", "poteto-mode/references
 
 
 def compaction_windows(view):
-    """One (compaction, first seq, end seq) per compaction, where the window runs to the next compaction."""
-    starts = []
+    starts, turns = [], view.case.get("turns") or []
     for compaction in view.trace.get("x_compactions") or []:
-        seq = compaction.get("seq")
-        if seq is None and isinstance(compaction.get("turn"), int):
-            seq = min((e["seq"] for e in view.events if e.get("turn", -1) >= compaction["turn"]), default=None)
+        seq, positioned, turn = compaction.get("seq"), True, compaction.get("turn")
+        if seq is None and isinstance(turn, int):
+            seq = min((e["seq"] for e in view.events if e.get("turn", -1) >= turn), default=None)
+            positioned = 0 <= turn < len(turns) and str(turns[turn]).strip() == "/compact"
         if seq is not None:
-            starts.append((seq, compaction))
+            starts.append((seq, positioned, compaction))
     starts.sort(key=lambda start: start[0])
+    unknown = {compaction.get("turn") for _, positioned, compaction in starts if not positioned}
     ends = [start[0] for start in starts[1:]] + [float("inf")]
-    return [(compaction, seq, end) for (seq, compaction), end in zip(starts, ends)]
+    return [(compaction, seq, end, positioned and compaction.get("turn") not in unknown)
+            for (seq, positioned, compaction), end in zip(starts, ends)]
+
+
+def files_only_planned(call):
+    command = str((call.get("input") or {}).get(SHELL_TOOLS[call["name"]]) or "")
+    planned, read = set(), set()
+    for argv in simple_commands(command):
+        paths = planned if any(os.path.basename(word) == "read-plan.py" for word in argv) else read
+        paths.update(rel for path in resolved_shell_paths(shlex.join(argv)) if (rel := skill_rel(path)))
+    return planned - read
 
 
 @oracle("mode-recovers-after-compaction")
@@ -4224,18 +4235,17 @@ def mode_recovers_after_compaction(view):
     routes = sorted((call["returned"], name) for name, calls in calls_by_playbook.items() for call in calls
                     if call["prints_plan"] and call["ok"] is True and call["returned"] is not None
                     and call["route"] not in (None, "pending"))
-    planners = {call.get("seq") for call in view.tool_calls
-                if any("read-plan.py" in value for value in (call.get("input") or {}).values() if isinstance(value, str))}
+    only_planned = {call.get("seq"): files_only_planned(call) for call in view.tool_calls if call.get("name") in SHELL_TOOLS}
     returned = {call.get("seq"): answer for call in view.tool_calls
                 if (answer := view.results_for(call)) is not None and answer.get("ok") is True}
     reads = [(seq, returned[seq]["seq"], rel) for seq, rel in view.event_reads()
-             if seq not in planners and seq in returned]
+             if rel not in only_planned.get(seq, ()) and seq in returned]
     if view.trace.get("entry") != "injected" and not any(done < windows[0][1] and rel == MODE_ENTRY for _, done, rel in reads):
         return inconclusive("the mode entry was not in the lead's context before the first compaction")
     governed = sorted([(seq, f"wrote {path}") for seq, path, _ in view.project_edits()]
                       + [(s.get("seq") or 0, "spawned a delegate") for s in view.spawns])
     failures, evidence, measured = [], [], []
-    for index, (compaction, start, end) in enumerate(windows, 1):
+    for index, (compaction, start, end, positioned) in enumerate(windows, 1):
         action = next(((seq, what) for seq, what in governed if start <= seq < end), None)
         active = next((name for done, name in reversed(routes) if done < (action[0] if action else end)), playbook)
         step_prints = [call for call in calls_by_playbook.get(active, [])
@@ -4252,13 +4262,17 @@ def mode_recovers_after_compaction(view):
                          "kept_skill_bodies": compaction.get("kept_skill_bodies"),
                          "reattached_skills": [skill["name"] for skill in reattached],
                          "reattached_bytes": sum(skill.get("bytes") or 0 for skill in reattached),
-                         "governed_action_seq": action[0] if action else None,
+                         "positioned": positioned, "governed_action_seq": action[0] if action and positioned else None,
                          "step_text": step_text, "recovery_read": RECOVERY_REFERENCE in before,
                          "reads_before_action": list(dict.fromkeys(before)),
                          "reads_in_window": list(dict.fromkeys(rels)),
                          "repeated_in_window": sorted({rel for rel in rels if rels.count(rel) > 1})})
         if action is None:
             evidence.append(f"window {index}: no project write or spawn, so recovery never came due")
+            continue
+        if not positioned:
+            evidence.append(f"window {index}: the compaction record has no seq and its turn is not /compact, "
+                            f"so the boundary inside turn {compaction.get('turn')} is unknown and the window does not count")
             continue
         missing = ([] if MODE_ENTRY in before or MODE_ENTRY in held else ["the mode entry"]) + ([] if step_text else ["the current step's text"])
         evidence.append(f"window {index}: the lead {action[1]} at seq {action[0]} with step text from {step_text} after reading {list(dict.fromkeys(before))[:6]}")
@@ -4268,7 +4282,7 @@ def mode_recovers_after_compaction(view):
     if failures:
         return verdict(FAIL, failures, evidence, measures=measures)
     if all(m["governed_action_seq"] is None for m in measured):
-        return inconclusive("no compaction window holds a project write or spawn", *evidence, measures=measures)
+        return inconclusive("no positioned compaction window holds a project write or spawn", *evidence, measures=measures)
     return verdict(PASS, (), evidence, measures=measures)
 
 
@@ -4468,7 +4482,7 @@ def trigger_skill_loads_after_compaction(view):
     seq, command, kind = first
     if kind == "unclear":
         return inconclusive(f"the command at seq {seq} may time something, but its Python code does not parse: {command[:160]!r}")
-    window = next(((index, compaction, start) for index, (compaction, start, end) in enumerate(windows, 1) if start <= seq < end), None)
+    window = next(((index, compaction, start) for index, (compaction, start, end, _) in enumerate(windows, 1) if start <= seq < end), None)
     returned = {call.get("seq"): answer["seq"] for call in view.tool_calls if (answer := view.results_for(call)) is not None}
     loads = [(returned[a[0]], a[1]) for a in load_attempts(view, skill, by_return=True)
              if a[2] is True and allowed_load(view, a) and a[0] in returned]

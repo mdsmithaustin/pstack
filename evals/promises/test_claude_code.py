@@ -1123,5 +1123,27 @@ class NativeSkillCommands(unittest.TestCase):
                         self.assertNotIn("command not found", done.stderr)
 
 
+
+class CompactionRecords(unittest.TestCase):
+    boundary = {"type": "system", "subtype": "compact_boundary"}
+
+    def invoked(self, *skills):
+        return {"type": "attachment", "attachment": {"type": "invoked_skills", "skills": [{"name": n, "content": c} for n, c in skills]}}
+
+    def test_reattached_skills_are_named_and_sized_in_utf8_bytes_per_boundary(self):
+        rows = [self.invoked(("early", "x")), self.boundary, self.invoked(("poteto-mode", "entry"), ("how", "ünï")), self.boundary,
+                {"type": "user"}, self.invoked(("how", "late"))]
+        self.assertEqual(claude_code.reattached_skills(rows),
+                         [[{"name": "poteto-mode", "bytes": 5}, {"name": "how", "bytes": 5}], [{"name": "how", "bytes": 4}]])
+
+    def test_compaction_records_take_seq_and_skills_only_when_the_counts_match(self):
+        stream = [{**self.boundary, "compact_metadata": {"trigger": "auto", "pre_tokens": 67000, "post_tokens": 23000}}]
+        skills = [[{"name": "poteto-mode", "bytes": 7904}]]
+        matched = claude_code.compactions([stream], boundaries=[12], reattached=skills)
+        self.assertEqual(matched, [{"turn": 0, "trigger": "auto", "pre_tokens": 67000, "post_tokens": 23000, "source": "stream",
+                                    "seq": 12, "reattached_skills": skills[0]}])
+        unmatched = claude_code.compactions([stream, stream], boundaries=[12], reattached=skills)
+        self.assertEqual([("seq" in c, "reattached_skills" in c, c["pre_tokens"]) for c in unmatched], [(False, False, 67000)] * 2)
+
 if __name__ == "__main__":
     unittest.main()
