@@ -466,7 +466,7 @@ class PreparedHarvest(unittest.TestCase):
         self.assertEqual([(e["turn"], e["kind"], e.get("text") or e.get("name")) for e in trace["events"]], [
             (0, "user", "what does relay do?"), (0, "text", "It imports feeds."), (1, "user", "/compact"),
             (2, "user", "/poteto-mode im stepping away."), (2, "tool_call", "Skill"), (2, "tool_result", "Skill")])
-        self.assertEqual(trace["x_compactions"], [{"turn": 1, "trigger": "manual", "pre_tokens": 25309, "post_tokens": 2308, "source": "stream"}])
+        self.assertEqual(trace["x_compactions"], [{"turn": 1, "trigger": "manual", "pre_tokens": 25309, "post_tokens": 2308, "source": "stream", "seq": 2, "reattached_skills": None}])
         self.assertEqual(trace["x_turn_entries"], [{"turn": 2, "skill": "poteto-mode", "entry": "injected"}])
 
     def test_delegate_skill_calls_and_the_listing_record_reach_the_trace(self):
