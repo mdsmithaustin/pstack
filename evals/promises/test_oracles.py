@@ -2414,6 +2414,161 @@ class RoutedSkillLoads(unittest.TestCase):
                 self.assertEqual(result["evidence"][-1], "routing decision: read arena/SKILL.md at seq 10")
 
 
+class TriggerSkillLoadsAfterCompaction(unittest.TestCase):
+    case = load_case("feature-compact-benchmark")
+    bench = "time python3 -m tally sample.txt --json"
+
+    def grade(self, events, compactions, harness="codex"):
+        project = installed_skill(self, "benchmark-checklist", 20)
+        return grade("trigger-skill-loads-after-compaction", minimal(events=events, harness=harness, x_compactions=compactions), self.case, project)
+
+    def load(self, seq, ok=True):
+        return shell(seq, "cat .agents/skills/benchmark-checklist/SKILL.md", ok=ok)
+
+    def test_a_load_after_the_compaction_and_before_the_measurement_passes(self):
+        result = self.grade(self.load(6) + shell(9, self.bench), [{"turn": 0, "seq": 4}])
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+
+    def test_a_load_only_before_the_compaction_fails(self):
+        result = self.grade(self.load(1) + shell(9, self.bench), [{"turn": 0, "seq": 4}])
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertIn("without loading benchmark-checklist after the compaction at seq 4", result["failures"][0])
+
+    def test_a_turn_number_without_a_compaction_position_is_inconclusive(self):
+        events = self.load(6) + shell(9, self.bench)
+        for event in events:
+            event["turn"] = 0
+        result = self.grade(events, [{"turn": 0}])
+        self.assertEqual(result["verdict"], INCONCLUSIVE)
+
+    def test_a_failed_load_or_one_returning_after_the_measurement_does_not_count(self):
+        late = self.load(6)
+        late[1]["seq"] = 11
+        for events in (self.load(6, ok=False) + shell(9, self.bench), late + shell(9, self.bench)):
+            with self.subTest(events=events[1]):
+                self.assertEqual(self.grade(events, [{"turn": 0, "seq": 4}])["verdict"], FAIL)
+
+    def test_a_skill_the_harness_attached_again_counts(self):
+        result = self.grade(shell(9, "time python3 -m tally sample.txt"), [{"turn": 0, "seq": 4, "reattached_skills": [{"name": "benchmark-checklist", "bytes": 900}]}], harness="claude-code")
+        self.assertEqual(result["verdict"], PASS)
+
+    def test_no_measurement_or_a_measurement_before_any_compaction_is_inconclusive(self):
+        for events in (self.load(6) + shell(9, 'git commit -m "save time on parsing"'), shell(1, self.bench) + self.load(6)):
+            with self.subTest(events=events[0]["input"]):
+                self.assertEqual(self.grade(events, [{"turn": 0, "seq": 4}])["verdict"], INCONCLUSIVE)
+
+    def test_running_a_timing_script_the_lead_wrote_counts_and_reading_it_does_not(self):
+        script = [{"seq": 2, "kind": "tool_call", "name": "apply_patch", "id": "p2",
+                   "input": {"patch": "*** Begin Patch\n*** Add File: /tmp/run/bench.py\n+import time\n+t = time.perf_counter()\n*** End Patch"}}]
+        read_only = self.grade(script + shell(7, "cat /tmp/run/bench.py"), [{"turn": 0, "seq": 4}])
+        self.assertEqual(read_only["verdict"], INCONCLUSIVE)
+        result = self.grade(script + shell(7, "cat /tmp/run/bench.py") + self.load(9) + shell(12, "python3 /tmp/run/bench.py"), [{"turn": 0, "seq": 4}])
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+        self.assertIn("seq 12", result["evidence"][0])
+        helper = self.grade(script + self.load(9) + shell(10, "python3 .agents/skills/pstack-harness/scripts/read-plan.py /tmp/run/bench.py")
+                            + shell(12, "python3 -u /tmp/run/bench.py"), [{"turn": 0, "seq": 4}])
+        self.assertIn("seq 12", helper["evidence"][0])
+
+    def test_a_shell_command_that_writes_a_timing_script_is_not_the_measurement(self):
+        write = "python3 -c 'from pathlib import Path\nPath(\"/tmp/run/bench.py\").write_text(\"import time\\nt = time.perf_counter()\")'"
+        for writer in (write, "cat > /tmp/run/bench.py <<'PY'\nimport time\nt = time.perf_counter()\nPY"):
+            with self.subTest(writer=writer[:20]):
+                result = self.grade(shell(6, writer) + self.load(8) + shell(12, "python3 /tmp/run/bench.py"), [{"turn": 0, "seq": 4}])
+                self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+                self.assertIn("seq 12", result["evidence"][0])
+
+    def test_timing_calls_in_a_script_count_as_a_measurement(self):
+        script = "python3 - <<'PY'\nimport time\nt = time.perf_counter()\nPY"
+        self.assertEqual(self.grade(shell(9, script), [{"turn": 0, "seq": 4}])["verdict"], FAIL)
+
+    def test_a_command_that_only_names_a_timing_tool_is_not_a_measurement(self):
+        # Each names a timing tool or call without running a timing measurement, so the later timed run is graded.
+        for inert in ("which hyperfine", "command -v hyperfine", "hyperfine --version", "brew install hyperfine",
+                      "pip show hyperfine", "rg -n 'perf_counter|timeit' .", "/usr/bin/time --version",
+                      'git commit -m "add --json flag\n\ntime the json path later"',
+                      "python3 -c 'p = Path(\"/tmp/run/bench.py\")\np.write_text(\"import time\\nt = time.perf_counter()\")'",
+                      "python3 -c 'open(\"/tmp/run/b.py\", \"w\").write(\"import timeit\\ntimeit.timeit()\")'"):
+            with self.subTest(inert=inert[:30]):
+                result = self.grade(shell(6, inert) + self.load(8) + shell(12, self.bench), [{"turn": 0, "seq": 4}])
+                self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+                self.assertIn("seq 12", result["evidence"][0])
+
+    def test_each_timing_form_is_the_measurement(self):
+        # Each runs a timing measurement before the load, so the window fails on it.
+        forms = ("for i in 1 2 3; do time python3 -m tally sample.txt --json >/dev/null; done",
+                 "{ time python3 -m tally sample.txt; } 2>&1", "bash -lc 'time python3 -m tally sample.txt'",
+                 "TIMEFORMAT=%R time python3 -m tally sample.txt", "hyperfine --warmup 3 'python3 -m tally sample.txt'",
+                 "python3 -m timeit -s 'import tally' 'tally'", "python3 -c 'import time; t = time.perf_counter()'",
+                 "cat > /tmp/run/bench.py <<'PY'\nimport time\nt = time.perf_counter()\nPY\npython3.12 /tmp/run/bench.py",
+                 "printf 'import time\\nt = time.monotonic()\\n' > /tmp/run/bench.py && uv run /tmp/run/bench.py",
+                 "bash <<'SH'\ntime python3 -m tally sample.txt\nSH")
+        for form in forms:
+            with self.subTest(form=form[:30]):
+                result = self.grade(shell(6, form) + self.load(8) + shell(12, self.bench), [{"turn": 0, "seq": 4}])
+                self.assertEqual(result["verdict"], FAIL)
+                self.assertIn("seq 6", result["evidence"][0])
+
+    def test_timing_lookups_and_bare_wrappers_do_not_start_measurement(self):
+        for tool in ("time", "gtime"):
+            for inert in (f"command -v {tool}", f"command -V {tool}", f"command -pv {tool}",
+                          f"command -v {tool} || brew install coreutils", tool, f"{tool} -p",
+                          f"env command -v {tool}", f"bash -c 'command -V {tool}'",
+                          f"echo $(command -v {tool})", f"bash <<'SH'\ncommand -v {tool}\nSH",
+                          f"{tool}; (echo ready)", f"{tool} | cat"):
+                with self.subTest(inert=inert):
+                    result = self.grade(shell(6, inert) + self.load(8) + shell(12, self.bench), [{"turn": 0, "seq": 4}])
+                    self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+                    self.assertIn("seq 12", result["evidence"][0])
+
+    def test_more_timing_forms_are_the_measurement(self):
+        forms = ("time (for i in 1 2 3; do python3 -m tally sample.txt; done)", "time -p { python3 -m tally sample.txt; }",
+                 "time -p (python3 -m tally sample.txt)", "time { python3 -m tally sample.txt; }",
+                 "command -p time python3 -m tally sample.txt", "command python3 -v -m timeit '1 + 1'",
+                 "env gtime python3 -m tally sample.txt", "bash -c 'time (python3 -m tally sample.txt)'",
+                 "timeout 60 time python3 -m tally sample.txt", "# baseline first\ntime python3 -m tally sample.txt",
+                 "python3 -c 'import time as t; s = t.time()'", "python3 -c 'from time import perf_counter as now; s = now()'")
+        for form in forms:
+            with self.subTest(form=form[:30]):
+                result = self.grade(shell(6, form) + self.load(8) + shell(12, self.bench), [{"turn": 0, "seq": 4}])
+                self.assertEqual(result["verdict"], FAIL)
+                self.assertIn("seq 6", result["evidence"][0])
+
+    def test_a_script_counts_only_after_timing_code_reaches_that_file(self):
+        def patch(seq, files):
+            body = "".join(f"*** Add File: /tmp/run/{name}\n+{text}\n" for name, text in files)
+            return [{"seq": seq, "kind": "tool_call", "name": "apply_patch", "id": f"p{seq}", "input": {"patch": f"*** Begin Patch\n{body}*** End Patch"}}]
+        later = patch(2, [("bench.py", "print(1)")]) + shell(6, "python3 /tmp/run/bench.py") + self.load(8) \
+            + patch(10, [("bench.py", "import time; t = time.perf_counter()")]) + shell(12, "python3 /tmp/run/bench.py")
+        sibling = patch(2, [("helper.py", "print(1)"), ("bench.py", "import time; t = time.perf_counter()")]) \
+            + shell(6, "python3 /tmp/run/helper.py") + self.load(8) + shell(12, "python3 /tmp/run/bench.py")
+        shell_sibling = shell(2, "cat > /tmp/run/helper.py <<'PY'\nprint(1)\nPY\ncat > /tmp/run/bench.py <<'PY'\nimport time\nt = time.perf_counter()\nPY") \
+            + shell(6, "python3 /tmp/run/helper.py") + self.load(8) + shell(12, "python3 /tmp/run/bench.py")
+        for name, events in (("later", later), ("sibling", sibling), ("shell sibling", shell_sibling)):
+            with self.subTest(name=name):
+                result = self.grade(events, [{"turn": 0, "seq": 4}])
+                self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+                self.assertIn("seq 12", result["evidence"][0])
+
+    def test_timeit_help_is_not_a_measurement(self):
+        result = self.grade(shell(6, "python3 -m timeit -h") + self.load(8) + shell(12, self.bench), [{"turn": 0, "seq": 4}])
+        self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+
+    def test_unparseable_python_that_names_a_timing_call_is_inconclusive(self):
+        result = self.grade(shell(6, "python3 -c 'import time; t = time.perf_counter('") + self.load(8) + shell(12, self.bench), [{"turn": 0, "seq": 4}])
+        self.assertEqual(result["verdict"], INCONCLUSIVE)
+
+    def test_a_read_of_unknown_extent_or_missing_reattach_data_is_inconclusive(self):
+        partial = shell(6, "cat .agents/skills/benchmark-checklist/SKILL.md | head -n \"$N\"")
+        self.assertEqual(self.grade(partial + shell(9, self.bench), [{"turn": 0, "seq": 4}])["verdict"], INCONCLUSIVE)
+        invoked = [{"seq": 1, "kind": "tool_call", "name": "Skill", "id": "s1", "input": {"skill": "benchmark-checklist"}},
+                   {"seq": 2, "kind": "tool_result", "id": "s1", "ok": True, "output_head": "Launching skill: benchmark-checklist"}]
+        unknown = self.grade(invoked + shell(9, self.bench), [{"turn": 0, "seq": 4, "reattached_skills": None}], harness="claude-code")
+        self.assertEqual(unknown["verdict"], INCONCLUSIVE)
+        never = self.grade(shell(9, self.bench), [{"turn": 0, "seq": 4, "reattached_skills": None}], harness="claude-code")
+        self.assertEqual(never["verdict"], FAIL)
+        known = self.grade(shell(9, self.bench), [{"turn": 0, "seq": 4, "reattached_skills": []}], harness="claude-code")
+        self.assertEqual(known["verdict"], FAIL)
+
 class ModeRecoversAfterCompaction(unittest.TestCase):
     case = load_case("feature-compact-midrun")
     entry, recovery, playbook = "poteto-mode/SKILL.md", "poteto-mode/references/recovery.md", "poteto-mode/playbooks/feature.md"
@@ -2442,6 +2597,44 @@ class ModeRecoversAfterCompaction(unittest.TestCase):
     def test_a_whole_playbook_read_also_supplies_the_step(self):
         result = self.grade(self.cat(4, self.entry) + self.cat(6, self.playbook) + self.write(8), [{"turn": 0, "seq": 4}])
         self.assertEqual((result["verdict"], result["measures"]["windows"][0]["step_text"]), (PASS, "playbook read"))
+
+    def route(self, seq, playbook):
+        events = shell(seq, f"python3 .agents/skills/poteto-mode/scripts/plan.py {playbook} --harness codex")
+        events[-1]["output_head"] = f"playbook: {playbook} (skills/poteto-mode/playbooks/{playbook}.md)\nroute: standard\n"
+        return events
+
+    def test_recovery_uses_the_routed_playbook_for_each_window(self):
+        # Recovery requires the active procedure, even when a follow-up changes it.
+        for route_seq in (10, 14):
+            for whole in (False, True):
+                with self.subTest(route_seq=route_seq, whole=whole):
+                    recovered = (self.cat(16, "poteto-mode/playbooks/investigation.md") if whole else
+                                 shell(16, "python3 .agents/skills/poteto-mode/scripts/plan.py investigation --step 3 --harness codex"))
+                    events = (self.cat(4, self.entry) + self.step(6) + self.write(8)
+                              + self.route(route_seq, "investigation") + self.cat(12, self.entry) + recovered)
+                    result = self.grade(events, [{"seq": 4}, {"seq": 12}], spawns=[{"seq": 18, "tool": "spawn_agent"}])
+                    self.assertEqual((result["verdict"], result["failures"]), (PASS, []))
+
+    def test_old_playbook_step_cannot_recover_a_new_route(self):
+        events = self.route(2, "investigation") + self.cat(4, self.entry) + self.step(6) + self.write(8)
+        result = self.grade(events, [{"seq": 4}])
+        self.assertEqual(result["verdict"], FAIL)
+        self.assertTrue(result["failures"][0].endswith(self.no_step))
+
+    def test_unsuccessful_or_later_routing_does_not_change_recovery(self):
+        for outcome in ("failed", "missing", "late", "pending"):
+            with self.subTest(outcome=outcome):
+                route = self.route(2, "investigation")
+                if outcome == "failed":
+                    route[-1]["ok"] = False
+                elif outcome == "missing":
+                    route.pop()
+                elif outcome == "late":
+                    route[-1]["seq"] = 9
+                else:
+                    route[-1]["output_head"] = route[-1]["output_head"].replace("standard", "pending")
+                events = route + self.cat(4, self.entry) + self.step(6) + self.write(8)
+                self.assertEqual(self.grade(events, [{"seq": 4}])["verdict"], PASS)
 
     def test_reading_recovery_alone_does_not_supply_the_step(self):
         result = self.grade(self.cat(4, self.entry) + self.cat(6, self.recovery) + self.write(8), [{"turn": 0, "seq": 4}])

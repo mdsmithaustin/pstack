@@ -4346,6 +4346,17 @@
    ],
    "scenario": "technical-writing-run"
   },
+  "trigger-skill-loads-after-compaction": {
+   "check": "live",
+   "claim": "After a compaction, the lead loads a skill named only by the task triggers again before the action that triggers it.",
+   "harness_sensitive": true,
+   "live_case": "Two-turn tally scenario in cases/feature-compact-benchmark/case.json. README.md#trigger-timing-after-compaction owns the recognized measurements, stricter pre-measurement load requirement, and inconclusive conditions.",
+   "owners": [
+    "skills/poteto-mode/references/recovery.md",
+    "skills/poteto-mode/references/task-triggers.md"
+   ],
+   "scenario": "feature-compact-benchmark"
+  },
   "triggered-principle-loads-before-code": {
    "check": "live",
    "claim": "When a poteto-mode task trigger names a principle for the work at hand, the lead loads that principle's skill before it writes code or hands code-writing to a delegate.",
@@ -5996,6 +6007,9 @@
    "text": "Give each PR a verification swarm before it merges, and let Autopilot-stack or Autopilot-full carry the queue."
   },
   "2366d0b35765": {
+   "also": [
+    "trigger-skill-loads-after-compaction"
+   ],
    "class": "promise",
    "file": "01-setup.md",
    "promise": "mode-recovers-after-compaction",
