@@ -39,8 +39,10 @@ def main(paths):
     for path in paths:
         e = json.loads(Path(path).read_text())
         s = e["spawns"]
+        calls = sum(spawn["style"] != "child" for spawn in s)
+        count = f"{calls} calls, {len(e['children'])} children" if calls != len(s) else str(calls)
         lead = "/".join(f"{m}@{x}" for m, x in e["lead_contexts"])
-        print(f"| {e['row']} | {lead} | {'on' if e['v2_flag'] else 'off'} | {len(s)} | {cell(s, 'fork')} | {cell(s, 'agent_type')} "
+        print(f"| {e['row']} | {lead} | {'on' if e['v2_flag'] else 'off'} | {count} | {cell(s, 'fork')} | {cell(s, 'agent_type')} "
               f"| {resolved(e)} | {observed(s)} | {e['verdict']} |")
 
 

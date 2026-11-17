@@ -130,6 +130,8 @@ def verdict(lead, children, resolved):
             problems.append(f"{name}: model passed with fork_turns {a.get('fork_turns')!r}")
         if pair[0] and fork_field == "fork_context" and a.get("fork_context"):
             problems.append(f"{name}: model passed with fork_context true")
+        if not pair[0]:
+            problems.append(f"{name}: spawn call passed no model or effort")
         if a.get("task_name"):
             child = next((c for c in children if (c["agent_path"] or "").endswith("/" + a["task_name"])), None)
             entry["child_contexts"] = child["turn_contexts"] if child else []
@@ -143,8 +145,6 @@ def verdict(lead, children, resolved):
                 problems.append(f"{name}: {pair} is no resolved role arm")
         else:
             entry["child_contexts"] = None
-            if not pair[0]:
-                problems.append(f"{name}: spawn call passed no model or effort")
         detail.append(entry)
     for child in children:
         if child["id"] in matched:

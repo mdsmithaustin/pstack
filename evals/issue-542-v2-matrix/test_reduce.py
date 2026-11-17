@@ -33,7 +33,7 @@ class CodeModeSpawns(unittest.TestCase):
 class RunDirectory(unittest.TestCase):
     def test_child_effort_is_checked_end_to_end(self):
         for effort, expected in [("medium", "PASS"), ("high", "FAIL")]:
-            with self.subTest(effort=effort), tempfile.TemporaryDirectory(dir=reduce.HERE) as tmp:
+            with self.subTest(effort=effort), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 config = root / "project/.agents/pstack-models.md"
                 config.parent.mkdir(parents=True)
@@ -103,6 +103,12 @@ class Verdict(unittest.TestCase):
         lead = {"calls": [{"tool": "spawn_agent", "style": "code-mode", "arguments": {"agent_type": "default", "fork_context": False}}]}
         problems = reduce.verdict(lead, [{**child("gpt-5.6-luna", "high"), "agent_path": None}], RESOLVED)[1]
         self.assertEqual(len(problems), 2)
+
+    def test_a_v2_spawn_without_model_or_effort_fails(self):
+        lead = {"turn_contexts": [("gpt-5.6-luna", "high")],
+                "calls": [spawn(task_name="explore", fork_turns="none")]}
+        problems = reduce.verdict(lead, [child("gpt-5.6-luna", "high")], RESOLVED)[1]
+        self.assertEqual(problems, ["explore: spawn call passed no model or effort"])
 
 
 if __name__ == "__main__":
