@@ -1889,10 +1889,6 @@ class ResolveExitCodes(unittest.TestCase):
         )
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class BedrockModelIds(ReviewerRunner, unittest.TestCase):
     def test_a_bedrock_inference_profile_id_maps_to_its_alias(self):
         expected = self.reviewer("claude-code", "opus@high")
@@ -1901,6 +1897,7 @@ class BedrockModelIds(ReviewerRunner, unittest.TestCase):
             "us.anthropic.claude-opus-5-5@high",
             "anthropic.claude-opus-4-1-20250805-v1:0@high",
             "us.anthropic.claude-opus-4-1-20250805-v1:0@high",
+            "us-gov.anthropic.claude-opus-5-5@high",
         ):
             with self.subTest(work_model=work_model):
                 self.assertEqual(self.reviewer("claude-code", work_model), expected)
@@ -1909,9 +1906,22 @@ class BedrockModelIds(ReviewerRunner, unittest.TestCase):
         arms = self.resolve("claude-code", "arena runners", lead_model="global.anthropic.claude-opus-5-5")
         self.assertEqual(arms, self.resolve("claude-code", "arena runners", lead_model="opus"))
 
-    def test_a_bedrock_id_for_another_vendor_still_exits_2(self):
-        result = self.rejected("claude-code", "global.meta.llama3-1-70b-instruct-v1:0")
-        self.assertEqual(result.returncode, 2)
+    def test_ids_that_are_not_a_claude_alias_on_bedrock_still_exit_2(self):
+        for work_model in (
+            "global.meta.llama3-1-70b-instruct-v1",
+            "x.y.anthropic.claude-opus-5-5",
+            "anthropic.claude-mistral-5-5",
+            "claude-opus-4.7:8",
+        ):
+            with self.subTest(work_model=work_model):
+                self.assertEqual(self.rejected("claude-code", work_model).returncode, 2)
+
+    def test_hermes_keeps_a_bedrock_id_as_a_literal_slug(self):
+        user = "## hermes\ntrail reviewer: model-a@high\n"
+        self.assertEqual(
+            self.reviewer("hermes", "global.anthropic.claude-opus-5-5@high", user=user),
+            {"role": "trail reviewer", "arm": 1, "model": "model-a", "effort": "high", "source": "user ## hermes"},
+        )
 
     def rejected(self, harness, work_model):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1948,6 +1958,19 @@ class LintUnusableEntries(unittest.TestCase):
             notices_of(findings), [(2, "notice", "gpt-7-sol is not in this Codex's model list")],
         )
 
+    def test_a_codex_slug_whose_other_release_is_listed_gets_no_notice(self):
+        text = "## codex\narena runners: gpt-6-sol@high, gpt-6-sol@xhigh\nfeature: gpt-6.1-luna@high\n"
+        _, findings = cmc.parse(text, self.LISTED)
+        self.assertEqual(findings, [])
+
+    def test_a_missing_codex_slug_is_noted_once_per_line(self):
+        _, findings = cmc.parse("## codex\narena runners: gpt-7-sol@high, gpt-7-sol@xhigh\n", self.LISTED)
+        self.assertEqual(notices_of(findings), [(2, "notice", "gpt-7-sol is not in this Codex's model list")])
+
+    def test_a_flat_line_slug_gets_no_codex_notice(self):
+        _, findings = cmc.parse("feature: gpt-7-sol@high\n", self.LISTED)
+        self.assertEqual(findings, [])
+
     def test_a_codex_slug_gets_no_notice_when_the_list_is_unreadable(self):
         _, findings = cmc.parse("## codex\nfeature: gpt-7-sol@high\n")
         self.assertEqual(findings, [])
@@ -1968,5 +1991,10 @@ class CodexUnlistedSlug(ReviewerRunner, unittest.TestCase):
 
     def test_the_trail_reviewer_never_steps_onto_an_unlisted_slug(self):
         arm = self.reviewer("codex", "gpt-6.1-sol@high", user=self.USER, codex_catalog=self.CATALOG)
-        self.assertNotEqual(arm["model"], "gpt-6-astra")
-        self.assertNotIn("astra", " ".join(arm.get("notes", [])))
+        self.assertEqual(arm["model"], "gpt-6-luna")
+        self.assertEqual(arm["step"], "down")
+        self.assertNotIn("astra", " ".join(arm["notes"]))
+
+
+if __name__ == "__main__":
+    unittest.main()

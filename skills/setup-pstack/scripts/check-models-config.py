@@ -150,6 +150,10 @@ def _listed_release(model: str, effort: str, listed: Mapping[str, frozenset[str]
     return model
 
 
+def _is_listed(model: str, listed: Mapping[str, frozenset[str]]) -> bool:
+    return model in listed or any(release + _tier(model) in listed for release in GPT6_RELEASES_NEWEST_FIRST)
+
+
 def _is_valid_model_name(model: str) -> bool:
     if model in OTHER_ALIASES:
         return True
@@ -175,6 +179,7 @@ def _parse_entries(
 ) -> tuple[list[tuple[str, str | None]], list[int]]:
     entries: list[tuple[str, str | None]] = []
     deferred_flat_notices: list[int] = []
+    unlisted_seen: set[str] = set()
     for raw in entries_str.split(","):
         entry = raw.strip()
         if not entry:
@@ -193,8 +198,10 @@ def _parse_entries(
         if section == CLAUDE_CODE_SECTION and model not in CLAUDE_ALIASES | OTHER_ALIASES:
             findings.append((line_no, "error", f"model {model!r} is not a Claude Code alias ({', '.join(CLAUDE_ALIAS_ORDER)})"))
             continue
-        if section == "codex" and listed and model not in listed and model not in OTHER_ALIASES | CLAUDE_ALIASES:
-            findings.append((line_no, "notice", f"{model} is not in this Codex's model list"))
+        if section == "codex" and listed and model not in OTHER_ALIASES | CLAUDE_ALIASES and model not in unlisted_seen:
+            if not _is_listed(model, listed):
+                findings.append((line_no, "notice", f"{model} is not in this Codex's model list"))
+                unlisted_seen.add(model)
 
         if effort is not None:
             if not effort:
@@ -561,7 +568,10 @@ def _claude_alias_of(model: str, harness: str) -> str:
     lowered = model.lower()
     if lowered in CLAUDE_ALIASES | OTHER_ALIASES:
         return lowered
-    full_id = re.fullmatch(r"(?:(?:[a-z]+\.)?anthropic\.)?claude-([a-z]+)(?:-[^/:]*)?(?::\d+)?", lowered)
+    full_id = (
+        re.fullmatch(r"claude-([a-z]+)(?:-[^/:]*)?", lowered)
+        or re.fullmatch(r"(?:[a-z]+(?:-[a-z]+)?\.)?anthropic\.claude-([a-z]+)(?:-[^/:]*)?(?::\d+)?", lowered)
+    )
     if full_id and full_id[1] in CLAUDE_ALIASES and (cli.native_aliases or full_id[1] in cli.translation):
         return full_id[1]
     return model
