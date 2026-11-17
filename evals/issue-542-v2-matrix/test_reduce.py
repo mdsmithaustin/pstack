@@ -1,4 +1,11 @@
+import contextlib
+import io
+import json
+from pathlib import Path
+import shutil
+import tempfile
 import unittest
+from unittest.mock import patch
 
 import reduce
 
@@ -21,6 +28,56 @@ class CodeModeSpawns(unittest.TestCase):
     def test_a_mapped_call_site_without_fork_or_model_reads_as_bare(self):
         source = "briefs.map(message => tools.multi_agent_v1__spawn_agent({agent_type:\"explorer\",message}))"
         self.assertEqual(reduce.code_mode_spawns(source)[0].keys(), {"agent_type", "message"})
+
+
+class RunDirectory(unittest.TestCase):
+    def test_child_effort_is_checked_end_to_end(self):
+        for effort, expected in [("medium", "PASS"), ("high", "FAIL")]:
+            with self.subTest(effort=effort), tempfile.TemporaryDirectory(dir=reduce.HERE) as tmp:
+                root = Path(tmp)
+                config = root / "project/.agents/pstack-models.md"
+                config.parent.mkdir(parents=True)
+                shutil.copyfile(reduce.HERE / "models.md", config)
+                (root / "run.json").write_text(json.dumps({
+                    "row": "how", "model": "gpt-6.1-sol", "effort": "high",
+                    "v2_flag": True, "turns": ["Explain the order total"], "skills_at": "synthetic",
+                }))
+                sessions = root / "codex-home/sessions"
+                sessions.mkdir(parents=True)
+                arguments = dict(task_name="explain", agent_type="default", fork_turns="none",
+                                 model="gpt-6.1-sol", reasoning_effort="medium", message="Explain totals")
+                for name, parent, actual_effort in [("lead", None, "high"), ("explain", "lead", effort)]:
+                    agent_path = f"/root/{name}" if parent else "/root"
+                    records = [
+                        {"type": "session_meta", "payload": {
+                            "id": name, "parent_thread_id": parent, "agent_path": agent_path,
+                            "source": {"subagent": {"thread_spawn": {
+                                "agent_path": agent_path, "agent_role": "default",
+                            }}},
+                        }},
+                        {"type": "turn_context", "payload": {"model": "gpt-6.1-sol", "effort": actual_effort}},
+                    ]
+                    if parent is None:
+                        records.append({"type": "response_item", "payload": {
+                            "type": "function_call", "name": "spawn_agent", "call_id": "spawn-1",
+                            "arguments": json.dumps(arguments),
+                        }})
+                    (sessions / f"rollout-{name}.jsonl").write_text("\n".join(map(json.dumps, records)) + "\n")
+                out = root / "extract.json"
+                with patch("sys.argv", ["reduce.py", str(root), "--out", str(out)]), contextlib.redirect_stdout(io.StringIO()):
+                    reduce.main()
+                extract = json.loads(out.read_text())
+                self.assertEqual(extract["verdict"], expected)
+                self.assertEqual(len(extract["spawns"]), 1)
+                recorded = extract["spawns"][0]
+                self.assertEqual(recorded["fork_field"], "fork_turns")
+                self.assertEqual(recorded["fork_value"], "none")
+                self.assertEqual(recorded["child_contexts"], [["gpt-6.1-sol", effort]])
+                if expected == "PASS":
+                    self.assertEqual(extract["problems"], [])
+                else:
+                    self.assertEqual(len(extract["problems"]), 1)
+                    self.assertIn("explain: child ran", extract["problems"][0])
 
 
 class Verdict(unittest.TestCase):
