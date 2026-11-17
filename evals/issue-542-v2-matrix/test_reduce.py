@@ -23,11 +23,65 @@ def spawn(**arguments):
 class CodeModeSpawns(unittest.TestCase):
     def test_a_call_site_keeps_its_keys_and_skips_the_brief(self):
         source = 'const message = `{agent_type:"x", model:"nope"}`;\nawait tools.multi_agent_v1__spawn_agent({agent_type:"default",fork_context:false,message});'
-        self.assertEqual(reduce.code_mode_spawns(source), [{"agent_type": "default", "fork_context": False, "message": "<code-mode brief, not recorded>"}])
+        self.assertEqual(reduce.code_mode_spawns(source), [("multi_agent_v1__spawn_agent", {"agent_type": "default", "fork_context": False, "message": "<code-mode brief, not recorded>"})])
 
     def test_a_mapped_call_site_without_fork_or_model_reads_as_bare(self):
         source = "briefs.map(message => tools.multi_agent_v1__spawn_agent({agent_type:\"explorer\",message}))"
-        self.assertEqual(reduce.code_mode_spawns(source)[0].keys(), {"agent_type", "message"})
+        self.assertEqual(reduce.code_mode_spawns(source)[0][1].keys(), {"agent_type", "message"})
+
+
+V1_RESOLVED = [{"role": "how explorer", "model": "gpt-6.1-sol", "effort": "low"},
+               {"role": "how explainer", "model": "gpt-6.1-sol", "effort": "medium"}]
+V1_STYLES = {"code-mode": {"style": "code-mode"}, "function": {}}
+
+
+def v1_site(style, agent_type, effort, **extra):
+    arguments = {"fork_context": False, "model": "gpt-6.1-sol", "reasoning_effort": effort, **extra}
+    if agent_type:
+        arguments["agent_type"] = agent_type
+    return {"tool": "spawn_agent", **V1_STYLES[style], "arguments": arguments}
+
+
+def v1_child(role, effort, n=1):
+    return {"id": f"{role}-{n}", "agent_path": None, "agent_role": role, "turn_contexts": [("gpt-6.1-sol", effort)]}
+
+
+class V1Children(unittest.TestCase):
+    def check(self, style, sites, children):
+        return reduce.verdict({"calls": [v1_site(style, *site) for site in sites]}, children, V1_RESOLVED)[1]
+
+    def test_children_that_ran_their_own_sites_ask_pass(self):
+        for style in V1_STYLES:
+            with self.subTest(style=style):
+                sites = [("explorer", "low"), ("default", "medium")]
+                children = [v1_child("explorer", "low", 1), v1_child("explorer", "low", 2), v1_child("default", "medium")]
+                self.assertEqual(self.check(style, sites, children), [])
+
+    def test_a_site_with_no_agent_type_asks_for_the_default_role(self):
+        for style in V1_STYLES:
+            with self.subTest(style=style):
+                self.assertEqual(self.check(style, [(None, "medium")], [v1_child("default", "medium")]), [])
+
+    def test_a_child_on_another_roles_resolved_arm_fails(self):
+        for style in V1_STYLES:
+            with self.subTest(style=style):
+                problems = self.check(style, [("explorer", "low"), ("default", "medium")],
+                                      [v1_child("explorer", "medium"), v1_child("default", "medium")])
+                self.assertEqual(len(problems), 1)
+                self.assertIn("child explorer: ran", problems[0])
+
+    def test_a_child_whose_agent_type_no_site_used_fails(self):
+        for style in V1_STYLES:
+            with self.subTest(style=style):
+                problems = self.check(style, [("explorer", "low")], [v1_child("explorer", "low"), v1_child("default", "medium")])
+                self.assertEqual(len(problems), 1)
+                self.assertIn("child default:", problems[0])
+
+    def test_a_site_that_started_no_child_fails(self):
+        for style in V1_STYLES:
+            with self.subTest(style=style):
+                problems = self.check(style, [("explorer", "low"), ("default", "medium")], [v1_child("default", "medium")])
+                self.assertEqual(problems, ["explorer: no child rollout"])
 
 
 class RunDirectory(unittest.TestCase):
@@ -50,7 +104,7 @@ class RunDirectory(unittest.TestCase):
                     agent_path = f"/root/{name}" if parent else "/root"
                     records = [
                         {"type": "session_meta", "payload": {
-                            "id": name, "parent_thread_id": parent, "agent_path": agent_path,
+                            "id": name, "parent_thread_id": parent, "agent_path": agent_path, "cli_version": "0.167.0",
                             "source": {"subagent": {"thread_spawn": {
                                 "agent_path": agent_path, "agent_role": "default",
                             }}},
@@ -68,8 +122,10 @@ class RunDirectory(unittest.TestCase):
                     reduce.main()
                 extract = json.loads(out.read_text())
                 self.assertEqual(extract["verdict"], expected)
+                self.assertEqual(extract["cli_versions"], ["0.167.0"])
                 self.assertEqual(len(extract["spawns"]), 1)
                 recorded = extract["spawns"][0]
+                self.assertEqual(recorded["tool_name"], "spawn_agent")
                 self.assertEqual(recorded["fork_field"], "fork_turns")
                 self.assertEqual(recorded["fork_value"], "none")
                 self.assertEqual(recorded["child_contexts"], [["gpt-6.1-sol", effort]])

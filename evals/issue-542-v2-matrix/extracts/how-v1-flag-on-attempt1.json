@@ -12,6 +12,9 @@
   "$how how does an order total get computed here, from line items through discounts and tax? I want to get oriented before I change checkout."
  ],
  "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
  "turns": [
   {
    "index": 0,
@@ -44,6 +47,7 @@
  "spawns": [
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "checkout_flow",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -61,6 +65,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "discount_rules",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -78,6 +83,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "tax_boundary",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -95,6 +101,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "order_total_explainer",
    "agent_type": "default",
    "fork_field": "fork_turns",

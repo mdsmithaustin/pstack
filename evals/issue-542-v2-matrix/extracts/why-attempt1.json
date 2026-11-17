@@ -12,6 +12,9 @@
   "$why why does tax get rounded per line item and not once on the order total?"
  ],
  "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
  "turns": [
   {
    "index": 0,
@@ -42,6 +45,7 @@
  "spawns": [
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "tax_history",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -59,6 +63,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "tax_synthesis",
    "agent_type": "default",
    "fork_field": "fork_turns",

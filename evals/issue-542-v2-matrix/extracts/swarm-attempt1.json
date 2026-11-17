@@ -12,6 +12,9 @@
   "$swarm Check the shop package from three separate angles in parallel, one worker each: tax rounding, discount stacking, and the line pricing. Each worker should run the code against a few inputs and report PASS or ISSUES. Do not change the project."
  ],
  "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
  "turns": [
   {
    "index": 0,
@@ -37,6 +40,7 @@
  "spawns": [
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "tax_rounding",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -54,6 +58,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "discount_stacking",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -71,6 +76,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "line_pricing",
    "agent_type": "default",
    "fork_field": "fork_turns",

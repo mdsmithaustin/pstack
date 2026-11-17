@@ -12,6 +12,9 @@
   "$poteto-mode Add a `refund_total(items, rate_bp, refunded_lines)` function to shop/orders.py that returns the cents to refund for the given line indexes, including the tax for those lines, with a unit test for it."
  ],
  "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
  "turns": [
   {
    "index": 0,
@@ -56,6 +59,7 @@
  "spawns": [
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "refund_review",
    "agent_type": "trail reviewer",
    "fork_field": "fork_turns",

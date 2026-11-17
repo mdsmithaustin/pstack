@@ -12,6 +12,9 @@
   "$architect I want to add refunds to this shop code: partial refunds per line, with the tax refunded to match. Explore a few designs for where it should live and how it should work. Do not change the project."
  ],
  "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
  "turns": [
   {
    "index": 0,
@@ -84,6 +87,7 @@
  "spawns": [
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "ground_shop",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -101,6 +105,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "refund_rationale",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -118,6 +123,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "refund_design_1",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -135,6 +141,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "refund_design_2",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -152,6 +159,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "refund_design_3",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -169,6 +177,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "refund_rationale_synthesis",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -186,6 +195,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "refund_design_judge",
    "agent_type": "default",
    "fork_field": "fork_turns",

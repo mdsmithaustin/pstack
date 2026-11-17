@@ -3,9 +3,11 @@
 
     reduce.py ROOT --out EXTRACT.json
 
-ROOT is a `run_row.py` run directory. For every `spawn_agent` call in the lead's rollouts the extract keeps the arguments
-(the encrypted `message` is replaced by its length), the call's output, and the model and effort the child's own
-`turn_context` records. The verdict compares those with `check-models-config.py --resolve` for the row's roles.
+ROOT is a `run_row.py` run directory. The verdict compares each `spawn_agent` call's asked model and effort, and the
+model and effort each child's own `turn_context` records, with `check-models-config.py --resolve` for the row's roles.
+
+A v2 child is matched to its call by task name. A v1 child has none, so it is matched by agent type: it passes when it
+ran one of the model and effort pairs that a spawn of its agent type asked for.
 """
 
 import argparse
@@ -24,7 +26,7 @@ COLLAB_TOOLS = ("spawn_agent", "wait_agent", "close_agent", "list_agents", "send
 
 
 BACKTICK = re.compile(r"`(?:\\.|[^`\\])*`", re.S)
-CODE_SPAWN = re.compile(r"spawn_agent\(\{([^{}]*)\}\)")
+CODE_SPAWN = re.compile(r"(\w*spawn_agent)\(\{([^{}]*)\}\)")
 CODE_KEY = re.compile(r"(\w+):\s*(\"[^\"]*\"|true|false|-?\d+)")
 
 
@@ -33,9 +35,9 @@ def code_mode_spawns(source):
     blanked first, so the scan sees only the argument keys. One call site can run once per brief."""
     sites = []
     for match in CODE_SPAWN.finditer(BACKTICK.sub("``", source)):
-        arguments = {key: json.loads(value) for key, value in CODE_KEY.findall(match.group(1))}
+        arguments = {key: json.loads(value) for key, value in CODE_KEY.findall(match.group(2))}
         arguments["message"] = "<code-mode brief, not recorded>"
-        sites.append(arguments)
+        sites.append((match.group(1), arguments))
     return sites
 
 
@@ -80,8 +82,9 @@ def thread(path, root):
             outputs[item.get("call_id")] = str(item.get("output"))[:300]
     for item in items:
         if item.get("type") == "custom_tool_call" and item.get("name") == "exec" and isinstance(item.get("input"), str):
-            for arguments in code_mode_spawns(item["input"]):
-                calls.append({"call_id": item.get("call_id"), "tool": "spawn_agent", "style": "code-mode", "arguments": arguments})
+            for tool_name, arguments in code_mode_spawns(item["input"]):
+                calls.append({"call_id": item.get("call_id"), "tool": "spawn_agent", "style": "code-mode", "tool_name": tool_name,
+                              "arguments": arguments})
     for call in calls:
         call["output"] = outputs.get(call["call_id"])
     prompts = [block["text"][:600] for item in items if item.get("type") == "message" and item.get("role") == "user"
@@ -89,7 +92,7 @@ def thread(path, root):
     source = meta.get("source")
     spawn = source.get("subagent", {}).get("thread_spawn", {}) if isinstance(source, dict) else {}
     return {"id": meta.get("id"), "file": path.name, "parent": meta.get("parent_thread_id"),
-            "agent_path": meta.get("agent_path"), "agent_role": spawn.get("agent_role"), "multi_agent_version": meta.get("multi_agent_version"),
+            "cli_version": meta.get("cli_version"), "agent_path": meta.get("agent_path"), "agent_role": spawn.get("agent_role"), "multi_agent_version": meta.get("multi_agent_version"),
             "turn_contexts": sorted({c for c in contexts}, key=str), "prompts": scrub(prompts, root), "calls": scrub(calls, root)}
 
 
@@ -121,7 +124,7 @@ def verdict(lead, children, resolved):
         fork_field = "fork_turns" if "fork_turns" in a else "fork_context" if "fork_context" in a else None
         pair = (a.get("model"), a.get("reasoning_effort"))
         name = a.get("task_name") or a.get("agent_type")
-        entry = {"style": call.get("style", "function"), "task_name": a.get("task_name"), "agent_type": a.get("agent_type"),
+        entry = {"style": call.get("style", "function"), "tool_name": call.get("tool_name", call["tool"]), "task_name": a.get("task_name"), "agent_type": a.get("agent_type"),
                  "fork_field": fork_field, "fork_value": a.get(fork_field) if fork_field else None,
                  "args_model": pair[0], "args_effort": pair[1], "matches_role": role_of(pair), "output": call.get("output")}
         if fork_field is None:
@@ -146,15 +149,23 @@ def verdict(lead, children, resolved):
         else:
             entry["child_contexts"] = None
         detail.append(entry)
-    for child in children:
-        if child["id"] in matched:
-            continue
+    asked = {}
+    for call in (c for c in lead["calls"] if c["tool"] == "spawn_agent" and not c["arguments"].get("task_name")):
+        a = call["arguments"]
+        asked.setdefault(a.get("agent_type") or "default", set()).add((a.get("model"), a.get("reasoning_effort")))
+    unmatched = [c for c in children if c["id"] not in matched]
+    for child in unmatched:
+        role = child["agent_role"] or "default"
         pairs = child["turn_contexts"]
-        detail.append({"style": "child", "task_name": None, "agent_type": child["agent_role"], "fork_field": None,
+        detail.append({"style": "child", "tool_name": None, "task_name": None, "agent_type": role, "fork_field": None,
                        "fork_value": None, "args_model": None, "args_effort": None, "child_contexts": pairs,
                        "matches_role": next((role_of(p) for p in pairs if p in expected), None), "output": None})
-        if not all(p in expected for p in pairs):
-            problems.append(f"child {child['agent_role']}: ran {pairs}, no resolved role arm")
+        if role not in asked:
+            problems.append(f"child {role}: no spawn call asked for that agent type")
+        elif not all(p in asked[role] for p in pairs):
+            problems.append(f"child {role}: ran {pairs}, spawn asked {sorted(asked[role], key=str)}")
+    ran = {c["agent_role"] or "default" for c in unmatched}
+    problems += [f"{role}: no child rollout" for role in asked if role not in ran]
     return detail, problems
 
 
@@ -181,7 +192,7 @@ def main():
         for call in t["calls"]:
             tools[call["tool"]] = tools.get(call["tool"], 0) + 1
     result = {"row": args.row or run["row"], "lead_model": run["model"], "v2_flag": run.get("v2_flag", True), "lead_contexts": lead["turn_contexts"], "lead_prompts": leads[0]["prompts"],
-              "skills_at": run["skills_at"], "turns": run["turns"], "resolved": resolved, "collab_tool_calls": tools,
+              "skills_at": run["skills_at"], "cli_versions": sorted({t["cli_version"] for t in threads if t["cli_version"]}), "turns": run["turns"], "resolved": resolved, "collab_tool_calls": tools,
               "spawns": detail, "lead_multi_agent_version": leads[0]["multi_agent_version"],
               "children": [{k: c[k] for k in ("id", "agent_path", "agent_role", "multi_agent_version", "turn_contexts")} for c in children],
               "spawn_fired": bool(detail), "problems": problems,

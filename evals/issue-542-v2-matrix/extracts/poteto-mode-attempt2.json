@@ -12,6 +12,9 @@
   "$poteto-mode Add partial refunds to the shop package. Two separate pieces: (1) `refund_total(items, rate_bp, refunded_lines)` in shop/orders.py returning the cents to refund for the given line indexes including their per-line tax, where refunding every line must give back exactly the original total when no discount applied; (2) a new shop/ledger.py that records refunds in a CSV file (order id, line index, cents, timestamp) and reads them back, with its own tests. Finance cares about the cents, so be careful."
  ],
  "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
  "turns": [
   {
    "index": 0,
@@ -57,6 +60,7 @@
  "spawns": [
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "order_architecture",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -74,6 +78,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "ledger_implementation",
    "agent_type": "poteto-agent",
    "fork_field": "fork_turns",
@@ -91,6 +96,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "independent_review",
    "agent_type": "trail reviewer",
    "fork_field": "fork_turns",

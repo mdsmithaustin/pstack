@@ -12,6 +12,9 @@
   "$show-me-your-work While I am away, make order_total in shop/orders.py reject a negative quantity with a ValueError, add a test for it, and run the tests."
  ],
  "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
  "turns": [
   {
    "index": 0,
@@ -36,6 +39,7 @@
  "spawns": [
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "trail_review",
    "agent_type": "trail reviewer",
    "fork_field": "fork_turns",

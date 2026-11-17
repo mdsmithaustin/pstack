@@ -12,6 +12,9 @@
   "$interrogate We plan to move discount caps out of code and into a per-partner config table. Stress-test that decision before we commit to it."
  ],
  "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
  "turns": [
   {
    "index": 0,
@@ -50,6 +53,7 @@
  "spawns": [
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "adversary_a",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -67,6 +71,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "adversary_b",
    "agent_type": "default",
    "fork_field": "fork_turns",
@@ -84,6 +89,7 @@
   },
   {
    "style": "function",
+   "tool_name": "spawn_agent",
    "task_name": "adversary_c",
    "agent_type": "default",
    "fork_field": "fork_turns",
