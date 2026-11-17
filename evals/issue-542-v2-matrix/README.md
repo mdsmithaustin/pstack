@@ -1,6 +1,6 @@
 # Live spawn matrix for Codex `multi_agent_v2` (issue 542)
 
-Issue 542 asks for live proof that every pstack skill that spawns agents spawns correctly on Codex `multi_agent_v2`. This directory holds that matrix. It has one live `codex exec` session per skill on `gpt-6.1-sol`, plus a `gpt-5.6-luna` row for the older `fork_context` tool. It covers the issue's work items 3 and 4. The setup-pstack step 0d change and its live test are a separate PR.
+Issue 542 asks for live proof that every pstack skill that spawns agents spawns correctly on Codex `multi_agent_v2`. This directory holds that matrix. It has one live `codex exec` session per attempt on `gpt-6.1-sol`, plus `gpt-5.6-luna` runs with the v2 flag on and off. It covers the issue's work items 3 and 4. The setup-pstack step 0d change and its live test are a separate PR.
 
 Ran on 2026-11-17 with `codex-cli 0.167.0`, against the skills at commit `a29fb3e84609d92e63fda356bf88ada5aa88b77e`.
 
@@ -50,13 +50,13 @@ Each spawn was checked on four things, read from the rollouts and never from the
 - A throwaway `shop` repository from `fixture.py`, three commits whose messages hold the reasons that `why` asks about.
 - The skills from this checkout's `HEAD`, installed to `.agents/skills`, and the personas registered through `subagents.py install --harness codex`, which writes `.codex/agents`.
 - `models.md` copied to the project's `.agents/pstack-models.md`. It sets a different low or medium effort per role and spreads panels over `gpt-6.1-sol`, `gpt-6-luna`, `gpt-6.1-terra` and `gpt-6-astra`, so a child that ignores its spawn arguments shows up. The skill defaults would run most roles at max.
-- The lead runs at `gpt-6.1-sol` high, with `approval_policy=never` and a `workspace-write` sandbox. Prompts are in `rows.json` and read like a user's request.
+- The lead defaults to `gpt-6.1-sol` high, with `approval_policy=never` and a `workspace-write` sandbox. Row-specific models and prompts are in `rows.json`.
 
 `reduce.py RUN_DIR --out EXTRACT.json` reads the rollouts under `RUN_DIR/codex-home/sessions` and writes the extract. The extract keeps each spawn's arguments (the encrypted `message` is replaced by its length), the spawn's output, and the model and effort of the child's own `turn_context`. It holds no model answers and no credentials. Rollout paths are replaced with `<run>`. `regen.sh RUNS_DIR` rebuilds every extract, and `python3 -m unittest test_reduce` checks the reducer.
 
 ## Not covered
 
-- One run per row. A row that passes once does not show how often the lead gets it right, and #550 shows a lead can differ between two runs of one prompt.
+- The recorded attempts do not establish reliability. A row that passes once does not show how often the lead gets it right, and #550 shows a lead can differ between two runs of one prompt.
 - The spawn briefs are encrypted in the rollouts, so a brief's content is unchecked. Role matching uses the model and effort pair, and two roles that share a pair cannot be told apart.
 - A `PASS` does not mean the skill's output was good, only that its spawns were well formed.
 - `gpt-5.6-luna` is the only v1 model tried, and only on `how`.
