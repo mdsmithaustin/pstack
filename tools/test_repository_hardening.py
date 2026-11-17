@@ -2,7 +2,12 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shlex
+import shutil
+import subprocess
+import textwrap
 import tomllib
 import unittest
 from pathlib import Path
@@ -13,6 +18,44 @@ WORKFLOW = (ROOT / ".github" / "workflows" / "lint.yml").read_text(encoding="utf
 SHARED_WORKFLOW = (ROOT / ".github" / "workflows" / "skill-checks.yml").read_text(encoding="utf-8")
 PIN = tomllib.loads((ROOT / ".skill-ci.toml").read_text(encoding="utf-8"))
 RULESET = json.loads((ROOT / ".github" / "rulesets" / "copilot-code-review.json").read_text(encoding="utf-8"))
+
+
+def workflow_job_models(workflow: str) -> dict:
+    def scalar(value: str) -> str:
+        value = re.sub(r"\s+#.*$", "", value).strip()
+        if value.startswith(('"', "'")):
+            value = value[1:-1]
+        if value.startswith("${{") and value.endswith("}}"):
+            value = value[3:-2].strip()
+        return value
+
+    jobs_block = re.search(r"(?ms)^jobs:\s*\n(.*?)(?=^\S|\Z)", workflow).group(1)
+    models = {}
+    for job, body in re.findall(r"(?ms)^  ([\w-]+):[^\S\n]*\n(.*?)(?=^  \S|\Z)", jobs_block):
+        fields = {}
+        for key, first, continuation in re.findall(
+            r"(?m)^    ([\w-]+):([^\n]*)(\n(?:(?:[ ]{5,}[^\n]*|)\n)*)", body
+        ):
+            fields[key] = (scalar(first), continuation)
+        first, continuation = fields.get("needs", ("", ""))
+        if first.startswith("["):
+            value = first + " ".join(scalar(line) for line in continuation.splitlines())
+            needs = [scalar(item) for item in value[1:-1].split(",") if item.strip()]
+        elif first:
+            needs = [first]
+        else:
+            needs = [scalar(item) for item in re.findall(r"(?m)^\s+- (.+)$", continuation)]
+        results = re.findall(r"(?m)^          RESULTS:([^\n]*)$", body)
+        scripts = [textwrap.dedent(block) for block in re.findall(
+            r"(?m)^        run: \|[+-]?[^\S\n]*\n((?:[ ]{10}[^\n]*\n|\n)+)", body
+        )]
+        models[job] = {
+            "needs": needs,
+            "if": fields.get("if", ("", ""))[0],
+            "results": scalar(results[0]) if len(results) == 1 else None,
+            "scripts": scripts,
+        }
+    return models
 
 
 class RepositoryHardening(unittest.TestCase):
@@ -63,6 +106,49 @@ class RepositoryHardening(unittest.TestCase):
                 if "skills" in (job_id, job_name):
                     reporting.append((path.name, job_id, job_name))
         self.assertEqual(reporting, [("lint.yml", "skills", None)])
+
+    def test_required_skills_gate_waits_for_every_skills_job(self) -> None:
+        jobs = workflow_job_models(WORKFLOW)
+        parts = {job for job in jobs if job.startswith("skills-")}
+        self.assertGreaterEqual(len(parts), 2)
+        gate = jobs["skills"]
+        self.assertEqual(set(gate["needs"]), parts)
+        self.assertEqual(gate["if"], "always()")
+
+    def test_required_skills_gate_accepts_only_successful_results(self) -> None:
+        jobs = workflow_job_models(WORKFLOW)
+        gate = jobs["skills"]
+        self.assertEqual(gate["results"], "toJSON(needs)")
+        self.assertEqual(len(gate["scripts"]), 1)
+        script = gate["scripts"][0]
+        commands = [shlex.split(line, comments=True) for line in script.splitlines()]
+        filters = [command[i + 2] for command in commands
+                   for i, token in enumerate(command[:-2])
+                   if token == "jq" and command[i + 1] == "-e"]
+        self.assertEqual(len(filters), 1, "expected one jq exit-status filter")
+        jq = shutil.which("jq")
+        if jq is None:
+            self.skipTest("jq is absent from PATH; cannot execute the skills gate")
+        successful = {job: {"result": "success"} for job in gate["needs"]}
+        cases = [("all successful", successful, 0), ("empty", {}, 1)]
+        for job in successful:
+            for result in ("failure", "skipped", "cancelled"):
+                cases.append((f"{job}: {result}",
+                              {**successful, job: {"result": result}}, 1))
+        for name, results, expected in cases:
+            with self.subTest(case=name):
+                payload = json.dumps(results)
+                filtered = subprocess.run(
+                    [jq, "-e", filters[0]], input=payload,
+                    capture_output=True, text=True, timeout=10,
+                )
+                self.assertEqual(filtered.returncode, expected, filtered.stderr)
+                executed = subprocess.run(
+                    ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", script],
+                    env={**os.environ, "RESULTS": payload},
+                    capture_output=True, text=True, timeout=10,
+                )
+                self.assertEqual(executed.returncode, expected, executed.stderr)
 
     def test_ruleset_has_required_branch_protections(self) -> None:
         self.assertEqual(RULESET["enforcement"], "active")
