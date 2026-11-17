@@ -129,7 +129,9 @@ class HostSkillHits(unittest.TestCase):
         home = str(Path.home())
         denied = f"ls: {home}/.claude/skills: Operation not permitted"
         for text in (f"Base directory for this skill: {home}/.claude/skills/how",
-                     f"{denied}\n{home}/.agents/skills/how/SKILL.md"):
+                     f"{denied}\n{home}/.agents/skills/how/SKILL.md",
+                     f"{denied}\nBase directory for this skill: {home}/.claude/skills/how",
+                     f"{home}/.claude/skills/how/SKILL.md\nError: Permission denied"):
             with self.subTest(text=text):
                 self.assertTrue(claude_code.host_skill_hits([json.dumps({"content": text}).encode()]))
 

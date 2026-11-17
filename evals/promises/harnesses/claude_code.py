@@ -877,7 +877,7 @@ def listed_skills(rows):
 
 def host_skill_hits(contents):
     roots = [str(Path.home() / ".claude/skills"), str(Path.home() / ".agents/skills")]
-    denied = re.compile("(?:" + "|".join(map(re.escape, roots)) + r")[^\s:\"']*: (?:Operation not permitted|Permission denied)")
+    denied = re.compile("(?:" + "|".join(map(re.escape, roots)) + r")[^\s:\"'\\]*: (?:Operation not permitted|Permission denied)")
     texts = [denied.sub("", data.decode(errors="replace")) for data in contents]
     return sorted({root for text in texts for root in roots if root in text})
 

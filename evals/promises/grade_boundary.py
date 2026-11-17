@@ -219,15 +219,19 @@ class _Root:
         self.verify()
         return found
 
-    def paths_by_inode(self, inodes):
+    def names_by_inode(self, linked):
         self.verify()
         found = {}
 
         def walk(fd, prefix):
+            folder = os.fstat(fd)
             for name in os.listdir(fd):
                 info = os.stat(name, dir_fd=fd, follow_symlinks=False)
-                if stat.S_ISREG(info.st_mode) and (info.st_dev, info.st_ino) in inodes:
-                    found.setdefault((info.st_dev, info.st_ino), set()).add(self.path / prefix / name)
+                inode = (info.st_dev, info.st_ino)
+                if stat.S_ISREG(info.st_mode) and inode in linked:
+                    if info.st_nlink != linked[inode][0]:
+                        raise GradeRefused("input_changed", self.path / prefix / name)
+                    found.setdefault(inode, set()).add((folder.st_dev, folder.st_ino, name))
                 elif stat.S_ISDIR(info.st_mode):
                     child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
                     try:
@@ -1004,8 +1008,8 @@ def _approved_trees(state):
         if linked:
             names = {}
             for root in allocations:
-                for inode, paths in root.paths_by_inode(linked.keys()).items():
-                    names.setdefault(inode, set()).update(paths)
+                for inode, found in root.names_by_inode(linked).items():
+                    names.setdefault(inode, set()).update(found)
             for inode, (count, path) in linked.items():
                 if len(names.get(inode, ())) != count:
                     raise GradeRefused("unsafe_link", path)
@@ -1077,7 +1081,7 @@ class _Environment:
             return []
         child = _Root.open(root.path / rel)
         try:
-            return child.files(pattern, recursive=recursive, include_directories=True)
+            return child.files(pattern, recursive=recursive, include_directories=True, linked={})
         finally:
             child.close()
 
