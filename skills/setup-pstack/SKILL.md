@@ -61,7 +61,7 @@ On Codex, pstack spawns roles natively through `spawn_agent`. When the tool is u
 
 Whether a session has `spawn_agent` depends on more than config. As of Codex 0.160.0 it also depends on the selected model's own multi-agent setting, launch flags, spawn depth, and config layers this skill cannot read. So config can only show signals, and only a Codex session shows the answer.
 
-- **Inside a Codex session**, the answer is whether `spawn_agent` is callable. When the session defers tools behind a tool search, search for it before calling it missing. If it is missing, list the causes you cannot rule out:
+- **Inside a Codex session**, the answer is whether `spawn_agent` is callable. When the session defers tools behind a tool search, search for it before calling it missing. On Codex 0.167.0, with `multi_agent_v2` off, a model whose catalog entry reads `multi_agent_version: v1` has no direct `spawn_agent`. The probe tested one such model. Its tool sits in a deferred `multi_agent_v1` namespace and is called through `exec` with `fork_context`. If it is missing, list the causes you cannot rule out:
   - a config key
   - a `-c` flag the session started with
   - the selected model
@@ -74,12 +74,16 @@ Whether a session has `spawn_agent` depends on more than config. As of Codex 0.1
 
 A key in a file you read is a possible cause, not a proven one, because `multi_agent_v2` or a layer you cannot read can override it. Offer an edit only when a Codex session confirms `spawn_agent` is missing, and only for a possible cause a config file shows:
 
-- `[agents]` `enabled = false` in a file you read, while the `multi_agent_v2` row reads `false` and no readable file of higher precedence sets it `true` (a trusted project's file beats the user's): offer to delete that line or set it to `true`. When a readable layer overrides it, or the rows are unverified, report the key as unverified and offer nothing. On Codex 0.160.0 this key removes `spawn_agent` even while the `multi_agent` row reads `true`. With `multi_agent_v2` on, the key does not block spawning, so offer nothing for it.
-- Both feature rows read `false` and a file you read turns the feature off, as `[features]` `multi_agent = false`, a dotted `features.multi_agent = false`, or the legacy `[features]` `collab = false`: offer to set it to `true` in that file. With the key in the user config, `codex features enable multi_agent` fixes any of the three. Codex's source on 2026-11-12 marks `multi_agent` deprecated beside a stable `multi_agent_v2`, and the key still parses, so when the edit changes nothing, report that and offer no second edit. When no file you read turns it off, the cause is a layer you cannot read, so name that instead of offering an edit.
+- `[agents]` `enabled = false` in a file you read, while the `multi_agent_v2` row reads `false` and no readable file of higher precedence sets it `true` (a trusted project's file beats the user's): offer to delete that line or set it to `true`. When a readable layer overrides it, or the rows are unverified, report the key as unverified and offer nothing. On Codex 0.160.0 this key removes `spawn_agent` even while the `multi_agent` row reads `true`. With `multi_agent_v2` on, the key does not block spawning, so offer nothing for it. A Codex 0.167.0 probe found both facts on a v2 model (`gpt-6.1-sol`) and on a v1 model.
+- Both feature rows read `false` and a file you read turns the feature off, as `[features]` `multi_agent = false`, a dotted `features.multi_agent = false`, or the legacy `[features]` `collab = false`: offer `multi_agent_v2 = true` in that file, or `codex features enable multi_agent_v2` to write it to the user config.
+  - Codex's source on 2026-11-12 marks `multi_agent` deprecated beside a stable `multi_agent_v2`, and the key still parses.
+  - A Codex 0.167.0 probe found that `multi_agent_v2` leaves a v2 model's `spawn_agent` as it was, and switches a v1 model to the direct v2 tool, with `task_name` and `fork_turns`.
+  - The same probe found that `multi_agent = false` removed `spawn_agent` from neither kind of model. So do not offer `multi_agent = true` on 0.167.0 or later.
+  - On a release older than 0.167.0, where the probe did not run, offer `multi_agent = true` as a second edit once the first changes nothing. `codex features enable multi_agent` fixes any of the three there. Otherwise, when the edit changes nothing, report that and offer no second edit. When no file you read turns the feature off, the cause is a layer you cannot read, so name that instead of offering an edit.
 
 ```toml
 [features]
-multi_agent = true
+multi_agent_v2 = true
 ```
 
 Edit a file only after the user says yes, and keep every other key. The change applies from the next session. Without a session to confirm, report the signals and any possible causes, say spawning is unverified, and offer no edit.
