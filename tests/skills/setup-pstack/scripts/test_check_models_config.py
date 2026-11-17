@@ -1963,6 +1963,10 @@ class LintUnusableEntries(unittest.TestCase):
         _, findings = cmc.parse(text, self.LISTED)
         self.assertEqual(findings, [])
 
+    def test_a_bare_tier_name_is_not_a_listed_model(self):
+        _, findings = cmc.parse("## codex\nfeature: sol@high\n", self.LISTED)
+        self.assertEqual(notices_of(findings), [(2, "notice", "sol is not in this Codex's model list")])
+
     def test_a_missing_codex_slug_is_noted_once_per_line(self):
         _, findings = cmc.parse("## codex\narena runners: gpt-7-sol@high, gpt-7-sol@xhigh\n", self.LISTED)
         self.assertEqual(notices_of(findings), [(2, "notice", "gpt-7-sol is not in this Codex's model list")])

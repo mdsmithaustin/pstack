@@ -151,7 +151,8 @@ def _listed_release(model: str, effort: str, listed: Mapping[str, frozenset[str]
 
 
 def _is_listed(model: str, listed: Mapping[str, frozenset[str]]) -> bool:
-    return model in listed or any(release + _tier(model) in listed for release in GPT6_RELEASES_NEWEST_FIRST)
+    tier = _tier(model)
+    return model in listed or (tier != model and any(release + tier in listed for release in GPT6_RELEASES_NEWEST_FIRST))
 
 
 def _is_valid_model_name(model: str) -> bool:
