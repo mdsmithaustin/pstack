@@ -2,9 +2,10 @@ name: lint
 permissions:
   contents: read
 on:
-  push:
-    branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 9 * * *"
+  workflow_dispatch: {}
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
