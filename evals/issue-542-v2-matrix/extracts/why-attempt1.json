@@ -1,0 +1,108 @@
+{
+ "row": "why",
+ "lead_model": "gpt-6.1-sol",
+ "v2_flag": true,
+ "lead_contexts": [
+  [
+   "gpt-6.1-sol",
+   "high"
+  ]
+ ],
+ "lead_prompts": [
+  "$why why does tax get rounded per line item and not once on the order total?"
+ ],
+ "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "turns": [
+  {
+   "index": 0,
+   "exit": 0,
+   "session": "01a1eb6e-02ac-75a2-ab13-00497bd85f1b"
+  }
+ ],
+ "resolved": [
+  {
+   "role": "why investigators",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "why synthesizer",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "medium",
+   "source": "workspace ## codex"
+  }
+ ],
+ "collab_tool_calls": {
+  "spawn_agent": 2,
+  "wait_agent": 2
+ },
+ "spawns": [
+  {
+   "style": "function",
+   "task_name": "tax_history",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "args_model": "gpt-6.1-sol",
+   "args_effort": "low",
+   "matches_role": "why investigators",
+   "output": "{\"task_name\":\"/root/tax_history\"}",
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "style": "function",
+   "task_name": "tax_synthesis",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "args_model": "gpt-6.1-sol",
+   "args_effort": "medium",
+   "matches_role": "why synthesizer",
+   "output": "{\"task_name\":\"/root/tax_synthesis\"}",
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "medium"
+    ]
+   ]
+  }
+ ],
+ "lead_multi_agent_version": "v2",
+ "children": [
+  {
+   "id": "01a1eb6e-b631-7900-b281-c2b1a1089900",
+   "agent_path": "/root/tax_history",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb6f-9b67-7683-97f0-bb82b62f2a23",
+   "agent_path": "/root/tax_synthesis",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "medium"
+    ]
+   ]
+  }
+ ],
+ "spawn_fired": true,
+ "problems": [],
+ "verdict": "PASS"
+}

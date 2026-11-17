@@ -1,0 +1,181 @@
+{
+ "row": "arena",
+ "lead_model": "gpt-6.1-sol",
+ "v2_flag": true,
+ "lead_contexts": [
+  [
+   "gpt-6.1-sol",
+   "high"
+  ]
+ ],
+ "lead_prompts": [
+  "$arena I need a function that splits an order total across N payers in cents without losing or gaining a cent. Try a few different approaches and give me the best one. Keep it in a scratch directory, not in the project."
+ ],
+ "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "turns": [
+  {
+   "index": 0,
+   "exit": 0,
+   "session": "01a1eb6e-02ac-70d2-b72e-cafe29406ee5"
+  }
+ ],
+ "resolved": [
+  {
+   "role": "arena runners",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "arena runners",
+   "arm": 2,
+   "model": "gpt-6-luna",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "arena runners",
+   "arm": 3,
+   "model": "gpt-6.1-terra",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "arena cross-judge pool",
+   "arm": 1,
+   "model": "gpt-6-astra",
+   "effort": "low",
+   "source": "workspace ## codex"
+  }
+ ],
+ "collab_tool_calls": {
+  "spawn_agent": 4,
+  "wait_agent": 3,
+  "send_message": 1
+ },
+ "spawns": [
+  {
+   "style": "function",
+   "task_name": "split_one",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "args_model": "gpt-6.1-sol",
+   "args_effort": "low",
+   "matches_role": "arena runners",
+   "output": "{\"task_name\":\"/root/split_one\"}",
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "style": "function",
+   "task_name": "split_two",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "args_model": "gpt-6-luna",
+   "args_effort": "low",
+   "matches_role": "arena runners",
+   "output": "{\"task_name\":\"/root/split_two\"}",
+   "child_contexts": [
+    [
+     "gpt-6-luna",
+     "low"
+    ]
+   ]
+  },
+  {
+   "style": "function",
+   "task_name": "split_three",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "args_model": "gpt-6.1-terra",
+   "args_effort": "low",
+   "matches_role": "arena runners",
+   "output": "{\"task_name\":\"/root/split_three\"}",
+   "child_contexts": [
+    [
+     "gpt-6.1-terra",
+     "low"
+    ]
+   ]
+  },
+  {
+   "style": "function",
+   "task_name": "split_judge",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "args_model": "gpt-6-astra",
+   "args_effort": "low",
+   "matches_role": "arena cross-judge pool",
+   "output": "{\"task_name\":\"/root/split_judge\"}",
+   "child_contexts": [
+    [
+     "gpt-6-astra",
+     "low"
+    ]
+   ]
+  }
+ ],
+ "lead_multi_agent_version": "v2",
+ "children": [
+  {
+   "id": "01a1eb6f-5487-7c23-bb8c-7ffa4018ff7f",
+   "agent_path": "/root/split_one",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb6f-754b-7970-8b83-1690fdea5be2",
+   "agent_path": "/root/split_two",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6-luna",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb6f-9de0-77a0-b636-3b4f4501a8ca",
+   "agent_path": "/root/split_three",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6.1-terra",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb70-89cf-7112-a13e-def25df52158",
+   "agent_path": "/root/split_judge",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6-astra",
+     "low"
+    ]
+   ]
+  }
+ ],
+ "spawn_fired": true,
+ "problems": [],
+ "verdict": "PASS"
+}

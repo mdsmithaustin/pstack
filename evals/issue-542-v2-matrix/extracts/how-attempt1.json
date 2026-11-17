@@ -1,0 +1,79 @@
+{
+ "row": "how",
+ "lead_model": "gpt-6.1-sol",
+ "v2_flag": true,
+ "lead_contexts": [
+  [
+   "gpt-6.1-sol",
+   "high"
+  ]
+ ],
+ "lead_prompts": [
+  "$how how does an order total get computed here, from line items through discounts and tax? I want to get oriented before I change checkout."
+ ],
+ "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "turns": [
+  {
+   "index": 0,
+   "exit": 0,
+   "session": "01a1eb6b-d44d-7fc2-bc07-2e96cef7fda5"
+  }
+ ],
+ "resolved": [
+  {
+   "role": "how explorer",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "how explainer",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "medium",
+   "source": "workspace ## codex"
+  }
+ ],
+ "collab_tool_calls": {
+  "spawn_agent": 1,
+  "wait_agent": 1
+ },
+ "spawns": [
+  {
+   "style": "function",
+   "task_name": "explain_order_total",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "args_model": "gpt-6.1-sol",
+   "args_effort": "medium",
+   "matches_role": "how explainer",
+   "output": "{\"task_name\":\"/root/explain_order_total\"}",
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "medium"
+    ]
+   ]
+  }
+ ],
+ "lead_multi_agent_version": "v2",
+ "children": [
+  {
+   "id": "01a1eb6c-6dbc-7860-a32f-84afec3a6d1e",
+   "agent_path": "/root/explain_order_total",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "medium"
+    ]
+   ]
+  }
+ ],
+ "spawn_fired": true,
+ "problems": [],
+ "verdict": "PASS"
+}
