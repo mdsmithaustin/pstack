@@ -154,7 +154,7 @@ class RepositoryHardening(unittest.TestCase):
         self.assertEqual(RULESET["enforcement"], "active")
         self.assertEqual(RULESET["conditions"]["ref_name"]["include"], ["~DEFAULT_BRANCH"])
         rules = {rule["type"]: rule.get("parameters", {}) for rule in RULESET["rules"]}
-        self.assertIn("copilot_code_review", rules)
+        self.assertEqual(rules["copilot_code_review"], {"review_draft_pull_requests": True, "review_on_push": False})
         pull_request = rules["pull_request"]
         self.assertEqual(pull_request["required_approving_review_count"], 0)
         self.assertTrue(pull_request["required_review_thread_resolution"])
