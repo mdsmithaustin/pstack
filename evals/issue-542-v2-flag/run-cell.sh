@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Run one Codex cell in a private CODEX_HOME and keep its rollouts under <out>/<cell>/home.
 # usage: run-cell.sh <out-dir> <cell> <model> [enable:<feature> | disable:<feature> | agents-off]...
 set -euo pipefail
 out=$1 cell=$2 model=$3

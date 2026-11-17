@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""Reduce one cell's Codex rollouts to the facts issue 542 asks about.
-
-usage: summarize.py <out-dir> <cell> > <cell>.json
-
-Reads the rollouts under the cell's CODEX_HOME sessions folder, finds the root rollout and its child rollouts, and prints:
-  v2_tool         the spawn_agent schema Codex put in the model's tool list, if any
-  deferred        deferred tool namespaces whose name starts with multi_agent
-  v1_tool_params  the spawn_agent parameters the model read from the deferred multi_agent_v1 namespace
-  spawn_calls     each spawn_agent call's argument keys and fork value, from either path
-  children        the model and effort each child ran at, from its own turn_context
-  child_answer_reached_root  whether the root's last message ends with the child's PONG
-The message argument is dropped, and so is every model answer, because model answers stay out of Git. Rollouts carry
-account identifiers and rate-limit data, so this script's output is what gets committed, never them.
-"""
+"""usage: summarize.py <out-dir> <cell> > <cell>.json"""
 import glob
 import json
 import re
@@ -29,7 +16,6 @@ def tools(items, namespace=""):
 
 
 def top_level_keys(text):
-    """Keys of the outermost object literal in text, ignoring strings and nested braces."""
     text = re.sub(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|`(?:[^`\\]|\\.)*`', '""', text)
     keys, depth, token = [], 0, ""
     for ch in text:
@@ -47,7 +33,6 @@ def top_level_keys(text):
 
 
 def object_after(text, marker):
-    """The balanced {...} that opens right after marker, or None."""
     start = text.find(marker)
     if start < 0:
         return None
