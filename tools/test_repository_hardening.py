@@ -64,6 +64,18 @@ class RepositoryHardening(unittest.TestCase):
                     reporting.append((path.name, job_id, job_name))
         self.assertEqual(reporting, [("lint.yml", "skills", None)])
 
+    def test_required_skills_gate_waits_for_every_skills_job(self) -> None:
+        jobs = dict(re.findall(r"(?ms)^  ([\w-]+):\s*\n(.*?)(?=^  \S|\Z)", WORKFLOW.split("\njobs:\n", 1)[1]))
+        parts = sorted(job for job in jobs if job.startswith("skills-"))
+        self.assertGreaterEqual(len(parts), 2)
+        gate = jobs["skills"]
+        needs = re.search(r"(?m)^    needs: \[(.*)\]$", gate)
+        self.assertIsNotNone(needs, "the skills job must name its jobs in a one-line needs list")
+        self.assertEqual(sorted(name.strip() for name in needs.group(1).split(",")), parts)
+        self.assertIn("    if: ${{ always() }}\n", gate)
+        self.assertIn("RESULTS: ${{ toJSON(needs) }}", gate)
+        self.assertIn('jq -e \'length > 0 and all(.[]; .result == "success")\'', gate)
+
     def test_ruleset_has_required_branch_protections(self) -> None:
         self.assertEqual(RULESET["enforcement"], "active")
         self.assertEqual(RULESET["conditions"]["ref_name"]["include"], ["~DEFAULT_BRANCH"])
