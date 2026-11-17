@@ -17,7 +17,7 @@ from unittest import mock
 import live
 import oracles
 import grade_boundary
-from grade_boundary import GradeRefused, _Root, _Controller, _authorize_fixture, _authorize_retained, _before_turns, _seal
+from grade_boundary import GradeRefused, _Root, _Controller, _approved_trees, _authorize_fixture, _authorize_retained, _before_turns, _seal, _snapshot, _Environment
 
 NATIVE = (platform.system(), platform.release(), platform.machine()) == ("Darwin", "25.6.0", "arm64")
 
@@ -240,6 +240,60 @@ class ControllerBoundary(BoundaryFixtures):
         for name in ("link.txt", "hard.txt", "../../outside/read-marker.txt"):
             with self.subTest(name=name), self.assertRaises(GradeRefused):
                 root.read(name)
+
+    def cloned_state(self):
+        self.repository()
+        scratch = self.root / "tmp"
+        scratch.mkdir()
+        live.git_run(scratch, "clone", "-q", str(self.project), "copy", capture_output=True)
+        self.assertTrue([p for p in (self.project / ".git" / "objects").rglob("*") if p.is_file() and p.stat().st_nlink > 1])
+        return {"project": _snapshot(self.project), "worktrees": [], "git": _snapshot(self.project / ".git"),
+                "allocations": [_snapshot(self.project.parent), _snapshot(scratch)]}
+
+    def test_a_local_clone_inside_the_run_allocations_is_approved(self):
+        state = self.cloned_state()
+        (self.root / "tmp" / "escape").symlink_to(self.outside)
+        self.assertEqual([tree["path"] for tree in _approved_trees(state)], [str(self.project)])
+
+    def test_a_hard_link_with_a_name_outside_the_run_allocations_refuses(self):
+        state = self.cloned_state()
+        os.link(self.read_marker, self.project / "hard.txt")
+        with self.assertRaises(GradeRefused) as refused:
+            _approved_trees(state)
+        self.assertEqual(refused.exception.receipt, {"run_id": None, "reason": "unsafe_link", "detail": str(self.project / "hard.txt")})
+        os.unlink(self.project / "hard.txt")
+        shared = next(p for p in (self.project / ".git" / "objects").rglob("*") if p.is_file() and p.stat().st_nlink > 1)
+        (self.root / "cache").mkdir()
+        for outside in (self.outside / "third-name", self.root / "cache" / "third-name"):
+            with self.subTest(outside=outside):
+                os.link(shared, outside)
+                with self.assertRaises(GradeRefused) as refused:
+                    _approved_trees(state)
+                self.assertEqual(refused.exception.receipt["reason"], "unsafe_link")
+                os.unlink(outside)
+
+    def test_a_link_count_that_changes_between_the_walks_refuses(self):
+        state = self.cloned_state()
+        names_by_inode = _Root.names_by_inode
+
+        def add_a_name(root, linked):
+            os.link(next(iter(linked.values()))[1], self.outside / "late-name")
+            return names_by_inode(root, linked)
+
+        with mock.patch.object(_Root, "names_by_inode", add_a_name), self.assertRaises(GradeRefused) as refused:
+            _approved_trees(state)
+        self.assertEqual(refused.exception.receipt["reason"], "input_changed")
+
+    def test_an_oracle_listing_of_a_cloned_project_lists_and_its_reads_stay_strict(self):
+        state = self.cloned_state()
+        environment = _Environment([state["project"]], [state["project"]], self.root, self.root, None)
+        listed = environment.files(self.project, "*", recursive=True)
+        shared = next(p for p in listed if p.is_file() and p.stat().st_nlink > 1)
+        root = _Root.open(self.project)
+        self.addCleanup(root.close)
+        with self.assertRaises(GradeRefused) as refused:
+            root.read(shared.relative_to(self.project))
+        self.assertEqual(refused.exception.receipt["reason"], "unsafe_object")
 
     def test_controller_publication_rejects_output_substitution(self):
         root = _Root.open(self.root)

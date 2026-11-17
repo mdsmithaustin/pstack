@@ -118,6 +118,24 @@ class RecordedReads(unittest.TestCase):
                              ["/fixture/project/inside.py", "/outside/link/canary"])
 
 
+class HostSkillHits(unittest.TestCase):
+    def test_a_denied_listing_of_the_host_skills_is_not_a_hit(self):
+        home = str(Path.home())
+        row = json.dumps({"type": "user", "message": {"content": [{"type": "tool_result", "is_error": False,
+              "content": f"ls: {home}/.claude/skills: Operation not permitted\nls: {home}/.claude/plugins: Operation not permitted"}]}})
+        self.assertEqual(claude_code.host_skill_hits([row.encode()]), [])
+
+    def test_host_skill_text_in_the_run_is_still_a_hit(self):
+        home = str(Path.home())
+        denied = f"ls: {home}/.claude/skills: Operation not permitted"
+        for text in (f"Base directory for this skill: {home}/.claude/skills/how",
+                     f"{denied}\n{home}/.agents/skills/how/SKILL.md",
+                     f"{denied}\nBase directory for this skill: {home}/.claude/skills/how",
+                     f"{home}/.claude/skills/how/SKILL.md\nError: Permission denied"):
+            with self.subTest(text=text):
+                self.assertTrue(claude_code.host_skill_hits([json.dumps({"content": text}).encode()]))
+
+
 class Harvest(unittest.TestCase):
     def test_claude_tool_events_keep_their_call_id(self):
         with tempfile.TemporaryDirectory() as tmp:

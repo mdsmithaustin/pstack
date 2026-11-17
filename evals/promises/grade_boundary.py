@@ -185,7 +185,7 @@ class _Root:
                 os.close(fd)
             os.close(parent)
 
-    def files(self, pattern="*", recursive=True, include_directories=False):
+    def files(self, pattern="*", recursive=True, include_directories=False, linked=None):
         self.verify()
         found = []
 
@@ -193,7 +193,9 @@ class _Root:
             for name in os.listdir(fd):
                 rel = prefix / name
                 info = os.stat(name, dir_fd=fd, follow_symlinks=False)
-                if stat.S_ISLNK(info.st_mode) or (stat.S_ISREG(info.st_mode) and info.st_nlink != 1):
+                if stat.S_ISREG(info.st_mode) and info.st_nlink != 1 and linked is not None:
+                    linked.setdefault((info.st_dev, info.st_ino), (info.st_nlink, self.path / rel))
+                elif stat.S_ISLNK(info.st_mode) or (stat.S_ISREG(info.st_mode) and info.st_nlink != 1):
                     raise GradeRefused("unsafe_link", self.path / rel)
                 if stat.S_ISDIR(info.st_mode):
                     if include_directories and rel.match(pattern):
@@ -209,6 +211,33 @@ class _Root:
                         found.append(self.path / rel)
                 else:
                     raise GradeRefused("unsafe_object", self.path / rel)
+
+        try:
+            walk(self.fd, Path("."))
+        except OSError as error:
+            raise GradeRefused("unsafe_link", self.path) from error
+        self.verify()
+        return found
+
+    def names_by_inode(self, linked):
+        self.verify()
+        found = {}
+
+        def walk(fd, prefix):
+            folder = os.fstat(fd)
+            for name in os.listdir(fd):
+                info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                inode = (info.st_dev, info.st_ino)
+                if stat.S_ISREG(info.st_mode) and inode in linked:
+                    if info.st_nlink != linked[inode][0]:
+                        raise GradeRefused("input_changed", self.path / prefix / name)
+                    found.setdefault(inode, set()).add((folder.st_dev, folder.st_ino, name))
+                elif stat.S_ISDIR(info.st_mode):
+                    child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                    try:
+                        walk(child, prefix / name)
+                    finally:
+                        os.close(child)
 
         try:
             walk(self.fd, Path("."))
@@ -956,10 +985,11 @@ def _approved_trees(state):
                             approved[str(path)] = _snapshot(path)
                 finally:
                     registry.close()
+        linked = {}
         for root in approved.values():
             opened = _Root.open(root["path"], root["identity"])
             try:
-                opened.files()
+                opened.files(linked=linked)
                 if root == project or not common:
                     continue
                 pointer = opened.read(".git").decode()
@@ -975,6 +1005,14 @@ def _approved_trees(state):
                     raise GradeRefused("unapproved_git", "worktree reverse pointer differs")
             finally:
                 opened.close()
+        if linked:
+            names = {}
+            for root in allocations:
+                for inode, found in root.names_by_inode(linked).items():
+                    names.setdefault(inode, set()).update(found)
+            for inode, (count, path) in linked.items():
+                if len(names.get(inode, ())) != count:
+                    raise GradeRefused("unsafe_link", path)
         return list(approved.values())
     except FileNotFoundError as error:
         raise GradeRefused("unapproved_git", f"missing worktree metadata: {error}") from error
@@ -1043,7 +1081,7 @@ class _Environment:
             return []
         child = _Root.open(root.path / rel)
         try:
-            return child.files(pattern, recursive=recursive, include_directories=True)
+            return child.files(pattern, recursive=recursive, include_directories=True, linked={})
         finally:
             child.close()
 
