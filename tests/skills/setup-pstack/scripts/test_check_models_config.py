@@ -1363,6 +1363,17 @@ class CodexSessionWorkModel(ResolveRunner, unittest.TestCase):
             {"role": "trail reviewer", "arm": 1, "model": "gpt-6.1-sol", "effort": "xhigh", "source": "user ## codex"},
         )
 
+    def test_invalid_session_model_keeps_behavior_without_a_rollout(self):
+        for work_model in (None, "gpt-6@high", "gpt-6-luna@medium"):
+            for session in (
+                (("custom/provider:tag", "high"),),
+                (("gpt-6.1-sol", "medium"), ("custom/provider:tag", "high")),
+            ):
+                with self.subTest(work_model=work_model, session=session):
+                    arm = self.reviewer(work_model=work_model, session=session)
+                    self.assertEqual(arm, self.reviewer(work_model=work_model, session=None))
+                    self.assertEqual((arm["model"], arm["effort"]), ("gpt-6.1-sol", "xhigh"))
+
     def test_a_thread_id_with_no_rollout_keeps_todays_behavior(self):
         arm = self.reviewer(thread="no-such-thread")
         self.assertEqual((arm["model"], arm["effort"], arm.get("notes")), ("gpt-6.1-sol", "xhigh", None))

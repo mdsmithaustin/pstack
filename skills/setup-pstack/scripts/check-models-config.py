@@ -595,7 +595,7 @@ def codex_session_model(env: Mapping[str, str]) -> tuple[str, str | None] | None
                         found = (payload["model"], effort if effort in EFFORT_ORDER else None)
         except OSError:
             return None
-    return found
+    return found if found and _is_valid_model_name(found[0]) else None
 
 
 def _shown(model: str, effort: str | None) -> str:
