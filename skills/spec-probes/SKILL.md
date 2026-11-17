@@ -1,63 +1,67 @@
 ---
 name: spec-probes
-description: "Apply when writing or reviewing a spec, requirements, acceptance criteria, user stories, or tickets before any code exists, and when deriving acceptance tests from a spec you cannot change (fixed-spec mode). Two passes: an edge probe over a closed taxonomy of data-shape boundaries, and a prohibition probe for what the feature must never silently become. Every raised item is resolved, dismissed with a reason, or carried as an explicit gap."
+description: "Apply when writing or reviewing a spec, requirements, acceptance criteria, user stories, or tickets before any code exists, when deriving acceptance tests from a spec you cannot change (fixed-spec mode), when a spec changes mid-task, and before each commit of code built from a spec. Probes data-shape edges and what the feature must never silently become, and checks the diff's outputs and rejections against the spec. Every raised item is resolved, dismissed with a reason, or carried as an explicit gap."
 ---
 
 # Spec probes
 
-A verifier only checks assertions that exist, and it is confidently wrong about edges the spec never stated. Run these two passes over each requirement before code, in this order.
+A checker grades the spec's examples and stated restrictions, not your reading of them. Two rules prevent most misses, on every requirement:
 
-## Pass 1: edge probe
+- **Examples fix how each value is written.** Where a worked example shows an output value, write it in that form character for character, even where the prose allows others. An example that prints `"total": 1.50` means `1.50`, not `1.5`, though the prose says only "a decimal". Compare as text, never through a parser or normalizer. An example does not fix order, counts, or behavior that the prose defines. Where an example and the prose disagree, follow the prose and report the conflict with both sentences.
+- **Accept what no requirement forbids.** Reject, error on, or reinterpret an input only when a requirement states the restriction. Examples that all show `https://` URLs do not make an `ftp://` URL an error. A stated type, range, or format is such a requirement.
 
-Classify each requirement's data shape: `numeric-range`, `collection`, `text`, `stateful`, `io`. The shape also includes `example` when the spec gives the requirement a worked example, and `variants` when the requirement names several variants, such as formats, languages, or strategies. It includes `look-alike` when the requirement defines a term that looks like another term in the spec. Then raise only the categories whose shapes intersect it.
+## Before code
+
+**1. Edge probe.** Classify each requirement's data shape: `numeric-range`, `collection`, `text`, `stateful`, `io`, plus `example` when it has a worked example, `variants` when it names several formats or strategies, and `look-alike` when it defines a term that resembles another. Raise only the categories whose shapes match.
 
 | Category | Shapes | Ask |
 |---|---|---|
-| Unit / cardinality | collection, stateful | What counts as one item where the spec counts, numbers, groups, or joins? Take the unit the spec's noun names. Test an input where the plausible units differ: two outer items of two parts each, a header line present, two occurrences in one window. |
-| Boundary values | numeric-range | What happens exactly at each min, max, or threshold, and one step either side? |
-| Adjacency | collection | When two things are exactly equal or just touch, do they merge, collide, or stay separate? |
+| Unit / cardinality | collection, stateful | What counts as one item where the spec counts, groups, or joins? Take the unit the spec's noun names, and test an input where plausible units differ, such as two outer items of two parts each. |
+| Boundary values | numeric-range | What happens at each min, max, or threshold, and one step either side? |
+| Adjacency | collection | When two things are equal or just touch, do they merge, collide, or stay separate? |
 | Empty / degenerate | collection, text | What is the result for empty, single-element, or null input? |
-| Encoding | text | Whose definition of length and equality applies: bytes, code points, grapheme clusters, normalized form? |
+| Encoding | text | Whose length and equality apply: bytes, code points, graphemes, normalized form? |
 | Ordering / stability | collection | When elements compare equal, is output order specified and stable? |
-| Precision / overflow | numeric-range | Where can rounding, tie-breaking, precision loss, or overflow occur, and what is the exact contract: half-up or half-even, floor or truncate? |
+| Precision / overflow | numeric-range | Where can rounding, ties, or overflow occur, and what is the exact contract? |
 | Idempotency | stateful | What happens if this runs twice on the same input? |
 | Concurrency / effect order | stateful, io | If interrupted or run in parallel, what is guaranteed? |
-| Example values | example | An example's output is exact: expect it character for character, never through a parser or normalizer, in the format the examples show where prose allows several. Its input values, and whatever else holds in it that no rule states, such as the order its operations finish, restrict nothing. Add one test where such a property does not hold when a requirement or today's behavior gives its result. Otherwise carry the edge as `unresolved`. |
-| Variant coverage | variants | Does each raised edge behave the same in every named variant? Probe it in each variant, or record why checking one variant covers the others. |
-| Look-alike terms | look-alike | Where the spec defines two similar terms differently, which input gets different results from them? Expect both results, so a test fails whichever term is implemented like the other. |
+| Example values | example | The first rule above fixes how values are written. Its input values, and what holds in it that no rule states, such as the order operations finish, restrict nothing. Test one input where such a property differs only when a requirement or today's behavior gives its result. |
+| Variant coverage | variants | Does each raised edge behave the same in every variant? Probe each, or record why one covers the rest. |
+| Look-alike terms | look-alike | Which input gets different results from the two terms? Expect both, so a test fails whichever is implemented like the other. |
 
-A requirement with prose but no matching shape gets one soft "unclassified, review by hand" item, not silence.
+A requirement with prose but no matching shape gets one "unclassified, review by hand" item, not silence.
 
-The defect this catches: "one reminder per overdue loan", tested with a member who has one loan of one book, passes whether reminders go out per member, per loan, or per book.
+**2. Prohibition probe.** Ask what the feature could silently become that the author would not want and the spec does not forbid. Cast wide, then keep only values, fairness, privacy, transparency, and safety items, such as "must not use shaming framing". Drop routine engineering, which belongs to the edge probe or review. Point anything a security or compliance tool owns to that step. Two or three items per feature is normal, and a pure utility yields zero.
 
-## Pass 2: prohibition probe
+## When the spec changes
 
-Edge shapes cannot surface "the reminder must not shame the user". For each requirement ask: **what could this feature silently become that the author would not want, but the spec does not forbid?** Cast wide first; ten raw candidates per requirement is expected.
+When a new checkpoint, revision, or ticket adds or changes requirements, run Before code on those requirements only. Add their examples to the fixtures and keep every earlier fixture. Record the probed requirements and each item's state in the worklist item. If the change contradicts an earlier fixture, report both spec sentences and leave the fixture alone.
 
-Then one precision pass:
+## Before each commit
 
-- **Drop** routine engineering: must not mutate its input, must not throw on empty, must not leak a handle. Those belong to pass 1 or to code review.
-- **Keep** values, fairness, privacy, transparency, and safety items: must not use shaming framing, must not proxy on protected attributes, must not store raw PII in plaintext.
-- **Refer, do not mint,** anything a dedicated tool already owns (injection, path traversal, data-retention law, generic bias canon): one breadcrumb to the security or compliance step, then stop.
+Check the diff against the spec. List every rejection, error, or reinterpretation of input that the diff adds or changes, and every output it formats.
 
-Two or three bespoke items per feature is the normal yield. A pure utility yields zero, and that is the right answer, so a non-empty list always carries signal.
+- Quote the requirement that states each rejection. Remove a rejection with no such requirement, so the input takes the permissive path.
+- Compare how each formatted value is written with the example of that value, as text, and fix a mismatch.
+
+Report the list in the reply, one line per path.
 
 ## Resolve every raised item
 
 Each item ends in exactly one state:
 
-- **resolved**: the spec or today's behavior states the answer (`explicit`, checked by an ordinary test); or a held-out or property-based test will stand in for an edge you know but cannot fully write down (`backstop`); or, for a prohibition that needs human judgment rather than a test, `judgment`.
-- **dismissed**, with a reason. "N/A, input is a bounded enum, no boundary exists" is valid; silence is not. The reason is the audit trail.
-- **unresolved**: carried forward as an explicit gap the plan must surface, never dropped silently.
+- **resolved**: the spec or today's behavior states the answer (`explicit`, checked by an ordinary test), a held-out or property-based test stands in for an edge you cannot fully write down (`backstop`), or a prohibition needs human judgment (`judgment`).
+- **dismissed**, with a reason, such as "N/A, input is a bounded enum". Silence is not a reason.
+- **unresolved**: carried forward as an explicit gap the plan surfaces.
 
-**A new rejection needs a requirement that states the restriction.** A rejection is an expected result that rejects, errors on, or reinterprets an input. Expect one only where a requirement states the restriction, and name that requirement in the criterion. A stated type, range, or format is such a requirement, so expect an input that breaks it to be rejected. The rule holds on a new field and on input the program accepts today, even when a worked example shows only one form of the value or a sibling field has the rejection.
-- Without such a requirement, expect the result the spec text gives the input, or the result the program gives it today. A new field has no result today, so where the spec text gives none, write no criterion for the input and carry the edge as `unresolved`.
-- Pair each rejection you test with the nearest valid input its definition allows, such as a leading zero or a single column, and expect it accepted. A validator that fails the pair is wider than its definition.
+**A rejection needs a requirement.** A rejection is an expected result that rejects, errors on, or reinterprets an input. Expect one only where a requirement states the restriction, and name it in the criterion. This holds on a new field and on input the program accepts today, even when an example shows only one form of the value or a sibling field rejects it.
+- Without such a requirement, expect the result the spec text gives the input, or today's result. A new field with no stated result gets no criterion, and the edge stays `unresolved`.
+- Pair each rejection you test with the nearest valid input its definition allows, such as a leading zero, and expect it accepted.
 
-Name the source of each criterion you write from a spec (a requirement, a spec sentence you quote, or the current behavior it keeps), and leave an edge with no source `unresolved` with no criterion. Text you add to the spec during the task is not a source. A criterion that answers a pass 2 prohibition and has no source gets tagged `assumption`.
+Name the source of each criterion: a requirement, a quoted spec sentence, or the current behavior it keeps. An edge with no source stays `unresolved` with no criterion. Text you add to the spec during the task is not a source. A criterion that answers a prohibition with no source is tagged `assumption`.
 
-**In fixed-spec mode, only what the spec states gets a test.** You are in it whenever you derive tests or criteria from a spec you cannot change. `explicit` then needs a narrower source: a spec sentence or example you quote, or current behavior you name. An answer you supply yourself, to an edge or a prohibition, is an `assumption`: write no criterion or test for it, keep the item `unresolved`, and have the code take the most permissive behavior.
+**In fixed-spec mode, only what the spec states gets a test.** You are in it whenever you derive tests from a spec you cannot change. `explicit` then needs a quoted spec sentence or example, or named current behavior. An answer you supply yourself is an `assumption`: write no test for it, keep it `unresolved`, and have the code take the most permissive behavior.
 
-Write the `backstop` and `judgment` tags into the spec, or into the reply in fixed-spec mode. A reviewer later abstains on those; without the tag it cannot see its own blind spot.
+Write the `backstop` and `judgment` tags into the spec, or into the reply in fixed-spec mode, so a later reviewer can see what it cannot check.
 
-**Reply:** per requirement, the items raised and their states; then each `assumption`; then the coverage count: applicable, resolved, unresolved, and how many are `backstop` or `judgment`.
+**Reply:** per requirement, the items raised and their states, then each `assumption`, then the counts: applicable, resolved, unresolved, and how many are `backstop` or `judgment`.

@@ -355,6 +355,10 @@ class GatesAndEndpoint(unittest.TestCase):
         recap = next(gate for gate in plan("feature", *LOW)["gates"] if gate["id"] == "recap")
         self.assertIn("only when the user or the repository", recap["when"])
 
+    def test_a_gate_scoped_to_playbooks_reaches_only_those(self):
+        self.assertIn("spec-conformance", [gate["id"] for gate in plan("feature", *LOW)["gates"]])
+        self.assertNotIn("spec-conformance", [gate["id"] for gate in plan("refactoring", *LOW)["gates"]])
+
     def test_every_playbook_gets_the_preserve_gate(self):
         for name in ("investigation", "babysit", "opening-a-pr", "feature"):
             args = LOW if name == "feature" else []
