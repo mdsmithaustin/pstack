@@ -41,7 +41,8 @@ REFLECT_SHORTHANDS = {"divergent", "synthesizer", "tooling", "judgment"}
 EFFORT_ORDER = ("none", "low", "medium", "high", "xhigh", "max", "ultra")
 ALLOWED_EFFORTS = frozenset(EFFORT_ORDER)
 NOTICE_EFFORTS = {"max", "ultra"}
-CLAUDE_ALIASES = {"fable", "opus", "sonnet", "haiku"}
+CLAUDE_ALIAS_ORDER = ("fable", "opus", "sonnet", "haiku")
+CLAUDE_ALIASES = set(CLAUDE_ALIAS_ORDER)
 CLAUDE_EFFORTS = frozenset({"low", "medium", "high", "xhigh", "max"})
 OTHER_ALIASES = {"inherit-parent", "auto"}
 CLAUDE_CODE_SECTION = "claude-code"
@@ -149,6 +150,11 @@ def _listed_release(model: str, effort: str, listed: Mapping[str, frozenset[str]
     return model
 
 
+def _is_listed(model: str, listed: Mapping[str, frozenset[str]]) -> bool:
+    tier = _tier(model)
+    return model in listed or (tier != model and any(release + tier in listed for release in GPT6_RELEASES_NEWEST_FIRST))
+
+
 def _is_valid_model_name(model: str) -> bool:
     if model in OTHER_ALIASES:
         return True
@@ -168,9 +174,13 @@ def _expand_names(raw_names: list[str]) -> list[str]:
     return expanded
 
 
-def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str, str]], section: str) -> tuple[list[tuple[str, str | None]], list[int]]:
+def _parse_entries(
+    entries_str: str, line_no: int, findings: list[tuple[int, str, str]], section: str,
+    listed: Mapping[str, frozenset[str]] = NO_CATALOG,
+) -> tuple[list[tuple[str, str | None]], list[int]]:
     entries: list[tuple[str, str | None]] = []
     deferred_flat_notices: list[int] = []
+    unlisted_seen: set[str] = set()
     for raw in entries_str.split(","):
         entry = raw.strip()
         if not entry:
@@ -186,6 +196,13 @@ def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str
         if not _is_valid_model_name(model):
             findings.append((line_no, "error", f"invalid model name {model!r}"))
             continue
+        if section == CLAUDE_CODE_SECTION and model not in CLAUDE_ALIASES | OTHER_ALIASES:
+            findings.append((line_no, "error", f"model {model!r} is not a Claude Code alias ({', '.join(CLAUDE_ALIAS_ORDER)})"))
+            continue
+        if section == "codex" and listed and model not in OTHER_ALIASES | CLAUDE_ALIASES and model not in unlisted_seen:
+            if not _is_listed(model, listed):
+                findings.append((line_no, "notice", f"{model} is not in this Codex's model list"))
+                unlisted_seen.add(model)
 
         if effort is not None:
             if not effort:
@@ -209,7 +226,7 @@ def _parse_entries(entries_str: str, line_no: int, findings: list[tuple[int, str
     return entries, deferred_flat_notices
 
 
-def parse(text: str) -> tuple[dict, list]:
+def parse(text: str, listed: Mapping[str, frozenset[str]] = NO_CATALOG) -> tuple[dict, list]:
     findings: list[tuple[int, str, str]] = []
     sections: dict[str, dict[str, list[tuple[str, str | None]]]] = {"": {}}
     lines = text.splitlines()
@@ -274,7 +291,7 @@ def parse(text: str) -> tuple[dict, list]:
                 roles_seen[current_section].add(STEP_SETTING)
                 sections[current_section][STEP_SETTING] = [(value, None)]
             continue
-        entries, deferred_flat_notices = _parse_entries(entries_str, line_no, findings, current_section)
+        entries, deferred_flat_notices = _parse_entries(entries_str, line_no, findings, current_section, listed)
         if not entries:
             continue
 
@@ -552,7 +569,10 @@ def _claude_alias_of(model: str, harness: str) -> str:
     lowered = model.lower()
     if lowered in CLAUDE_ALIASES | OTHER_ALIASES:
         return lowered
-    full_id = re.fullmatch(r"claude-([a-z]+)(?:-[^/:]*)?", lowered)
+    full_id = (
+        re.fullmatch(r"claude-([a-z]+)(?:-[^/:]*)?", lowered)
+        or re.fullmatch(r"(?:[a-z]+(?:-[a-z]+)?\.)?anthropic\.claude-([a-z]+)(?:-[^/:]*)?(?::\d+)?", lowered)
+    )
     if full_id and full_id[1] in CLAUDE_ALIASES and (cli.native_aliases or full_id[1] in cli.translation):
         return full_id[1]
     return model
@@ -619,7 +639,7 @@ def _resolve_main(argv: list[str]) -> int:
         allowed: dict[str, set[str]] = {}
         for role in ROLES:
             for arm in resolve_role(role, args.harness, layers, listed):
-                if arm.model != INHERIT:
+                if arm.model != INHERIT and (not listed or arm.model in listed):
                     allowed.setdefault(arm.model, set()).add(role)
         pinned = _step_pinned(layers)
     lead = None
@@ -661,7 +681,7 @@ def main(argv: list[str]) -> int:
     exit_code = 0
     for path in argv[1:]:
         text = Path(path).read_text(encoding="utf-8")
-        _, findings = parse(text)
+        _, findings = parse(text, listed_models(CLIS["codex"].catalog))
         for line_no, level, message in findings:
             print(f"{path}:{line_no}: {level}: {message}")
             if level == "error":
