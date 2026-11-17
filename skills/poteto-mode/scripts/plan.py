@@ -139,6 +139,8 @@ def route_gates(manifest, playbook, route):
     for gate in manifest["gates"]:
         if gate["applies"] == "code" and not changes_code:
             continue
+        if playbook not in gate.get("playbooks", [playbook]):
+            continue
         gates.append({"id": gate["id"], "skill": gate.get("skill"), "run": gate.get("run"), "when": gate_timing(gate, route)})
     return gates
 

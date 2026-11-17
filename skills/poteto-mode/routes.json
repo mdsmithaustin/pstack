@@ -15,6 +15,15 @@
       "run": "python3 \"${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/preserve.py\" --since <start commit>"
     },
     {
+      "id": "spec-conformance",
+      "skill": "spec-probes",
+      "applies": "code",
+      "playbooks": ["feature"],
+      "when": {
+        "all": "before every commit of code built from a spec, run its Before each commit pass"
+      }
+    },
+    {
       "id": "cleanup",
       "skill": "deslop",
       "applies": "code",

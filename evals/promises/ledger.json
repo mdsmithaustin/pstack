@@ -1544,7 +1544,7 @@
     },
     {
      "file": "skills/poteto-mode/references/task-triggers.md",
-     "quote": "- Writing acceptance tests or criteria for a new requirement from a spec, issue, or plan → call the Skill tool with `spec-probes`, then follow its edge probe."
+     "quote": "- Writing acceptance tests or criteria for a new requirement from a spec, issue, or plan → call the Skill tool with `spec-probes`, then follow its Before code steps."
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
