@@ -1,0 +1,41 @@
+{
+  "cell": "sol-agents-off-v2",
+  "child_answer_reached_root": true,
+  "children": [
+    {
+      "agent_path": "/root/pong",
+      "effort": "low",
+      "model": "gpt-6.1-sol"
+    }
+  ],
+  "config_toml": "\n[agents]\nenabled = false\n\n[features]\nmulti_agent_v2 = true\n",
+  "deferred": [],
+  "features": {
+    "multi_agent": "true",
+    "multi_agent_v2": "true"
+  },
+  "root_effort": "low",
+  "root_model": "gpt-6.1-sol",
+  "spawn_calls": [
+    {
+      "fork_turns": "none",
+      "path": "function_call",
+      "task_name": "pong"
+    }
+  ],
+  "v1_tool_params": null,
+  "v2_tool": {
+    "namespace": "collaboration",
+    "parameters": [
+      "fork_turns",
+      "message",
+      "model",
+      "reasoning_effort",
+      "task_name"
+    ],
+    "required": [
+      "message",
+      "task_name"
+    ]
+  }
+}
