@@ -291,8 +291,9 @@ class ControllerBoundary(BoundaryFixtures):
         shared = next(p for p in listed if p.is_file() and p.stat().st_nlink > 1)
         root = _Root.open(self.project)
         self.addCleanup(root.close)
-        with self.assertRaises(GradeRefused):
+        with self.assertRaises(GradeRefused) as refused:
             root.read(shared.relative_to(self.project))
+        self.assertEqual(refused.exception.receipt["reason"], "unsafe_object")
 
     def test_controller_publication_rejects_output_substitution(self):
         root = _Root.open(self.root)
