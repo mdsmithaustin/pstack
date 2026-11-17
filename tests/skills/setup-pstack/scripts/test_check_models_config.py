@@ -348,20 +348,41 @@ def read_listed(catalog_text):
         return cmc.listed_models(path)
 
 
-def run_script(args, codex_catalog=None):
+SESSION_THREAD = "01a1e24b-7f3c-7cf1-bdc4-f5507d06c671"
+
+
+def write_codex_session(codex_home, contexts, thread=SESSION_THREAD):
+    """Write a rollout file for `thread` whose turn_context records carry each (model, effort) in `contexts`."""
+    day = Path(codex_home) / "sessions" / "2026" / "11" / "16"
+    day.mkdir(parents=True, exist_ok=True)
+    lines = [json.dumps({"type": "session_meta", "payload": {"id": thread}})]
+    for model, effort in contexts:
+        lines.append(json.dumps({"type": "turn_context", "payload": {"model": model, "effort": effort}}))
+        lines.append(json.dumps({"type": "response_item", "payload": {"type": "message", "text": "turn_context"}}))
+    (day / f"rollout-2026-11-16T02-59-21-{thread}.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def run_script(args, codex_catalog=None, codex_session=None, thread=None):
     with tempfile.TemporaryDirectory() as codex_home:
         if codex_catalog is not None:
             (Path(codex_home) / "models_cache.json").write_text(codex_catalog, encoding="utf-8")
+        env = {k: v for k, v in os.environ.items() if k != "CODEX_THREAD_ID"}
+        if codex_session is not None:
+            write_codex_session(codex_home, codex_session)
+            env["CODEX_THREAD_ID"] = thread or SESSION_THREAD
         return subprocess.run(
             [sys.executable, str(SCRIPT), *args],
             capture_output=True,
             text=True,
-            env={**os.environ, "CODEX_HOME": codex_home},
+            env={**env, "CODEX_HOME": codex_home},
         )
 
 
 class ResolveRunner:
-    def resolve(self, harness, *roles, user=None, workspace=None, codex_catalog=None, work_model=None, lead_model=None):
+    def resolve(
+        self, harness, *roles, user=None, workspace=None, codex_catalog=None, work_model=None, lead_model=None,
+        codex_session=None, thread=None,
+    ):
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp) / "project"
             project.mkdir()
@@ -379,6 +400,8 @@ class ResolveRunner:
                     *(["--lead-model", lead_model] if lead_model else []), *roles,
                 ],
                 codex_catalog,
+                codex_session,
+                thread,
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         return [json.loads(line) for line in result.stdout.splitlines()]
@@ -1290,6 +1313,80 @@ class TrailReviewerStep(ReviewerRunner, unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertEqual(result.stdout, "")
         self.assertIn("unknown effort 'turbo'", result.stderr)
+
+
+class CodexSessionWorkModel(ResolveRunner, unittest.TestCase):
+    """Codex names only the model family to the agent, so the resolver reads the session's own model."""
+
+    def reviewer(self, work_model=None, session=(("gpt-6.1-sol", "medium"),), thread=None, harness="codex"):
+        [arm] = self.resolve(
+            harness, "trail reviewer", user=OPERATOR_FILE, codex_catalog=STEP_CATALOG,
+            work_model=work_model, codex_session=session, thread=thread,
+        )
+        return arm
+
+    def test_without_a_work_model_the_session_model_steps_the_reviewer(self):
+        self.assertEqual(
+            self.reviewer(),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "gpt-6-astra", "effort": "high", "source": "user ## codex",
+                "notes": [
+                    "trail reviewer matched work model gpt-6.1-sol; stepped up to gpt-6-astra (allowed by arena cross-judge pool)",
+                    "work model gpt-6.1-sol@medium read from this Codex session; "
+                    "pass --work-model when a different model did the work",
+                ],
+                "step": "up",
+            },
+        )
+
+    def test_the_last_turn_context_wins(self):
+        arm = self.reviewer(session=(("gpt-6.1-sol", "medium"), ("gpt-6-astra", "high")))
+        self.assertEqual((arm["model"], arm.get("step")), ("gpt-6.1-sol", None))
+        self.assertIn("work model gpt-6-astra@high read from this Codex session", arm["notes"][0])
+
+    def test_a_family_name_the_catalog_does_not_list_is_replaced_by_the_session_model(self):
+        arm = self.reviewer(work_model="gpt-6@high")
+        self.assertEqual((arm["model"], arm["effort"], arm["step"]), ("gpt-6-astra", "high", "up"))
+        self.assertIn(
+            "--work-model gpt-6@high names no model this Codex knows; used this session's gpt-6.1-sol@medium",
+            arm["notes"],
+        )
+
+    def test_a_known_work_model_from_a_delegate_is_kept(self):
+        arm = self.reviewer(work_model="gpt-6-luna@medium")
+        self.assertEqual((arm["model"], arm["effort"]), ("gpt-6.1-sol", "xhigh"))
+        self.assertFalse(any("Codex session" in note or "session's" in note for note in arm.get("notes", [])))
+
+    def test_no_thread_id_keeps_todays_behavior(self):
+        self.assertEqual(
+            self.reviewer(session=None),
+            {"role": "trail reviewer", "arm": 1, "model": "gpt-6.1-sol", "effort": "xhigh", "source": "user ## codex"},
+        )
+
+    def test_invalid_session_model_keeps_behavior_without_a_rollout(self):
+        for work_model in (None, "gpt-6@high", "gpt-6-luna@medium"):
+            for session in (
+                (("custom/provider:tag", "high"),),
+                (("gpt-6.1-sol", "medium"), ("custom/provider:tag", "high")),
+            ):
+                with self.subTest(work_model=work_model, session=session):
+                    arm = self.reviewer(work_model=work_model, session=session)
+                    self.assertEqual(arm, self.reviewer(work_model=work_model, session=None))
+                    self.assertEqual((arm["model"], arm["effort"]), ("gpt-6.1-sol", "xhigh"))
+
+    def test_a_thread_id_with_no_rollout_keeps_todays_behavior(self):
+        arm = self.reviewer(thread="no-such-thread")
+        self.assertEqual((arm["model"], arm["effort"], arm.get("notes")), ("gpt-6.1-sol", "xhigh", None))
+
+    def test_a_thread_id_with_a_glob_character_is_ignored(self):
+        arm = self.reviewer(thread="*")
+        self.assertEqual((arm["model"], arm["effort"], arm.get("notes")), ("gpt-6.1-sol", "xhigh", None))
+
+    def test_other_harnesses_never_read_the_codex_session(self):
+        [arm] = self.resolve(
+            "claude-code", "trail reviewer", user=OPERATOR_FILE, codex_session=(("gpt-6.1-sol", "medium"),),
+        )
+        self.assertFalse(any("Codex session" in note for note in arm.get("notes", [])))
 
 
 class TrailReviewerStepNote(ReviewerRunner, unittest.TestCase):

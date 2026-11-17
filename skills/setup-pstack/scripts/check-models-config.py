@@ -564,6 +564,44 @@ def _work_model(value: str) -> tuple[str, str | None]:
     return model, effort if at else None
 
 
+def codex_session_model(env: Mapping[str, str]) -> tuple[str, str | None] | None:
+    """The model and effort of the running Codex session, from the last turn_context in its rollout file.
+
+    Codex's base instructions name only the model family, so an agent cannot state its own slug or effort.
+    Codex exports CODEX_THREAD_ID to commands it runs, and the rollout named for that thread records both.
+    """
+    thread = env.get("CODEX_THREAD_ID", "")
+    if not re.fullmatch(r"[0-9A-Za-z-]+", thread):
+        return None
+    sessions = Path(env.get("CODEX_HOME") or Path.home() / ".codex") / "sessions"
+    try:
+        rollouts = sorted(sessions.rglob(f"rollout-*-{thread}.jsonl"))
+    except OSError:
+        return None
+    found = None
+    for rollout in rollouts[-1:]:
+        try:
+            with rollout.open(encoding="utf-8") as stream:
+                for line in stream:
+                    if '"turn_context"' not in line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except ValueError:
+                        continue
+                    payload = record.get("payload") if record.get("type") == "turn_context" else None
+                    if isinstance(payload, dict) and isinstance(payload.get("model"), str) and payload["model"]:
+                        effort = payload.get("effort")
+                        found = (payload["model"], effort if effort in EFFORT_ORDER else None)
+        except OSError:
+            return None
+    return found if found and _is_valid_model_name(found[0]) else None
+
+
+def _shown(model: str, effort: str | None) -> str:
+    return f"{model}@{effort}" if effort else model
+
+
 def _claude_alias_of(model: str, harness: str) -> str:
     cli = CLIS[harness]
     lowered = model.lower()
@@ -605,6 +643,24 @@ def _resolve_main(argv: list[str]) -> int:
             )
         return name
 
+    catalog = CLIS[args.harness].catalog
+    listed = listed_models(catalog) if catalog else NO_CATALOG
+    session_note = None
+    session = codex_session_model(os.environ) if args.harness == "codex" else None
+    if session and args.work_model is None:
+        args.work_model = session
+        session_note = (
+            f"work model {_shown(*session)} read from this Codex session; "
+            "pass --work-model when a different model did the work"
+        )
+    elif session and args.work_model and args.work_model[0] != session[0]:
+        known = {*listed, *MODEL_EFFORTS, *CLIS["codex"].translation, *OTHER_ALIASES}
+        if args.work_model[0].lower() not in known:
+            session_note = (
+                f"--work-model {_shown(*args.work_model)} names no model this Codex knows; "
+                f"used this session's {_shown(*session)}"
+            )
+            args.work_model = session
     if args.work_model:
         work_name, work_written_effort = named_model("--work-model", args.work_model), args.work_model[1]
     lead_name = named_model("--lead-model", args.lead_model) if args.lead_model else None
@@ -629,8 +685,6 @@ def _resolve_main(argv: list[str]) -> int:
 
     skill_default, _ = parse(SKILL_DEFAULT_FILE.read_text(encoding="utf-8"))
     layers = build_layers(args.harness, parsed[workspace_file], parsed[args.user_file], skill_default)
-    catalog = CLIS[args.harness].catalog
-    listed = listed_models(catalog) if catalog else NO_CATALOG
     if args.work_model:
         work_model, work_effort, work_notes = _resolve_model(work_name, work_written_effort, args.harness)
         if work_name in OTHER_ALIASES:
@@ -653,7 +707,10 @@ def _resolve_main(argv: list[str]) -> int:
         arms = resolve_role(role, args.harness, layers, listed)
         if args.work_model and role == "trail reviewer":
             arms = [
-                _with_notes(step_reviewer(arm, work_model, work_effort, args.harness, allowed, pinned, listed), *no_step_notes)
+                _with_notes(
+                    step_reviewer(arm, work_model, work_effort, args.harness, allowed, pinned, listed),
+                    session_note, *no_step_notes,
+                )
                 for arm in arms
             ]
         arms = [_with_notes(arm, _default_leak_note(arm, written)) for arm in arms]
