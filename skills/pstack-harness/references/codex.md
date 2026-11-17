@@ -18,6 +18,8 @@ For a review, verdict, or fresh-perspective role, always set `fork_turns: "none"
 
 When the configured role is `trail reviewer` and the live catalog lists that exact name, set `agent_type: "trail reviewer"`. Pass the resolved model and effort and the calling workflow's read-only review brief. This native assignment takes precedence over a persona. If the type is unavailable, use the normal fallback below with the same review brief and report the fallback.
 
+To resolve `trail reviewer` for work this session did, omit `--work-model`. Codex names only the model family to you, so the resolver reads this session's model and effort from its rollout file and says so in a note.
+
 Pass `model` and `reasoning_effort` on `spawn_agent`, and whenever you pass either, set `fork_turns` to `"none"`. A full-history fork, with `fork_turns` omitted or `"all"`, inherits the parent's model and effort and ignores overrides. So a role that resolves to a model or an effort never forks the full history. Only a non-review role that resolves to `inherit-parent` for both may fork full history, and it does so by passing `fork_turns: "all"`, never by leaving the field out. With `[agents] default_subagent_model` configured, a 0.163 alpha ran such a fork on that default instead of the parent's model (openai/codex#54896, one unconfirmed report), so report a fork's model as observed.
 - Set `agent_type` to the persona's native name when the live agent catalog lists it, and otherwise to `default` with the persona's briefing at the top of the message. When `spawn_agent` shows no `agent_type` parameter, this session loaded no custom agents, so omit the field and put the persona's briefing at the top of the message.
 
