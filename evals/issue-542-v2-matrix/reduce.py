@@ -144,10 +144,10 @@ def verdict(lead, children, resolved):
                 matched.add(child["id"])
                 if pair[0] and not all(c == pair for c in child["turn_contexts"]):
                     problems.append(f"{name}: child ran {child['turn_contexts']}, spawn asked {pair}")
-            if pair[0] and pair not in expected:
-                problems.append(f"{name}: {pair} is no resolved role arm")
         else:
             entry["child_contexts"] = None
+        if pair[0] and pair not in expected:
+            problems.append(f"{name}: {pair} is no resolved role arm")
         detail.append(entry)
     asked = {}
     for call in (c for c in lead["calls"] if c["tool"] == "spawn_agent" and not c["arguments"].get("task_name")):

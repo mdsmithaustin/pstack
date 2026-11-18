@@ -77,6 +77,13 @@ class V1Children(unittest.TestCase):
                 self.assertEqual(len(problems), 1)
                 self.assertIn("child default:", problems[0])
 
+    def test_a_site_that_asks_for_no_resolved_arm_fails_even_when_its_child_obeys(self):
+        for style in V1_STYLES:
+            with self.subTest(style=style):
+                problems = self.check(style, [("explorer", "high")], [v1_child("explorer", "high")])
+                self.assertEqual(len(problems), 1)
+                self.assertIn("is no resolved role arm", problems[0])
+
     def test_a_site_that_started_no_child_fails(self):
         for style in V1_STYLES:
             with self.subTest(style=style):
