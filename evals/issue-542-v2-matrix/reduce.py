@@ -3,12 +3,7 @@
 
     reduce.py ROOT --out EXTRACT.json
 
-ROOT is a `run_row.py` run directory. The verdict compares each `spawn_agent` call's asked model and effort, and the
-model and effort each child's own `turn_context` records, with `check-models-config.py --resolve` for the row's roles.
-
-A v2 child is matched to its call by task name. A v1 child has none, so it is matched by id: the output of the call that
-ran a spawn site lists the `agent_id` of every child it started. A child passes when it ran a model and effort that its
-call's sites asked for. Sites in one code-mode `exec` call share the call's output, so their children cannot be told apart.
+ROOT is a `run_row.py` run directory. See README.md for verdict criteria and v1 attribution limits.
 """
 
 import argparse

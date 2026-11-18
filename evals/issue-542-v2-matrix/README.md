@@ -13,7 +13,7 @@ Each spawn was checked on four things, read from the rollouts and never from the
 - `spawn_agent` fired.
 - The fork field was set explicitly. On v2 that is `fork_turns`, and a spawn that passes a model must use `"none"`. On v1 it is `fork_context`, and a spawn that passes a model must use `false`.
 - The child's own `turn_context` model and effort match the spawn request. The reducer matches a v2 child to its call by task name. See the [v1 attribution limits](#not-covered) for the checks on v1 children.
-- That model and effort are an arm of `setup-pstack/scripts/check-models-config.py --resolve --harness codex` for the row's roles, run against the fixture project. The row's roles include the roles of skills it calls, so `architect` also resolves the `how`, `why`, and `arena` roles.
+- The requested model and effort are a pair returned by [`check-models-config.py`](../../skills/setup-pstack/scripts/check-models-config.py) with `--resolve --harness codex` for the row's roles in the fixture project. The `architect` row includes roles from its nested `how`, `why`, and `arena` calls.
 
 | Row | Lead model | Flag | Spawns | Fork field | Agent type | Resolved vs observed | Attempts | Result |
 |---|---|---|---|---|---|---|---|---|
@@ -46,7 +46,7 @@ Two attempts did not reach their row and one failed it.
 
 ## How a row runs
 
-Run `run_row.py ROW --root DIR` with a fresh output directory. Before creating anything, the driver rejects a root that resolves to or inside the main checkout or any linked worktree. It skips worktree entries whose directories are gone. It also rejects a root with a `codex-home` symlink. The driver prepares the run under `DIR`.
+From this directory, run `python3 run_row.py ROW --root DIR` with a fresh output directory. Use `--timeout SECONDS` to change the per-turn timeout from its default of 3000 seconds. The minimum is one second. Before creating anything, the driver rejects a root that resolves to or inside the main checkout or any linked worktree. It skips worktree entries whose directories are gone. It also rejects a root with a `codex-home` symlink. The driver prepares the run under `DIR`.
 
 - A private `CODEX_HOME` and `HOME`. The driver copies the login from `~/.codex/auth.json` without using the user's Codex config or feature flags. It removes any existing file or link at `DIR/codex-home/auth.json`, then creates the copy exclusively with mode `0600` and without following links. The driver removes the copy and restores its signal handlers when the Codex session ends, including on error. On `SIGINT`, `SIGTERM`, `SIGHUP`, or `SIGQUIT`, the driver stops any running Codex child before removing the copy. This also applies when the process group receives `SIGHUP` and the child ignores it.
 - A throwaway `shop` repository from `fixture.py`, three commits whose messages hold the reasons that `why` asks about.
@@ -54,7 +54,9 @@ Run `run_row.py ROW --root DIR` with a fresh output directory. Before creating a
 - `models.md` copied to the project's `.agents/pstack-models.md`. It sets a different low or medium effort per role and spreads panels over `gpt-6.1-sol`, `gpt-6-luna`, `gpt-6.1-terra` and `gpt-6-astra`, so a child that ignores its spawn arguments shows up. The skill defaults would run most roles at max.
 - The lead defaults to `gpt-6.1-sol` high, with `approval_policy=never` and a `workspace-write` sandbox. `rows.json` holds each row's roles, models and prompts as of the last attempt. The prompts of `reflect` attempt 1 and `poteto-mode` attempt 1 survive only in the `lead_prompts` of their extracts.
 
-`reduce.py RUN_DIR --out EXTRACT.json` reads the rollouts under `RUN_DIR/codex-home/sessions` and writes the extract. Per spawn the extract keeps the style, tool name, task name, agent type, fork field and value, the model and effort asked for, the spawn's output, the child ids that output lists, and the model and effort of the child's own `turn_context`. It also keeps `cli_versions`, the resolved roles, the lead's prompts, the child threads' ids, roles and contexts, and the verdict with its problems. It holds no spawn message, model answer or credential, and the spawn arguments themselves are not kept. Rollout paths are replaced with `<run>`. `regen.sh RUNS_DIR` rebuilds every extract, and `python3 -m unittest test_reduce test_run_row` checks the reducer and the driver.
+`python3 reduce.py RUN_DIR --out EXTRACT.json` reads the rollouts under `RUN_DIR/codex-home/sessions` and writes the extract. For each spawn, the extract keeps the style, tool name, task name, agent type, fork field and value, requested model and effort, and any child IDs parsed from the output. For function calls it keeps up to 300 characters of output and the matched child's recorded model and effort. For v1 code-mode calls it records the children's contexts in separate entries. The extract also keeps `cli_versions`, the resolved roles, the lead's prompts, the child threads' IDs, roles and contexts, and the verdict with its problems. It omits spawn messages, model answers, credentials, and the full spawn arguments. The reducer replaces the run directory path with `<run>` in the extracted prompts and calls.
+
+`sh regen.sh RUNS_DIR` rebuilds every extract from saved run directories. The script resolves relative paths from this directory and expects the [historical run directory names](regen.sh) under `RUNS_DIR`. From this directory, `python3 -m unittest test_reduce test_run_row` checks the reducer and the driver.
 
 ## Not covered
 
