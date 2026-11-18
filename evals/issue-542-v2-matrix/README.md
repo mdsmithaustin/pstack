@@ -46,9 +46,9 @@ Two attempts did not reach their row and one failed it.
 
 ## How a row runs
 
-`run_row.py ROW --root DIR` builds everything under `DIR`, a fresh directory outside this repository. It refuses a `DIR` that resolves inside the repository or its main checkout, and checks its arguments before it creates anything.
+`run_row.py ROW --root DIR` builds everything under `DIR`, a fresh directory outside this repository. It refuses a `DIR` that resolves inside the repository, its main checkout or any linked worktree of it, or that holds a `codex-home` symlink, and checks its arguments before it creates anything.
 
-- A private `CODEX_HOME` and `HOME`. Only `auth.json` is copied from the real login, with mode 0600 and only while codex runs. The driver removes it when the run ends, including on an error, SIGINT or SIGTERM. The user's `~/.codex/config.toml` and feature flags are never read or changed.
+- A private `CODEX_HOME` and `HOME`. Only `auth.json` is copied from the real login, with mode 0600 and only while codex runs. The driver replaces any file or link already at that path and removes the copy when the run ends, including on an error, SIGINT, SIGTERM, SIGHUP or SIGQUIT. The user's `~/.codex/config.toml` and feature flags are never read or changed.
 - A throwaway `shop` repository from `fixture.py`, three commits whose messages hold the reasons that `why` asks about.
 - The skills from this checkout's `HEAD`, installed to `.agents/skills`, and the personas registered through `subagents.py install --harness codex`, which writes `.codex/agents`.
 - `models.md` copied to the project's `.agents/pstack-models.md`. It sets a different low or medium effort per role and spreads panels over `gpt-6.1-sol`, `gpt-6-luna`, `gpt-6.1-terra` and `gpt-6-astra`, so a child that ignores its spawn arguments shows up. The skill defaults would run most roles at max.

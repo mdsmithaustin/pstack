@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import signal
 import stat
 import subprocess
@@ -17,9 +18,11 @@ import run_row
 HERE = Path(__file__).resolve().parent
 DRIVER = HERE / "run_row.py"
 LOGIN = "fake-login-token"
+CLEANUP_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT)
 
 STUB = f"""#!{sys.executable}
-import json, os, stat, sys, time
+import json, os, signal, stat, sys, time
+PRELUDE
 home = os.environ["CODEX_HOME"]
 login = os.path.join(home, "auth.json")
 record = {{"mode": stat.S_IMODE(os.stat(login).st_mode), "content": open(login).read(), "pid": os.getpid()}}
@@ -40,10 +43,10 @@ class Sandbox(unittest.TestCase):
         self.root = self.tmp / "run"
         self.login_copy = self.root / "codex-home" / "auth.json"
 
-    def stub(self, action="sys.exit(0)"):
+    def stub(self, action="sys.exit(0)", prelude=""):
         bin_dir = self.tmp / "bin"
         bin_dir.mkdir(exist_ok=True)
-        (bin_dir / "codex").write_text(STUB.replace("ACTION", action))
+        (bin_dir / "codex").write_text(STUB.replace("PRELUDE", prelude).replace("ACTION", action))
         (bin_dir / "codex").chmod(0o755)
         return {**os.environ, "HOME": str(self.home), "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
 
@@ -88,21 +91,35 @@ class RefusesRootsInsideTheRepository(Sandbox):
             self.skipTest("the disk tells the two spellings apart")
         self.assertTrue(run_row.inside_repository(respelled / "evals" / "scratch-run"))
 
-    def make_worktree(self):
-        main, worktree = self.tmp / "main", self.tmp / "worktree"
+    def make_worktrees(self):
+        main, worktree, other = self.tmp / "main", self.tmp / "worktree", self.tmp / "other tree"
         git = ["git", "-c", "user.name=dev", "-c", "user.email=dev@example.com", "-C", str(main)]
         subprocess.run(["git", "init", "-q", str(main)], check=True)
         subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "init"], check=True)
         subprocess.run([*git, "worktree", "add", "-q", str(worktree), "-b", "side"], check=True)
-        return main, worktree
+        subprocess.run([*git, "worktree", "add", "-q", str(other), "-b", "elsewhere"], check=True)
+        return main, worktree, other
 
     def test_a_directory_in_the_main_checkout_of_a_worktree(self):
-        main, worktree = self.make_worktree()
+        main, worktree, _ = self.make_worktrees()
         with patch.object(run_row, "REPO", worktree):
             self.assertFalse(self.refused(main / ".audit" / "run").exists())
 
+    def test_a_directory_in_a_linked_worktree_outside_the_repository(self):
+        main, worktree, other = self.make_worktrees()
+        for current in (main, worktree):
+            with self.subTest(checkout=current.name), patch.object(run_row, "REPO", current):
+                self.assertFalse(self.refused(other / "run").exists())
+
+    def test_a_worktree_whose_directory_is_gone_does_not_break_the_check(self):
+        main, worktree, other = self.make_worktrees()
+        shutil.rmtree(other)
+        with patch.object(run_row, "REPO", worktree):
+            self.assertFalse(run_row.inside_repository(self.tmp / "outside" / "run"))
+            self.assertTrue(run_row.inside_repository(main / "run"))
+
     def test_a_sibling_whose_name_starts_with_the_repository_name_is_outside(self):
-        main, worktree = self.make_worktree()
+        main, worktree, _ = self.make_worktrees()
         with patch.object(run_row, "REPO", worktree):
             self.assertFalse(run_row.inside_repository(self.tmp / "main-extra" / "run"))
             self.assertFalse(run_row.inside_repository(self.tmp / "worktree-extra" / "run"))
@@ -132,9 +149,9 @@ class ValidatesBeforeCopying(Sandbox):
 
 class LoginCopy(Sandbox):
     def test_it_is_private_while_codex_runs_and_gone_after_success(self):
-        handlers = [signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)]
+        handlers = [signal.getsignal(number) for number in CLEANUP_SIGNALS]
         code, stdout, _ = self.run_in_process(self.stub())
-        self.assertEqual([signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM)], handlers)
+        self.assertEqual([signal.getsignal(number) for number in CLEANUP_SIGNALS], handlers)
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(stdout), [{"index": 0, "exit": 0, "session": "stub-thread"}])
         self.assertEqual(self.stub_record()["mode"], 0o600)
@@ -163,27 +180,114 @@ class LoginCopy(Sandbox):
         self.assertEqual(self.stub_record()["content"], LOGIN)
         self.assertFalse(self.login_copy.exists())
 
+    def start_driver(self, env, **popen):
+        (self.root / "codex-home").mkdir(parents=True, exist_ok=True)
+        driver = subprocess.Popen([sys.executable, str(DRIVER), "how", "--root", str(self.root)], env=env,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, **popen)
+        record = self.root / "codex-home" / "stub.json"
+        deadline = time.monotonic() + 60
+        while not record.exists() and driver.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.1)
+        self.assertTrue(record.exists(), "the stub codex never started")
+        self.assertEqual(stat.S_IMODE(self.login_copy.stat().st_mode), 0o600)
+        pid = json.loads(record.read_text())["pid"]
+        record.unlink()
+        return driver, pid
+
+    def assert_stopped_clean(self, driver, pid, code):
+        driver.communicate(timeout=30)
+        self.assertEqual(driver.returncode, code)
+        self.assertFalse(self.login_copy.exists())
+        with self.assertRaises(ProcessLookupError):
+            os.kill(pid, 0)
+
     def test_it_is_gone_after_the_driver_is_signalled(self):
         env = self.stub("time.sleep(120)")
-        for number in (signal.SIGTERM, signal.SIGINT):
+        for number in CLEANUP_SIGNALS:
             with self.subTest(signal=number.name):
-                (self.root / "codex-home").mkdir(parents=True, exist_ok=True)
-                driver = subprocess.Popen([sys.executable, str(DRIVER), "how", "--root", str(self.root)], env=env,
-                                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                record = self.root / "codex-home" / "stub.json"
-                deadline = time.monotonic() + 60
-                while not record.exists() and driver.poll() is None and time.monotonic() < deadline:
-                    time.sleep(0.1)
-                self.assertTrue(record.exists(), "the stub codex never started")
-                self.assertEqual(stat.S_IMODE(self.login_copy.stat().st_mode), 0o600)
-                stub_pid = json.loads(record.read_text())["pid"]
+                driver, pid = self.start_driver(env)
                 driver.send_signal(number)
-                driver.communicate(timeout=30)
-                self.assertEqual(driver.returncode, 128 + number)
-                self.assertFalse(self.login_copy.exists())
-                with self.assertRaises(ProcessLookupError):
-                    os.kill(stub_pid, 0)
-                record.unlink()
+                self.assert_stopped_clean(driver, pid, 128 + number)
+
+    def test_it_is_gone_after_the_process_group_gets_a_hangup(self):
+        stubs = {"codex dies of it": self.stub("time.sleep(120)"),
+                 "codex ignores it": self.stub("time.sleep(120)", "signal.signal(signal.SIGHUP, signal.SIG_IGN)")}
+        for name, env in stubs.items():
+            with self.subTest(case=name):
+                driver, pid = self.start_driver(env, start_new_session=True)
+                os.killpg(driver.pid, signal.SIGHUP)
+                self.assert_stopped_clean(driver, pid, 128 + signal.SIGHUP)
+
+    def test_a_second_signal_during_cleanup_does_not_leave_it(self):
+        unlink, cleaning = Path.unlink, []
+        def unlink_after_another_signal(path, *args, **kwargs):
+            if cleaning:
+                os.kill(os.getpid(), signal.SIGTERM)
+            unlink(path, *args, **kwargs)
+        self.addCleanup(signal.signal, signal.SIGHUP, signal.signal(signal.SIGHUP, signal.SIG_IGN))
+        self.login_copy.parent.mkdir(parents=True)
+        with patch.object(Path, "unlink", autospec=True, side_effect=unlink_after_another_signal):
+            with self.assertRaises(SystemExit) as stopped:
+                with run_row.private_login(self.home / ".codex" / "auth.json", self.login_copy):
+                    cleaning.append(True)
+                    os.kill(os.getpid(), signal.SIGHUP)
+                    time.sleep(5)
+        self.assertEqual(stopped.exception.code, 128 + signal.SIGHUP)
+        self.assertFalse(self.login_copy.exists())
+
+
+class PlantedLoginPath(Sandbox):
+    def plant(self, make):
+        self.login_copy.parent.mkdir(parents=True)
+        make(self.login_copy)
+        self.run_in_process(self.stub())
+        self.assertEqual(self.stub_record()["mode"], 0o600)
+        self.assertEqual(self.stub_record()["content"], LOGIN)
+        self.assertFalse(self.login_copy.is_symlink() or self.login_copy.exists())
+
+    def test_a_symlink_to_a_file_is_not_written_through(self):
+        victim = self.tmp / "victim"
+        victim.write_text("keep")
+        self.plant(lambda path: path.symlink_to(victim))
+        self.assertEqual(victim.read_text(), "keep")
+
+    def test_a_dangling_symlink_creates_nothing_at_its_target(self):
+        target = self.tmp / "absent"
+        self.plant(lambda path: path.symlink_to(target))
+        self.assertFalse(target.exists())
+
+    def test_a_hard_link_to_another_file_is_not_written_through(self):
+        victim = self.tmp / "victim"
+        victim.write_text("keep")
+        self.plant(lambda path: os.link(victim, path))
+        self.assertEqual(victim.read_text(), "keep")
+
+    def test_a_symlink_planted_after_the_unlink_is_not_written_through(self):
+        victim = self.tmp / "victim"
+        victim.write_text("keep")
+        unlink, planted = Path.unlink, []
+        def unlink_then_plant(path, *args, **kwargs):
+            unlink(path, *args, **kwargs)
+            if not planted:
+                planted.append(path)
+                path.symlink_to(victim)
+        self.login_copy.parent.mkdir(parents=True)
+        with patch.object(Path, "unlink", autospec=True, side_effect=unlink_then_plant):
+            with self.assertRaises(FileExistsError):
+                with run_row.private_login(self.home / ".codex" / "auth.json", self.login_copy):
+                    self.fail("the login was copied through a planted link")
+        self.assertEqual(victim.read_text(), "keep")
+        self.assertFalse(self.login_copy.is_symlink() or self.login_copy.exists())
+
+    def test_a_codex_home_that_is_a_symlink_is_refused_before_anything_is_written(self):
+        elsewhere = self.tmp / "elsewhere"
+        elsewhere.mkdir()
+        self.root.mkdir()
+        (self.root / "codex-home").symlink_to(elsewhere)
+        code, _, stderr = self.run_in_process(self.stub())
+        self.assertEqual(code, 2)
+        self.assertIn("codex-home", stderr)
+        self.assertEqual(list(elsewhere.iterdir()), [])
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ REPO = HERE.parents[1]
 ROWS = json.loads((HERE / "rows.json").read_text())
 LEAD_MODEL = "gpt-6.1-sol"
 LEAD_EFFORT = "high"
+CLEANUP_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP, signal.SIGQUIT)
 ENV_KEPT = ("PATH", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "USER", "LOGNAME", "SHELL", "TZ", "SSL_CERT_FILE",
             "SSL_CERT_DIR", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy")
 
@@ -61,36 +62,38 @@ def prepare(root):
 
 
 def repository_roots():
-    roots = [REPO]
-    common = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                            capture_output=True, text=True)
-    if common.returncode == 0:
-        roots.append(Path(common.stdout.strip()).parent)
-    return roots
+    listing = subprocess.run(["git", "-C", str(REPO), "worktree", "list", "--porcelain", "-z"], check=True,
+                             stdout=subprocess.PIPE, text=True).stdout
+    return [REPO, *(Path(field.removeprefix("worktree ")) for field in listing.split("\0") if field.startswith("worktree "))]
 
 
 def inside_repository(root):
     real = root.resolve()
-    tops = repository_roots()
+    tops = [top for top in repository_roots() if top.exists()]
     return any(ancestor.exists() and any(ancestor.samefile(top) for top in tops) for ancestor in (real, *real.parents))
 
 
 @contextlib.contextmanager
 def private_login(source, dest):
     def stop(signum, frame):
+        for number in CLEANUP_SIGNALS:
+            signal.signal(number, signal.SIG_IGN)
         raise SystemExit(128 + signum)
 
-    signals = (signal.SIGINT, signal.SIGTERM)
-    previous = {number: signal.signal(number, stop) for number in signals}
+    previous = {number: signal.signal(number, stop) for number in CLEANUP_SIGNALS}
     try:
-        with os.fdopen(os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb") as out:
+        dest.unlink(missing_ok=True)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+        with os.fdopen(os.open(dest, flags, 0o600), "wb") as out:
             os.fchmod(out.fileno(), 0o600)
             out.write(source.read_bytes())
         yield
     finally:
-        dest.unlink(missing_ok=True)
-        for number, handler in previous.items():
-            signal.signal(number, handler)
+        try:
+            dest.unlink(missing_ok=True)
+        finally:
+            for number, handler in previous.items():
+                signal.signal(number, handler)
 
 
 def env_for(root):
@@ -135,6 +138,8 @@ def parse_args():
         parser.error(f"--root {args.root} resolves inside the repository; choose a directory outside it")
     if args.root.exists() and not args.root.is_dir():
         parser.error(f"--root {args.root} exists and is not a directory")
+    if (args.root / "codex-home").is_symlink():
+        parser.error(f"{args.root / 'codex-home'} is a symlink; remove it or choose a fresh --root")
     if args.timeout < 1:
         parser.error("--timeout must be at least 1 second")
     if not login_source().is_file():
