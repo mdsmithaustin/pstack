@@ -3677,7 +3677,7 @@
   },
   "setup-checks-codex-multi-agent": {
    "check": "live",
-   "claim": "On Codex, setup-pstack treats a live session's callable spawn_agent as the answer and config as signals: it reports the multi_agent and multi_agent_v2 rows and the `[agents] enabled` key as possible causes, offers an edit only when a session confirms spawn_agent is missing and only after a yes, and otherwise reports what it saw and the causes it cannot rule out.",
+   "claim": "On Codex, setup-pstack treats a live session's callable spawn_agent as the answer and config as signals: it reports the multi_agent and multi_agent_v2 rows and the `[agents] enabled` key as possible causes, offers a repair only when a session confirms spawn_agent is missing and only for a possible cause a config file shows, may also offer multi_agent_v2 as an optional switch on a model whose spawn_agent is the deferred multi_agent_v1 tool, says when an offer to enable multi_agent_v2 overrides a setting of the user's, edits only after a yes, and otherwise reports what it saw and the causes it cannot rule out.",
    "harness_sensitive": true,
    "live_case": "setup-run inside Codex: fresh CODEX_HOME with `[agents] enabled = false`; pass when the transcript confirms spawn_agent is missing in the session, names that key as a possible cause, and does not edit before a yes.",
    "owners": [
@@ -5121,6 +5121,15 @@
     "port"
    ],
    "text": "Tests check the cases someone thought to write."
+  },
+  "0f3e3eb70a55": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "setup-checks-codex-multi-agent",
+   "sources": [
+    "port"
+   ],
+   "text": "Setup offers a repair only when a Codex session shows spawning is missing and a config file holds a possible cause, editing only with your yes."
   },
   "0f9cc893bd89": {
    "class": "context",
@@ -8981,15 +8990,6 @@
    ],
    "text": "The two most common design mistakes are taking the agent's first design and polishing a plan that no code has tested."
   },
-  "7177ab579608": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "setup-checks-codex-multi-agent",
-   "sources": [
-    "port"
-   ],
-   "text": "When a Codex session shows spawning is missing and a config file holds a key that could cause it, setup names that key as a possible cause and may offer to change it, editing only with your yes."
-  },
   "717f9194b730": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -10823,6 +10823,15 @@
     "port"
    ],
    "text": "They let the agent answer its own open questions by running something instead of asking you, and they leave room for an option you wouldn't have thought of."
+  },
+  "a2e616502091": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "setup-checks-codex-multi-agent",
+   "sources": [
+    "port"
+   ],
+   "text": "On a model whose `spawn_agent` is the deferred older tool, it may also offer to turn on `multi_agent_v2`, which makes `spawn_agent` directly visible, as an optional change that repairs nothing."
   },
   "a3132d1f816a": {
    "class": "promise",
@@ -13338,6 +13347,15 @@
     "port"
    ],
    "text": "[`/correct`](../../skills/correct/SKILL.md) does the work:"
+  },
+  "e0335df2a7b5": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "setup-checks-codex-multi-agent",
+   "sources": [
+    "port"
+   ],
+   "text": "An offer to turn on `multi_agent_v2` says when it overrides a setting of yours, such as `[agents] enabled = false` or an earlier disable of `multi_agent_v2`."
   },
   "e0a138206f07": {
    "class": "promise",

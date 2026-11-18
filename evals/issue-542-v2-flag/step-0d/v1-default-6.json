@@ -1,0 +1,33 @@
+{
+  "cell": "v1-default-6",
+  "checks": {
+    "HOME and CODEX_HOME are private to the cell": true,
+    "never offers multi_agent = true": true,
+    "never read the host ~/.codex": true,
+    "only offer is multi_agent_v2": true,
+    "ran codex --version": true,
+    "read the branch copy of setup-pstack": true,
+    "says it is optional": true,
+    "spawn_agent tool as the kind expects": true
+  },
+  "codex_version": "codex-cli 0.167.0",
+  "config_toml": "",
+  "features": {
+    "multi_agent": "true",
+    "multi_agent_v2": "false"
+  },
+  "isolation": {
+    "CODEX_HOME": "home",
+    "HOME": "user-home"
+  },
+  "kind": "v1-default",
+  "offers": [
+    "Optional: enable `multi_agent_v2` in the user config by adding `multi_agent_v2 = true` under its existing `[features]` table, or run `codex features enable multi_agent_v2`. This would make `spawn_agent` directly visible; it overrides any explicit disable."
+  ],
+  "reply": "Step 0d completed.\n\n- `spawn_agent` is callable via deferred `multi_agent_v1`; its shape is `fork_context`, indicating v1.\n- Codex version: `0.167.0` (the probe covered one v1 and one v2 model).\n- `multi_agent`: enabled.\n- `multi_agent_v2`: disabled.\n- `[agents] enabled`: no setting found in the readable user config; no project config exists.\n- Spawning is confirmed for this session. Config signals are not a verdict for other sessions; unreadable launch flags, selected-model settings, spawn depth, or config layers may still differ.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2` in the user config by adding `multi_agent_v2 = true` under its existing `[features]` table, or run `codex features enable multi_agent_v2`. This would make `spawn_agent` directly visible; it overrides any explicit disable.",
+  "root_model": "gpt-5.6-luna",
+  "skill_blob": "ec29702265e86107ef49e7ad6a5b97d20cd08b20",
+  "skill_reads": [
+    "$CODEX_HOME/skills/setup-pstack/SKILL.md"
+  ]
+}

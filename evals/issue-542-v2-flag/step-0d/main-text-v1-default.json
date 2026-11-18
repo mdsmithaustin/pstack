@@ -1,7 +1,9 @@
 {
   "cell": "main-text-v1-default",
   "checks": {
+    "HOME and CODEX_HOME are private to the cell": true,
     "never offers multi_agent = true": true,
+    "never read the host ~/.codex": true,
     "only offer is multi_agent_v2": false,
     "ran codex --version": false,
     "read the branch copy of setup-pstack": true,
@@ -14,9 +16,13 @@
     "multi_agent": "true",
     "multi_agent_v2": "false"
   },
+  "isolation": {
+    "CODEX_HOME": "home",
+    "HOME": "user-home"
+  },
   "kind": "v1-default",
   "offers": [],
-  "reply": "Step 0d complete.\n\n- `spawn_agent` is callable in this Codex session.\n- `codex features list` reports:\n  - `multi_agent`: `true`\n  - `multi_agent_v2`: `false`\n- No readable `[agents] enabled = false` or feature-off setting was found in the checked config files.\n- Spawning is therefore confirmed available; no configuration edit is indicated.\n\n## OFFERS\n\nnone",
+  "reply": "## Step 0d \u2014 Codex subagents\n\n- `spawn_agent` is callable in this session.\n- `codex features list` reports:\n  - `multi_agent`: `true`\n  - `multi_agent_v2`: `false`\n- No readable user `config.toml` was found under the active `CODEX_HOME`.\n- No project `.codex/config.toml` was found.\n- Spawning is available; no config edit is indicated.\n\n## OFFERS\n\nnone",
   "root_model": "gpt-5.6-luna",
   "skill_blob": "e3aae95650af8e6e2b4282126d798b2613b8b96b",
   "skill_reads": [

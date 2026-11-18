@@ -9,7 +9,7 @@ for step in "${@:4}"; do
     *) echo "unknown step $step" >&2; exit 2 ;;
   esac
 done
-out=$(mkdir -p "$1" && cd "$1" && pwd)
+out=$(mkdir -p "$1" && cd "$1" && pwd -P)
 cell=$2 model=$3
 shift 3
 home=$out/$cell/home

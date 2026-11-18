@@ -1,7 +1,9 @@
 {
   "cell": "main-text-features-off-flag",
   "checks": {
+    "HOME and CODEX_HOME are private to the cell": true,
     "never offers multi_agent = true": false,
+    "never read the host ~/.codex": true,
     "offers none": false,
     "ran codex --version": false,
     "read the branch copy of setup-pstack": true,
@@ -13,11 +15,15 @@
     "multi_agent": "false",
     "multi_agent_v2": "false"
   },
+  "isolation": {
+    "CODEX_HOME": "home",
+    "HOME": "user-home"
+  },
   "kind": "features-off-flag",
   "offers": [
-    "Set `[features] multi_agent = true` in `$CODEX_HOME/config.toml`, preserving every other key. The change applies from the next session."
+    "Set `multi_agent = true` under `[features]` in `$CODEX_HOME/config.toml`. The change applies from the next session."
   ],
-  "reply": "Step 0d completed. No files edited.\n\n- `spawn_agent` is unavailable, including in the deferred tool catalog.\n- `codex features list` reports `multi_agent = false` and `multi_agent_v2 = false`.\n- `$CODEX_HOME/config.toml` contains `[features] multi_agent = false`. `[agents].enabled` is absent.\n- The project\u2019s `.codex/config.toml` is absent.\n\nThe feature setting is a possible cause. Other causes remain possible: a launch `-c` flag, the selected model, spawn depth, or an unreadable config layer.\n\n## OFFERS\n\n1. Set `[features] multi_agent = true` in `$CODEX_HOME/config.toml`, preserving every other key. The change applies from the next session.",
+  "reply": "`spawn_agent` is unavailable in this session; the deferred tool search found no match.\n\nConfig signals:\n\n- `multi_agent`: `false`\n- `multi_agent_v2`: `false`\n- `$CODEX_HOME/config.toml` contains `[features] multi_agent = false`; `[agents].enabled` is absent.\n- Project `.codex/config.toml` is absent.\n\nThe file setting is a possible cause. Other causes remain possible: a launch `-c` flag, the selected model, spawn depth, or an unreadable config layer.\n\nNo files were edited.\n\n## OFFERS\n\n1. Set `multi_agent = true` under `[features]` in `$CODEX_HOME/config.toml`. The change applies from the next session.",
   "root_model": "gpt-6.1-sol",
   "skill_blob": "e3aae95650af8e6e2b4282126d798b2613b8b96b",
   "skill_reads": [

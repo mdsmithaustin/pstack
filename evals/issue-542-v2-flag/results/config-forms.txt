@@ -1,0 +1,58 @@
+codex-cli 0.167.0
+
+== disable on an empty file
+exit 0
+| [features.multi_agent_v2]
+| enabled = false
+row: false
+
+== enable on the [features.multi_agent_v2] table
+exit 0
+| [features.multi_agent_v2]
+| enabled = true
+row: true
+
+== enable on multi_agent_v2 = false under [features]
+exit 0
+| [features]
+| multi_agent_v2 = true
+| multi_agent = true
+row: true
+
+== enable on a top-level features.multi_agent_v2 = false
+exit 0
+| features.multi_agent_v2 = true
+row: true
+
+== enable on a file with [features] and no multi_agent_v2
+exit 0
+| [features]
+| multi_agent = true
+| multi_agent_v2 = true
+row: true
+
+== second key: [features] multi_agent_v2 = true beside the table
+exit 1
+| [features.multi_agent_v2]
+| enabled = false
+| 
+| [features]
+| multi_agent_v2 = true
+Error: failed to load bootstrap configuration
+
+== second key: [features] multi_agent_v2 = true beside a top-level dotted key
+exit 1
+| features.multi_agent_v2 = false
+| 
+| [features]
+| multi_agent_v2 = true
+Error: failed to load bootstrap configuration
+
+== second [features] table
+exit 1
+| [features]
+| multi_agent = true
+| 
+| [features]
+| multi_agent_v2 = true
+Error: failed to load bootstrap configuration

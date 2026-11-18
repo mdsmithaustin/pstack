@@ -1,0 +1,36 @@
+{
+  "cell": "v2-disabled-2",
+  "checks": {
+    "HOME and CODEX_HOME are private to the cell": true,
+    "adds no second multi_agent_v2 key": true,
+    "edits the existing table in place, or uses the command": true,
+    "never offers multi_agent = true": true,
+    "never read the host ~/.codex": true,
+    "only offer is multi_agent_v2": true,
+    "ran codex --version": true,
+    "read the branch copy of setup-pstack": true,
+    "says it is optional": true,
+    "says the offer overrides the disable": true,
+    "spawn_agent tool as the kind expects": true
+  },
+  "codex_version": "codex-cli 0.167.0",
+  "config_toml": "[features.multi_agent_v2]\nenabled = false\n",
+  "features": {
+    "multi_agent": "true",
+    "multi_agent_v2": "false"
+  },
+  "isolation": {
+    "CODEX_HOME": "home",
+    "HOME": "user-home"
+  },
+  "kind": "v2-disabled",
+  "offers": [
+    "Optional: enable `multi_agent_v2` by changing `enabled = false` to `enabled = true` under `[features.multi_agent_v2]` in `$CODEX_HOME/config.toml`. This overrides the current disable and applies next session."
+  ],
+  "reply": "Step 0d completed.\n\n- Codex version: `0.167.0`\n- `multi_agent`: on\n- `multi_agent_v2`: off\n- Live session: `spawn_agent` is callable via deferred `multi_agent_v1`; its shape is `fork_context`.\n- Config signal: `multi_agent_v2` is explicitly disabled in `$CODEX_HOME/config.toml`.\n- No `[agents] enabled = false` setting was found.\n- Spawning is confirmed for this session. The probe referenced by the skill covered one v1 model and one v2 model; this session exposes the v1 shape. No child was spawned.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2` by changing `enabled = false` to `enabled = true` under `[features.multi_agent_v2]` in `$CODEX_HOME/config.toml`. This overrides the current disable and applies next session.",
+  "root_model": "gpt-5.6-luna",
+  "skill_blob": "ec29702265e86107ef49e7ad6a5b97d20cd08b20",
+  "skill_reads": [
+    "$CODEX_HOME/skills/setup-pstack/SKILL.md"
+  ]
+}

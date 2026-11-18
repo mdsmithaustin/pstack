@@ -1,9 +1,11 @@
 {
   "cell": "agents-off-1",
   "checks": {
+    "HOME and CODEX_HOME are private to the cell": true,
     "first offer is the agents line": true,
     "names multi_agent_v2 as the override alternative": true,
     "never offers multi_agent = true": true,
+    "never read the host ~/.codex": true,
     "ran codex --version": true,
     "read the branch copy of setup-pstack": true,
     "spawn_agent tool as the kind expects": true
@@ -14,14 +16,18 @@
     "multi_agent": "true",
     "multi_agent_v2": "false"
   },
+  "isolation": {
+    "CODEX_HOME": "home",
+    "HOME": "user-home"
+  },
   "kind": "agents-off",
   "offers": [
-    "Delete `[agents] enabled = false` from the active user config, or set it to `true`.",
-    "Alternatively, enable `multi_agent_v2 = true` under `[features]`, keeping any existing table. This overrides the explicit agents disable on both probed models."
+    "Delete `enabled = false` under `[agents]` in `$CODEX_HOME/config.toml`, or change it to `enabled = true`.",
+    "Alternatively, leave that line and run `codex features enable multi_agent_v2` against the same user config. This overrides the user\u2019s explicit agents disable; the probe restored spawning on both models."
   ],
-  "reply": "`spawn_agent` is unavailable in this session, including the deferred tool catalog.\n\nCodex reports version 0.167.0, with `multi_agent = true` and `multi_agent_v2 = false`. The active `$CODEX_HOME/config.toml` contains `[agents] enabled = false`; the project config is absent.\n\nThat disable is a possible cause. Launch `-c` flags, the selected model, spawn depth, and unreadable config layers remain possible causes too. Step 0d\u2019s evidence comes from two models on 0.167.0, not other releases or project configs.\n\nNo files were edited.\n\n## OFFERS\n\n1. Delete `[agents] enabled = false` from the active user config, or set it to `true`.\n2. Alternatively, enable `multi_agent_v2 = true` under `[features]`, keeping any existing table. This overrides the explicit agents disable on both probed models.\n\nEither change applies from the next session.",
+  "reply": "Step 0d completed. No files edited or children spawned.\n\n- `spawn_agent` is missing from the live and deferred tool catalogs; neither parameter shape is available.\n- Codex: `0.167.0`. Feature signals: `multi_agent = true`, `multi_agent_v2 = false`.\n- `$CODEX_HOME/config.toml` contains `[agents] enabled = false`. Project `.codex/config.toml` is absent.\n- The skill\u2019s probe covered one v1 model and one v2 model. This session matches the probed release; no project setting is involved.\n- The agents key is a possible cause. Launch `-c` flags, the selected model, spawn depth, and unreadable config layers remain possible causes.\n\n## OFFERS\n\n1. Delete `enabled = false` under `[agents]` in `$CODEX_HOME/config.toml`, or change it to `enabled = true`.\n2. Alternatively, leave that line and run `codex features enable multi_agent_v2` against the same user config. This overrides the user\u2019s explicit agents disable; the probe restored spawning on both models.\n\nEither change applies from the next session.",
   "root_model": "gpt-6.1-sol",
-  "skill_blob": "290a54aeded93bae8e8f48b5363f7b345bf80f0a",
+  "skill_blob": "ec29702265e86107ef49e7ad6a5b97d20cd08b20",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

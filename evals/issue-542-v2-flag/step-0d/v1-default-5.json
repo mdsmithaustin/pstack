@@ -1,7 +1,9 @@
 {
   "cell": "v1-default-5",
   "checks": {
+    "HOME and CODEX_HOME are private to the cell": true,
     "never offers multi_agent = true": true,
+    "never read the host ~/.codex": true,
     "only offer is multi_agent_v2": true,
     "ran codex --version": true,
     "read the branch copy of setup-pstack": true,
@@ -14,13 +16,17 @@
     "multi_agent": "true",
     "multi_agent_v2": "false"
   },
+  "isolation": {
+    "CODEX_HOME": "home",
+    "HOME": "user-home"
+  },
   "kind": "v1-default",
   "offers": [
-    "`multi_agent_v2 = true` \u2014 optional switch to change the `spawn_agent` tool shape to direct v2 spawning; it does not repair spawning."
+    "Optional: enable `multi_agent_v2` by adding `[features]` with `multi_agent_v2 = true` to the user config at `$CODEX_HOME/config.toml`. Applies next session."
   ],
-  "reply": "Step 0d completed. No files were edited.\n\n- `spawn_agent` is callable through deferred `multi_agent_v1`.\n- Codex version: `0.167.0`.\n- Feature signals: `multi_agent=true`, `multi_agent_v2=false`.\n- No readable `[agents] enabled = false` setting was found.\n- The project has no readable `.codex/config.toml`.\n- Spawning is confirmed; config signals are not, by themselves, a verdict. The skill\u2019s probe covered only specific models/releases.\n\n## OFFERS\n\n`multi_agent_v2 = true` \u2014 optional switch to change the `spawn_agent` tool shape to direct v2 spawning; it does not repair spawning.",
+  "reply": "Step 0d completed; no files were edited and no subagent was spawned.\n\n- Codex version: `0.167.0`\n- `spawn_agent`: callable through deferred `multi_agent_v1`\n- Tool shape: `fork_context`\n- `multi_agent`: enabled\n- `multi_agent_v2`: disabled\n- No project config was found; user config was readable but empty.\n- The probe referenced by the skill covered one v1 and one v2 model. This session exposes the v1 shape; the version matches the probe release.\n\n### OFFERS\n\n1. Optional: enable `multi_agent_v2` by adding `[features]` with `multi_agent_v2 = true` to the user config at `$CODEX_HOME/config.toml`. Applies next session.",
   "root_model": "gpt-5.6-luna",
-  "skill_blob": "290a54aeded93bae8e8f48b5363f7b345bf80f0a",
+  "skill_blob": "ec29702265e86107ef49e7ad6a5b97d20cd08b20",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]
