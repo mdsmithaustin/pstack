@@ -28,7 +28,7 @@ Each spawn was checked on four things, read from the rollouts and never from the
 | `trail-reviewer` | gpt-6.1-sol | on | 1 | `fork_turns: "none"` | `trail reviewer` | gpt-6-astra medium, as asked | 1 | PASS |
 | `how-v1` | gpt-5.6-luna | off | 2 call sites, 4 children | `fork_context` | explorer, default | resolved gpt-6.1-sol low and medium, children asked and ran at those | 2 | PASS on attempt 2 |
 
-`Flag` is `-c features.multi_agent_v2=true`. `how-v1` is the `fork_context` row, so it runs with the flag off. The `extracts/` directory has one file per attempt, and `matrix.py` prints the full per-spawn table from them.
+`Flag` is `-c features.multi_agent_v2=true`. `how-v1` is the `fork_context` row, so it runs with the flag off. The `extracts/` directory has one file per attempt. From this directory, run `python3 matrix.py extracts/*.json` to print one table row per attempt with its spawn details and verdict.
 
 ## Earlier attempts
 
@@ -56,7 +56,7 @@ From this directory, run `python3 run_row.py ROW --root DIR` with a fresh output
 
 `python3 reduce.py RUN_DIR --out EXTRACT.json` reads the rollouts under `RUN_DIR/codex-home/sessions` and writes the extract. For each spawn, the extract keeps the style, tool name, task name, agent type, fork field and value, requested model and effort, and any child IDs parsed from the output. For function calls it keeps up to 300 characters of output and the matched child's recorded model and effort. For v1 code-mode calls it records the children's contexts in separate entries. The extract also keeps `cli_versions`, the resolved roles, the lead's prompts, the child threads' IDs, roles and contexts, and the verdict with its problems. It omits spawn messages, model answers, credentials, and the full spawn arguments. The reducer replaces the run directory path with `<run>` in the extracted prompts and calls.
 
-`sh regen.sh RUNS_DIR` rebuilds every extract from saved run directories. The script resolves relative paths from this directory and expects the [historical run directory names](regen.sh) under `RUNS_DIR`. From this directory, `python3 -m unittest test_reduce test_run_row` checks the reducer and the driver.
+`sh regen.sh RUNS_DIR` rebuilds every extract from saved run directories. The script resolves relative paths from this directory and expects the [historical run directory names](regen.sh) under `RUNS_DIR`. From this directory, `python3 -m unittest test_reduce test_run_row` checks the reducer and the driver. The driver tests use a stub `codex` on `PATH` and a temporary `HOME` with a fake login.
 
 ## Not covered
 
