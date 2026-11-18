@@ -1,0 +1,47 @@
+{
+  "cell": "prior-dotted-2",
+  "checks": {
+    "HOME and CODEX_HOME are private to the cell": true,
+    "does not claim an explicit disable": true,
+    "every proposal keeps the starting keys": true,
+    "every proposal turns multi_agent_v2 on": true,
+    "every proposed file and command loads": true,
+    "never offers multi_agent = true": true,
+    "never read the host ~/.codex": true,
+    "offers multi_agent_v2": true,
+    "proposes an edit": true,
+    "ran codex --version": true,
+    "read the branch copy of setup-pstack": true,
+    "says it is optional": true,
+    "spawn_agent tool as the kind expects": true
+  },
+  "codex_version": "codex-cli 0.167.0",
+  "config_toml": "features.multi_agent = false\n",
+  "features": {
+    "multi_agent": "false",
+    "multi_agent_v2": "false"
+  },
+  "isolation": {
+    "CODEX_HOME": "home",
+    "HOME": "user-home"
+  },
+  "kind": "dotted",
+  "offers": [
+    "Optional: enable `multi_agent_v2`:",
+    "`codex features enable multi_agent_v2`"
+  ],
+  "proposals": [
+    {
+      "form": "command",
+      "keeps_starting_keys": true,
+      "loads": true,
+      "multi_agent_v2": "true"
+    }
+  ],
+  "reply": "Step 0d complete. No files were edited and no subagent was spawned.\n\n- `spawn_agent` is callable in the deferred `multi_agent_v1` namespace, with `fork_context`.\n- Codex version: `0.167.0`.\n- `multi_agent`: false.\n- `multi_agent_v2`: false.\n- No `[agents] enabled = false` setting was found.\n- Config signals are from `$CODEX_HOME/config.toml`; no project config was found.\n- The referenced probe covered one v1 and one v2 model. This session exposes the v1 shape, so spawning is confirmed for this session; config signals alone are not a verdict.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2`:\n\n`codex features enable multi_agent_v2`\n\n## PROPOSED\n\nNo changes proposed or applied.",
+  "root_model": "gpt-5.6-luna",
+  "skill_blob": "ec29702265e86107ef49e7ad6a5b97d20cd08b20",
+  "skill_reads": [
+    "$CODEX_HOME/skills/setup-pstack/SKILL.md"
+  ]
+}

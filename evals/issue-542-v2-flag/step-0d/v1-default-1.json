@@ -1,0 +1,34 @@
+{
+  "cell": "v1-default-1",
+  "checks": {
+    "HOME and CODEX_HOME are private to the cell": true,
+    "never offers multi_agent = true": true,
+    "never read the host ~/.codex": true,
+    "only offer is multi_agent_v2": true,
+    "ran codex --version": true,
+    "read the branch copy of setup-pstack": true,
+    "says it is optional": true,
+    "spawn_agent tool as the kind expects": true
+  },
+  "codex_version": "codex-cli 0.167.0",
+  "config_toml": "",
+  "features": {
+    "multi_agent": "true",
+    "multi_agent_v2": "false"
+  },
+  "isolation": {
+    "CODEX_HOME": "home",
+    "HOME": "user-home"
+  },
+  "kind": "v1-default",
+  "offers": [
+    "Optional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`."
+  ],
+  "proposals": [],
+  "reply": "Step 0d completed.\n\n- `spawn_agent` is callable via deferred `multi_agent_v1`; its shape is `fork_context`.\n- Codex version: `0.167.0` (the probe version; not later).\n- `multi_agent`: stable, enabled.\n- `multi_agent_v2`: stable, disabled.\n- No readable `[agents] enabled = false` setting was found.\n- No existing `multi_agent_v2` setting was found.\n- User config checked: `$CODEX_HOME/config.toml`.\n- Project `.codex/config.toml` was absent.\n\nSpawning is confirmed, so no repair is needed. The skill permits one optional switch offer.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`.",
+  "root_model": "gpt-5.6-luna",
+  "skill_blob": "a73c3d54b9a282a5ddbc540a83bb98e6bb5f2fc7",
+  "skill_reads": [
+    "$CODEX_HOME/skills/setup-pstack/SKILL.md"
+  ]
+}

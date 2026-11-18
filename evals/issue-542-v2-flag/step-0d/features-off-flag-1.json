@@ -1,0 +1,31 @@
+{
+  "cell": "features-off-flag-1",
+  "checks": {
+    "HOME and CODEX_HOME are private to the cell": true,
+    "never offers multi_agent = true": true,
+    "never read the host ~/.codex": true,
+    "offers none": true,
+    "ran codex --version": true,
+    "read the branch copy of setup-pstack": true,
+    "spawn_agent tool as the kind expects": true
+  },
+  "codex_version": "codex-cli 0.167.0",
+  "config_toml": "[features]\nmulti_agent = false\n",
+  "features": {
+    "multi_agent": "false",
+    "multi_agent_v2": "false"
+  },
+  "isolation": {
+    "CODEX_HOME": "home",
+    "HOME": "user-home"
+  },
+  "kind": "features-off-flag",
+  "offers": [],
+  "proposals": [],
+  "reply": "Step 0d completed. No files were edited or children spawned.\n\n- Codex version: **0.167.0**.\n- `spawn_agent` is unavailable, including after searching deferred tools. Neither parameter shape (`task_name` with `fork_turns`, or `fork_context`) is exposed.\n- Feature signals: `multi_agent = false`; `multi_agent_v2 = false`.\n- `$CODEX_HOME/config.toml` contains `[features] multi_agent = false`, with no `[agents] enabled` or `multi_agent_v2` setting. Project `.codex/config.toml` is absent.\n\nThe skill\u2019s probe covered one v1 model and one v2 model on this release. Neither lost spawning from `multi_agent = false`, so that setting warrants no edit offer. Possible causes still include a config key, launch `-c` flag, selected model, spawn depth, or an unreadable config layer.\n\n## OFFERS\n\nnone",
+  "root_model": "gpt-6.1-sol",
+  "skill_blob": "a73c3d54b9a282a5ddbc540a83bb98e6bb5f2fc7",
+  "skill_reads": [
+    "$CODEX_HOME/skills/setup-pstack/SKILL.md"
+  ]
+}

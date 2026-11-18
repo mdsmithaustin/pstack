@@ -1,0 +1,35 @@
+{
+  "cell": "features-off-1",
+  "checks": {
+    "HOME and CODEX_HOME are private to the cell": true,
+    "first offer is the agents line": true,
+    "names multi_agent_v2 as the override alternative": true,
+    "never offers multi_agent = true": true,
+    "never read the host ~/.codex": true,
+    "ran codex --version": true,
+    "read the branch copy of setup-pstack": true,
+    "spawn_agent tool as the kind expects": true
+  },
+  "codex_version": "codex-cli 0.167.0",
+  "config_toml": "[features]\nmulti_agent = false\n\n[agents]\nenabled = false\n",
+  "features": {
+    "multi_agent": "false",
+    "multi_agent_v2": "false"
+  },
+  "isolation": {
+    "CODEX_HOME": "home",
+    "HOME": "user-home"
+  },
+  "kind": "features-off",
+  "offers": [
+    "In `$CODEX_HOME/config.toml`, delete `[agents]`\u2019s `enabled = false` line or set it to `true`.",
+    "Alternatively, run `codex features enable multi_agent_v2`. This leaves the agents line in place and overrides your explicit disable of agents."
+  ],
+  "proposals": [],
+  "reply": "Step 0d completed. No files edited or children spawned.\n\n- Codex version: **0.167.0**.\n- `spawn_agent` is unavailable after searching the tool catalog; neither parameter shape is exposed.\n- Feature signals: `multi_agent = false`, `multi_agent_v2 = false`.\n- `$CODEX_HOME/config.toml` contains `[agents] enabled = false`. Project `.codex/config.toml` is absent.\n- The skill\u2019s probe covered one v1 model and one v2 model. These signals do not prove the cause; launch `-c` flags, selected model, spawn depth, and unreadable config layers remain possible causes.\n\n## OFFERS\n\n1. In `$CODEX_HOME/config.toml`, delete `[agents]`\u2019s `enabled = false` line or set it to `true`.\n2. Alternatively, run `codex features enable multi_agent_v2`. This leaves the agents line in place and overrides your explicit disable of agents.\n\nChanges apply from the next session.",
+  "root_model": "gpt-6.1-sol",
+  "skill_blob": "a73c3d54b9a282a5ddbc540a83bb98e6bb5f2fc7",
+  "skill_reads": [
+    "$CODEX_HOME/skills/setup-pstack/SKILL.md"
+  ]
+}

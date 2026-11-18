@@ -1,0 +1,37 @@
+{
+  "cell": "luna-v2-disabled",
+  "child_answer_reached_root": true,
+  "children": [
+    {
+      "agent_path": null,
+      "effort": "low",
+      "model": "gpt-5.6-luna"
+    }
+  ],
+  "config_toml": "[features.multi_agent_v2]\nenabled = false\n",
+  "deferred": [
+    "multi_agent_v1"
+  ],
+  "features": {
+    "multi_agent": "true",
+    "multi_agent_v2": "false"
+  },
+  "root_effort": "low",
+  "root_model": "gpt-5.6-luna",
+  "spawn_calls": [
+    {
+      "keys": [
+        "fork_context"
+      ],
+      "path": "exec:multi_agent_v1__spawn_agent"
+    }
+  ],
+  "v1_tool_params": [
+    "fork_context",
+    "items",
+    "message",
+    "model",
+    "reasoning_effort"
+  ],
+  "v2_tool": null
+}
