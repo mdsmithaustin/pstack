@@ -15,9 +15,9 @@
   },
   "kind": "features-off-flag",
   "offers": [],
-  "reply": "Step 0d checked. No files edited.\n\n- Live tool search found no callable `spawn_agent`.\n- Codex version: `0.167.0`.\n- Feature signals: `multi_agent = false`, `multi_agent_v2 = false`.\n- Active `$CODEX_HOME/config.toml` sets `[features] multi_agent = false`; `[agents] enabled` is absent. Project config is absent.\n\nThe skill offers no edit for `multi_agent = false` on this version because it blocked spawning on neither probed model. The cause remains unresolved: a config key, launch `-c` flag, selected model, spawn depth, or unreadable config layer.\n\n## OFFERS\n\nnone",
+  "reply": "Step 0d checked. No files edited.\n\n- `spawn_agent` is unavailable, including in the deferred tool catalog.\n- Codex version is `0.167.0`.\n- Feature signals: `multi_agent = false`, `multi_agent_v2 = false`.\n- The wrapper\u2019s `$CODEX_HOME/config.toml` contains `[features] multi_agent = false`; `[agents] enabled` is absent. No project config exists.\n\nThe skill\u2019s probe found that `multi_agent = false` did not remove spawning on either tested model, so it warrants no edit offer here. Possible causes remain a config key, launch `-c` flag, selected model, spawn depth, or an unreadable config layer.\n\n## OFFERS\n\nnone",
   "root_model": "gpt-6.1-sol",
-  "skill_blob": "09b2c4873a5e1af28f237a6f3b97d771be1972e8",
+  "skill_blob": "2f9799d8599f3136ce872c0c988ecb600cf41696",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

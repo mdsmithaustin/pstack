@@ -51,7 +51,7 @@ evals/issue-542-v2-flag/run-step-0d.sh "$out" v1-default-1 v1-default
 python3 -I evals/issue-542-v2-flag/check-step-0d.py "$out" v1-default-1 v1-default
 ```
 
-What these runs do not show. The sessions ran code mode and shell reads, so the checker reads `custom_tool_call` inputs for the skill path. The text's older-release rule (`multi_agent = true` before 0.167.0) was not run, because only Codex 0.167.0 was installed. No run put the key in a project `.codex/config.toml`, and a session's reply is graded on its OFFERS list, not on an edit it never made. The checker first failed two of the eight runs on format alone, an unbulleted OFFERS line and the word "overrode" where it looked for "override". It now reads either, and those two transcripts were regraded, not rerun.
+What these runs do not show. The sessions ran code mode and shell reads, so the checker reads `custom_tool_call` inputs for the skill path. The text's older-release rule (`multi_agent = true` before 0.167.0) was not run, because only Codex 0.167.0 was installed. No run put the key in a project `.codex/config.toml`, and a session's reply is graded on its OFFERS list, not on an edit it never made. In an earlier batch the checker failed two of eight runs on format alone, an unbulleted OFFERS line and the word "overrode" where it looked for "override". It now reads either, and those two transcripts were regraded, not rerun. The recorded batch ran later, on the text that `skill_blob` names.
 
 ## Rerun
 

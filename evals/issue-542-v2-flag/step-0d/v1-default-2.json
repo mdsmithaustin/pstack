@@ -16,11 +16,11 @@
   },
   "kind": "v1-default",
   "offers": [
-    "Optionally set `multi_agent_v2 = true` to use the direct `spawn_agent` tool shape with `task_name` and `fork_turns`; this changes the tool shape, not whether spawning works."
+    "Optionally set `multi_agent_v2 = true` to switch to direct `spawn_agent` with `task_name` and `fork_turns`."
   ],
-  "reply": "Step 0d complete.\n\n- `spawn_agent` is callable via deferred `multi_agent_v1`; spawning works.\n- Codex version: `0.167.0`.\n- Feature signals: `multi_agent = true`; `multi_agent_v2 = false`.\n- Readable user config contains no `[agents] enabled` setting.\n- Project config was not evaluated because this project is not marked trusted.\n- No repair is needed. The feature signals are configuration evidence, not a complete verdict on all possible sessions.\n\n## OFFERS\n\n- Optionally set `multi_agent_v2 = true` to use the direct `spawn_agent` tool shape with `task_name` and `fork_turns`; this changes the tool shape, not whether spawning works.",
+  "reply": "Step 0d completed. No files were edited.\n\n- `spawn_agent` is callable through deferred `multi_agent_v1`.\n- Codex version: `0.167.0`.\n- `multi_agent`: on.\n- `multi_agent_v2`: off.\n- No `[agents] enabled = false` setting was found.\n- No repair is needed. The session can spawn agents; enabling v2 would only change the tool shape.\n\n## OFFERS\n\n- Optionally set `multi_agent_v2 = true` to switch to direct `spawn_agent` with `task_name` and `fork_turns`.",
   "root_model": "gpt-5.6-luna",
-  "skill_blob": "09b2c4873a5e1af28f237a6f3b97d771be1972e8",
+  "skill_blob": "2f9799d8599f3136ce872c0c988ecb600cf41696",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

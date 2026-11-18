@@ -16,12 +16,12 @@
   },
   "kind": "features-off",
   "offers": [
-    "Delete `[agents] enabled = false` or set it to `true` in `$CODEX_HOME/config.toml`.",
-    "Alternatively, add `multi_agent_v2 = true` under its existing `[features]` table. This overrides the user's explicit disable and restored spawning on both probed models."
+    "Delete `[agents] enabled = false` or set it to `true`.",
+    "Alternatively, enable `multi_agent_v2` under the existing `[features]` table. This overrides the explicit agents disable, as observed on both probed models."
   ],
-  "reply": "Step 0d results:\n\n- `spawn_agent` is unavailable, including in the deferred tool catalog.\n- Codex version is `0.167.0`.\n- Feature signals: `multi_agent = false`, `multi_agent_v2 = false`.\n- `$CODEX_HOME/config.toml` contains `[agents] enabled = false`. No project config exists.\n\nThe agents setting is a possible cause. Launch `-c` flags, the selected model, spawn depth, and unreadable config layers remain possible causes too. The skill's probe covered two models on 0.167.0 with user config only.\n\nNo files were edited. The skill prescribes no edit for `multi_agent = false` on this release.\n\n## OFFERS\n\n1. Delete `[agents] enabled = false` or set it to `true` in `$CODEX_HOME/config.toml`.\n2. Alternatively, add `multi_agent_v2 = true` under its existing `[features]` table. This overrides the user's explicit disable and restored spawning on both probed models.\n\nEither change applies from the next session.",
+  "reply": "Step 0d checked. No files edited.\n\n- `spawn_agent` is unavailable, including after searching deferred tools.\n- Codex version is `0.167.0`.\n- Feature signals: `multi_agent = false`, `multi_agent_v2 = false`.\n- `$CODEX_HOME/config.toml` contains `[agents] enabled = false` and `[features] multi_agent = false`. No project config exists.\n\nThe agents disable is a possible cause. Launch `-c` flags, the selected model, spawn depth, and unreadable config layers remain possible causes. On this release, the skill offers no repair for `multi_agent = false`.\n\n## OFFERS\n\n1. Delete `[agents] enabled = false` or set it to `true`.\n2. Alternatively, enable `multi_agent_v2` under the existing `[features]` table. This overrides the explicit agents disable, as observed on both probed models.\n\nEither change applies from the next session.",
   "root_model": "gpt-6.1-sol",
-  "skill_blob": "09b2c4873a5e1af28f237a6f3b97d771be1972e8",
+  "skill_blob": "2f9799d8599f3136ce872c0c988ecb600cf41696",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]
