@@ -1,0 +1,206 @@
+{
+ "row": "how-v1",
+ "lead_model": "gpt-5.6-luna",
+ "v2_flag": false,
+ "lead_contexts": [
+  [
+   "gpt-5.6-luna",
+   "high"
+  ]
+ ],
+ "lead_prompts": [
+  "$how how does an order total get computed here, from line items through discounts and tax? I want to get oriented before I change checkout."
+ ],
+ "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
+ "turns": [
+  {
+   "index": 0,
+   "exit": 0,
+   "session": "01a1eb86-1a50-7f31-b29f-2c3570b81304"
+  }
+ ],
+ "resolved": [
+  {
+   "role": "how explorer",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "how explainer",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "medium",
+   "source": "workspace ## codex"
+  }
+ ],
+ "collab_tool_calls": {
+  "spawn_agent": 2
+ },
+ "spawns": [
+  {
+   "style": "code-mode",
+   "tool_name": "multi_agent_v1__spawn_agent",
+   "task_name": null,
+   "agent_type": "explorer",
+   "fork_field": "fork_context",
+   "fork_value": false,
+   "agent_ids": [
+    "01a1eb86-b301-7683-bbe8-d3e8b93c9655",
+    "01a1eb86-b32f-7e93-9900-4a443f3fc524",
+    "01a1eb86-b362-7dd3-9882-95018f0f361e"
+   ],
+   "args_model": "gpt-6.1-sol",
+   "args_effort": "low",
+   "matches_role": "how explorer",
+   "output": null,
+   "child_contexts": null
+  },
+  {
+   "style": "code-mode",
+   "tool_name": "multi_agent_v1__spawn_agent",
+   "task_name": null,
+   "agent_type": "default",
+   "fork_field": "fork_context",
+   "fork_value": false,
+   "agent_ids": [
+    "01a1eb87-bc83-7152-8f31-5ca18e3968f6"
+   ],
+   "args_model": "gpt-6.1-sol",
+   "args_effort": "medium",
+   "matches_role": "how explainer",
+   "output": null,
+   "child_contexts": null
+  },
+  {
+   "style": "child",
+   "tool_name": null,
+   "task_name": null,
+   "agent_type": "explorer",
+   "fork_field": null,
+   "fork_value": null,
+   "args_model": null,
+   "args_effort": null,
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ],
+   "matches_role": "how explorer",
+   "output": null
+  },
+  {
+   "style": "child",
+   "tool_name": null,
+   "task_name": null,
+   "agent_type": "explorer",
+   "fork_field": null,
+   "fork_value": null,
+   "args_model": null,
+   "args_effort": null,
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ],
+   "matches_role": "how explorer",
+   "output": null
+  },
+  {
+   "style": "child",
+   "tool_name": null,
+   "task_name": null,
+   "agent_type": "explorer",
+   "fork_field": null,
+   "fork_value": null,
+   "args_model": null,
+   "args_effort": null,
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ],
+   "matches_role": "how explorer",
+   "output": null
+  },
+  {
+   "style": "child",
+   "tool_name": null,
+   "task_name": null,
+   "agent_type": "default",
+   "fork_field": null,
+   "fork_value": null,
+   "args_model": null,
+   "args_effort": null,
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "medium"
+    ]
+   ],
+   "matches_role": "how explainer",
+   "output": null
+  }
+ ],
+ "lead_multi_agent_version": null,
+ "children": [
+  {
+   "id": "01a1eb86-b301-7683-bbe8-d3e8b93c9655",
+   "agent_path": null,
+   "agent_role": "explorer",
+   "multi_agent_version": "v1",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb86-b32f-7e93-9900-4a443f3fc524",
+   "agent_path": null,
+   "agent_role": "explorer",
+   "multi_agent_version": "v1",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb86-b362-7dd3-9882-95018f0f361e",
+   "agent_path": null,
+   "agent_role": "explorer",
+   "multi_agent_version": "v1",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb87-bc83-7152-8f31-5ca18e3968f6",
+   "agent_path": null,
+   "agent_role": "default",
+   "multi_agent_version": "v1",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "medium"
+    ]
+   ]
+  }
+ ],
+ "spawn_fired": true,
+ "problems": [],
+ "verdict": "PASS"
+}

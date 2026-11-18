@@ -1,0 +1,154 @@
+{
+ "row": "interrogate",
+ "lead_model": "gpt-6.1-sol",
+ "v2_flag": true,
+ "lead_contexts": [
+  [
+   "gpt-6.1-sol",
+   "high"
+  ]
+ ],
+ "lead_prompts": [
+  "$interrogate We plan to move discount caps out of code and into a per-partner config table. Stress-test that decision before we commit to it."
+ ],
+ "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
+ "turns": [
+  {
+   "index": 0,
+   "exit": 0,
+   "session": "01a1eb6e-6a94-7212-8dd4-f613322eb229"
+  }
+ ],
+ "resolved": [
+  {
+   "role": "interrogate reviewers",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "interrogate reviewers",
+   "arm": 2,
+   "model": "gpt-6-astra",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "interrogate reviewers",
+   "arm": 3,
+   "model": "gpt-6.1-terra",
+   "effort": "low",
+   "source": "workspace ## codex"
+  }
+ ],
+ "collab_tool_calls": {
+  "spawn_agent": 3,
+  "wait_agent": 1,
+  "send_message": 1
+ },
+ "spawns": [
+  {
+   "style": "function",
+   "tool_name": "spawn_agent",
+   "task_name": "adversary_a",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "agent_ids": [],
+   "args_model": "gpt-6.1-sol",
+   "args_effort": "low",
+   "matches_role": "interrogate reviewers",
+   "output": "{\"task_name\":\"/root/adversary_a\"}",
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "style": "function",
+   "tool_name": "spawn_agent",
+   "task_name": "adversary_b",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "agent_ids": [],
+   "args_model": "gpt-6-astra",
+   "args_effort": "low",
+   "matches_role": "interrogate reviewers",
+   "output": "{\"task_name\":\"/root/adversary_b\"}",
+   "child_contexts": [
+    [
+     "gpt-6-astra",
+     "low"
+    ]
+   ]
+  },
+  {
+   "style": "function",
+   "tool_name": "spawn_agent",
+   "task_name": "adversary_c",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "agent_ids": [],
+   "args_model": "gpt-6.1-terra",
+   "args_effort": "low",
+   "matches_role": "interrogate reviewers",
+   "output": "{\"task_name\":\"/root/adversary_c\"}",
+   "child_contexts": [
+    [
+     "gpt-6.1-terra",
+     "low"
+    ]
+   ]
+  }
+ ],
+ "lead_multi_agent_version": "v2",
+ "children": [
+  {
+   "id": "01a1eb6f-7017-7b02-9ef2-39dd4246805f",
+   "agent_path": "/root/adversary_a",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb6f-99dd-7f01-9408-50162c476036",
+   "agent_path": "/root/adversary_b",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6-astra",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb6f-c91f-7242-a79c-c5da60b30ac2",
+   "agent_path": "/root/adversary_c",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6.1-terra",
+     "low"
+    ]
+   ]
+  }
+ ],
+ "spawn_fired": true,
+ "problems": [],
+ "verdict": "PASS"
+}

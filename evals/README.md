@@ -27,7 +27,8 @@ They are reduced, sanitized traces, CLI error records, and recorded verdicts use
 is a second exception. It holds aggregated verdict matrices with no model
 answers. `skill-recovery/fixtures/` is a third exception. It holds hand-built,
 sanitized projections of native Codex records with replacement text, used by
-model-free evaluator tests.
+model-free evaluator tests. `issue-542-v2-matrix/extracts/` is a fourth exception.
+It holds per-spawn records reduced from live Codex runs, with no spawn messages or model answers.
 
 The [port-value comparison](port-value/README.md) documents the separate
 native, upstream, and current-port application study, including its published

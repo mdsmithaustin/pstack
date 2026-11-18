@@ -1,0 +1,179 @@
+{
+ "row": "how-v1-flag-on",
+ "lead_model": "gpt-5.6-luna",
+ "v2_flag": true,
+ "lead_contexts": [
+  [
+   "gpt-5.6-luna",
+   "high"
+  ]
+ ],
+ "lead_prompts": [
+  "$how how does an order total get computed here, from line items through discounts and tax? I want to get oriented before I change checkout."
+ ],
+ "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
+ "turns": [
+  {
+   "index": 0,
+   "exit": 0,
+   "session": "01a1eb72-0ab9-7400-be7a-eb6624e94587"
+  }
+ ],
+ "resolved": [
+  {
+   "role": "how explorer",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "how explainer",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "medium",
+   "source": "workspace ## codex"
+  }
+ ],
+ "collab_tool_calls": {
+  "spawn_agent": 4,
+  "wait_agent": 5,
+  "list_agents": 1,
+  "send_message": 1
+ },
+ "spawns": [
+  {
+   "style": "function",
+   "tool_name": "spawn_agent",
+   "task_name": "checkout_flow",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "agent_ids": [],
+   "args_model": "gpt-6.1-sol",
+   "args_effort": "low",
+   "matches_role": "how explorer",
+   "output": "{\"task_name\":\"/root/checkout_flow\"}",
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "style": "function",
+   "tool_name": "spawn_agent",
+   "task_name": "discount_rules",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "agent_ids": [],
+   "args_model": "gpt-6.1-sol",
+   "args_effort": "low",
+   "matches_role": "how explorer",
+   "output": "{\"task_name\":\"/root/discount_rules\"}",
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "style": "function",
+   "tool_name": "spawn_agent",
+   "task_name": "tax_boundary",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "agent_ids": [],
+   "args_model": "gpt-6.1-sol",
+   "args_effort": "low",
+   "matches_role": "how explorer",
+   "output": "{\"task_name\":\"/root/tax_boundary\"}",
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "style": "function",
+   "tool_name": "spawn_agent",
+   "task_name": "order_total_explainer",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "agent_ids": [],
+   "args_model": "gpt-6.1-sol",
+   "args_effort": "medium",
+   "matches_role": "how explainer",
+   "output": "{\"task_name\":\"/root/order_total_explainer\"}",
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "medium"
+    ]
+   ]
+  }
+ ],
+ "lead_multi_agent_version": "v2",
+ "children": [
+  {
+   "id": "01a1eb72-a048-7612-92f3-5c9d8eecfd33",
+   "agent_path": "/root/checkout_flow",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb72-affc-7f81-834a-571f04015804",
+   "agent_path": "/root/discount_rules",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb72-bf2b-7db2-9710-c84696f02338",
+   "agent_path": "/root/tax_boundary",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb73-976b-73c0-8dcd-787b8f1af26a",
+   "agent_path": "/root/order_total_explainer",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "medium"
+    ]
+   ]
+  }
+ ],
+ "spawn_fired": true,
+ "problems": [],
+ "verdict": "PASS"
+}

@@ -1,0 +1,161 @@
+{
+ "row": "poteto-mode",
+ "lead_model": "gpt-6.1-sol",
+ "v2_flag": true,
+ "lead_contexts": [
+  [
+   "gpt-6.1-sol",
+   "high"
+  ]
+ ],
+ "lead_prompts": [
+  "$poteto-mode Add partial refunds to the shop package. Two separate pieces: (1) `refund_total(items, rate_bp, refunded_lines)` in shop/orders.py returning the cents to refund for the given line indexes including their per-line tax, where refunding every line must give back exactly the original total when no discount applied; (2) a new shop/ledger.py that records refunds in a CSV file (order id, line index, cents, timestamp) and reads them back, with its own tests. Finance cares about the cents, so be careful."
+ ],
+ "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
+ "turns": [
+  {
+   "index": 0,
+   "exit": 0,
+   "session": "01a1eb7e-d89c-79f1-a7ce-6876da6a3c6c"
+  }
+ ],
+ "resolved": [
+  {
+   "role": "feature",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "trail reviewer",
+   "arm": 1,
+   "model": "gpt-6-astra",
+   "effort": "medium",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "how explorer",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "how explainer",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "medium",
+   "source": "workspace ## codex"
+  }
+ ],
+ "collab_tool_calls": {
+  "spawn_agent": 3,
+  "send_message": 1,
+  "wait_agent": 1
+ },
+ "spawns": [
+  {
+   "style": "function",
+   "tool_name": "spawn_agent",
+   "task_name": "order_architecture",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "agent_ids": [],
+   "args_model": "gpt-6.1-sol",
+   "args_effort": "medium",
+   "matches_role": "how explainer",
+   "output": "{\"task_name\":\"/root/order_architecture\"}",
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "medium"
+    ]
+   ]
+  },
+  {
+   "style": "function",
+   "tool_name": "spawn_agent",
+   "task_name": "ledger_implementation",
+   "agent_type": "poteto-agent",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "agent_ids": [],
+   "args_model": "gpt-6.1-sol",
+   "args_effort": "low",
+   "matches_role": "feature / how explorer",
+   "output": "{\"task_name\":\"/root/ledger_implementation\"}",
+   "child_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "style": "function",
+   "tool_name": "spawn_agent",
+   "task_name": "independent_review",
+   "agent_type": "trail reviewer",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "agent_ids": [],
+   "args_model": "gpt-6-astra",
+   "args_effort": "medium",
+   "matches_role": "trail reviewer",
+   "output": "{\"task_name\":\"/root/independent_review\"}",
+   "child_contexts": [
+    [
+     "gpt-6-astra",
+     "medium"
+    ]
+   ]
+  }
+ ],
+ "lead_multi_agent_version": "v2",
+ "children": [
+  {
+   "id": "01a1eb7f-ec8a-7d91-a6d3-2925d0406e8c",
+   "agent_path": "/root/order_architecture",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "medium"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb81-3ff8-78e1-8b8d-228ecc70da43",
+   "agent_path": "/root/ledger_implementation",
+   "agent_role": "poteto-agent",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6.1-sol",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb83-82c7-78d0-ab9f-311d640cd18d",
+   "agent_path": "/root/independent_review",
+   "agent_role": "trail reviewer",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6-astra",
+     "medium"
+    ]
+   ]
+  }
+ ],
+ "spawn_fired": true,
+ "problems": [],
+ "verdict": "PASS"
+}

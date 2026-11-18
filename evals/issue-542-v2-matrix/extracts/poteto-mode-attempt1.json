@@ -1,0 +1,98 @@
+{
+ "row": "poteto-mode",
+ "lead_model": "gpt-6.1-sol",
+ "v2_flag": true,
+ "lead_contexts": [
+  [
+   "gpt-6.1-sol",
+   "high"
+  ]
+ ],
+ "lead_prompts": [
+  "$poteto-mode Add a `refund_total(items, rate_bp, refunded_lines)` function to shop/orders.py that returns the cents to refund for the given line indexes, including the tax for those lines, with a unit test for it."
+ ],
+ "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
+ "turns": [
+  {
+   "index": 0,
+   "exit": 0,
+   "session": "01a1eb72-0ab9-7fe0-9388-c00cdc3d4a2f"
+  }
+ ],
+ "resolved": [
+  {
+   "role": "feature",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "trail reviewer",
+   "arm": 1,
+   "model": "gpt-6-astra",
+   "effort": "medium",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "how explorer",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "how explainer",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "medium",
+   "source": "workspace ## codex"
+  }
+ ],
+ "collab_tool_calls": {
+  "spawn_agent": 1,
+  "wait_agent": 1
+ },
+ "spawns": [
+  {
+   "style": "function",
+   "tool_name": "spawn_agent",
+   "task_name": "refund_review",
+   "agent_type": "trail reviewer",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "agent_ids": [],
+   "args_model": "gpt-6-astra",
+   "args_effort": "medium",
+   "matches_role": "trail reviewer",
+   "output": "{\"task_name\":\"/root/refund_review\"}",
+   "child_contexts": [
+    [
+     "gpt-6-astra",
+     "medium"
+    ]
+   ]
+  }
+ ],
+ "lead_multi_agent_version": "v2",
+ "children": [
+  {
+   "id": "01a1eb73-fe83-7710-8347-dbb5812c5b3b",
+   "agent_path": "/root/refund_review",
+   "agent_role": "trail reviewer",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6-astra",
+     "medium"
+    ]
+   ]
+  }
+ ],
+ "spawn_fired": true,
+ "problems": [],
+ "verdict": "PASS"
+}

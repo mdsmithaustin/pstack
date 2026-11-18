@@ -1,0 +1,125 @@
+{
+ "how": {
+  "skill": "how",
+  "roles": [
+   "how explorer",
+   "how explainer"
+  ],
+  "turns": [
+   "$how how does an order total get computed here, from line items through discounts and tax? I want to get oriented before I change checkout."
+  ]
+ },
+ "why": {
+  "skill": "why",
+  "roles": [
+   "why investigators",
+   "why synthesizer"
+  ],
+  "turns": [
+   "$why why does tax get rounded per line item and not once on the order total?"
+  ]
+ },
+ "arena": {
+  "skill": "arena",
+  "roles": [
+   "arena runners",
+   "arena cross-judge pool"
+  ],
+  "turns": [
+   "$arena I need a function that splits an order total across N payers in cents without losing or gaining a cent. Try a few different approaches and give me the best one. Keep it in a scratch directory, not in the project."
+  ]
+ },
+ "architect": {
+  "skill": "architect",
+  "roles": [
+   "architect runners",
+   "how explorer",
+   "how explainer",
+   "why investigators",
+   "why synthesizer",
+   "arena cross-judge pool"
+  ],
+  "turns": [
+   "$architect I want to add refunds to this shop code: partial refunds per line, with the tax refunded to match. Explore a few designs for where it should live and how it should work. Do not change the project."
+  ]
+ },
+ "swarm": {
+  "skill": "swarm",
+  "roles": [
+   "swarm workers"
+  ],
+  "turns": [
+   "$swarm Check the shop package from three separate angles in parallel, one worker each: tax rounding, discount stacking, and the line pricing. Each worker should run the code against a few inputs and report PASS or ISSUES. Do not change the project."
+  ]
+ },
+ "interrogate": {
+  "skill": "interrogate",
+  "roles": [
+   "interrogate reviewers"
+  ],
+  "turns": [
+   "$interrogate We plan to move discount caps out of code and into a per-partner config table. Stress-test that decision before we commit to it."
+  ]
+ },
+ "reflect": {
+  "skill": "reflect",
+  "roles": [
+   "reflect tooling",
+   "reflect judgment",
+   "reflect synthesizer",
+   "reflect divergent"
+  ],
+  "turns": [
+   "Tax is currently computed on the pre-discount line totals. Change shop/orders.py so tax applies to the discounted amount instead, and run the tests.",
+   "No, finance told us tax stays on the pre-discount amounts, that is the whole point of the per-line rounding commit. Revert that and keep the behavior. You also did not run the full test suite before telling me it was done. From now on run it every time before you say a change is finished.",
+   "$reflect"
+  ]
+ },
+ "poteto-mode": {
+  "skill": "poteto-mode",
+  "roles": [
+   "feature",
+   "trail reviewer",
+   "how explorer",
+   "how explainer"
+  ],
+  "turns": [
+   "$poteto-mode Add partial refunds to the shop package. Two separate pieces: (1) `refund_total(items, rate_bp, refunded_lines)` in shop/orders.py returning the cents to refund for the given line indexes including their per-line tax, where refunding every line must give back exactly the original total when no discount applied; (2) a new shop/ledger.py that records refunds in a CSV file (order id, line index, cents, timestamp) and reads them back, with its own tests. Finance cares about the cents, so be careful."
+  ],
+  "work_model": "gpt-6.1-sol@high"
+ },
+ "trail-reviewer": {
+  "skill": "show-me-your-work",
+  "roles": [
+   "trail reviewer"
+  ],
+  "work_model": "gpt-6.1-sol@high",
+  "turns": [
+   "$show-me-your-work While I am away, make order_total in shop/orders.py reject a negative quantity with a ValueError, add a test for it, and run the tests."
+  ]
+ },
+ "how-v1": {
+  "skill": "how",
+  "roles": [
+   "how explorer",
+   "how explainer"
+  ],
+  "model": "gpt-5.6-luna",
+  "turns": [
+   "$how how does an order total get computed here, from line items through discounts and tax? I want to get oriented before I change checkout."
+  ],
+  "v2_flag": false
+ },
+ "how-v1-flag-on": {
+  "skill": "how",
+  "roles": [
+   "how explorer",
+   "how explainer"
+  ],
+  "model": "gpt-5.6-luna",
+  "turns": [
+   "$how how does an order total get computed here, from line items through discounts and tax? I want to get oriented before I change checkout."
+  ],
+  "v2_flag": true
+ }
+}

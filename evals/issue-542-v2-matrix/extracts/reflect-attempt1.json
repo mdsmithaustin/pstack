@@ -1,0 +1,68 @@
+{
+ "row": "reflect",
+ "lead_model": "gpt-6.1-sol",
+ "v2_flag": true,
+ "lead_contexts": [
+  [
+   "gpt-6.1-sol",
+   "high"
+  ]
+ ],
+ "lead_prompts": [
+  "The 30 percent discount cap in shop/discounts.py is applied after the percents stack, but I want to know what happens with a 40 percent promo on a one-line order. Check it by running the code and tell me.",
+  "$reflect"
+ ],
+ "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
+ "turns": [
+  {
+   "index": 0,
+   "exit": 0,
+   "session": "01a1eb72-0ab9-7320-960b-fe2bfc401079"
+  },
+  {
+   "index": 1,
+   "exit": 0,
+   "session": "01a1eb72-0ab9-7320-960b-fe2bfc401079"
+  }
+ ],
+ "resolved": [
+  {
+   "role": "reflect tooling",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "reflect judgment",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "reflect synthesizer",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "low",
+   "source": "workspace ## codex"
+  },
+  {
+   "role": "reflect divergent",
+   "arm": 1,
+   "model": "gpt-6.1-sol",
+   "effort": "medium",
+   "source": "workspace ## codex"
+  }
+ ],
+ "collab_tool_calls": {},
+ "spawns": [],
+ "lead_multi_agent_version": "v2",
+ "children": [],
+ "spawn_fired": false,
+ "problems": [],
+ "verdict": "FAIL"
+}

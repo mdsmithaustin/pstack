@@ -1,0 +1,141 @@
+{
+ "row": "swarm",
+ "lead_model": "gpt-6.1-sol",
+ "v2_flag": true,
+ "lead_contexts": [
+  [
+   "gpt-6.1-sol",
+   "high"
+  ]
+ ],
+ "lead_prompts": [
+  "$swarm Check the shop package from three separate angles in parallel, one worker each: tax rounding, discount stacking, and the line pricing. Each worker should run the code against a few inputs and report PASS or ISSUES. Do not change the project."
+ ],
+ "skills_at": "a29fb3e84609d92e63fda356bf88ada5aa88b77e",
+ "cli_versions": [
+  "0.167.0"
+ ],
+ "turns": [
+  {
+   "index": 0,
+   "exit": 0,
+   "session": "01a1eb6e-6a94-7d70-9c89-c55c3c27ee63"
+  }
+ ],
+ "resolved": [
+  {
+   "role": "swarm workers",
+   "arm": 1,
+   "model": "gpt-6-luna",
+   "effort": "low",
+   "source": "workspace ## codex"
+  }
+ ],
+ "collab_tool_calls": {
+  "spawn_agent": 3,
+  "wait_agent": 5,
+  "followup_task": 2,
+  "send_message": 4
+ },
+ "spawns": [
+  {
+   "style": "function",
+   "tool_name": "spawn_agent",
+   "task_name": "tax_rounding",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "agent_ids": [],
+   "args_model": "gpt-6-luna",
+   "args_effort": "low",
+   "matches_role": "swarm workers",
+   "output": "{\"task_name\":\"/root/tax_rounding\"}",
+   "child_contexts": [
+    [
+     "gpt-6-luna",
+     "low"
+    ]
+   ]
+  },
+  {
+   "style": "function",
+   "tool_name": "spawn_agent",
+   "task_name": "discount_stacking",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "agent_ids": [],
+   "args_model": "gpt-6-luna",
+   "args_effort": "low",
+   "matches_role": "swarm workers",
+   "output": "{\"task_name\":\"/root/discount_stacking\"}",
+   "child_contexts": [
+    [
+     "gpt-6-luna",
+     "low"
+    ]
+   ]
+  },
+  {
+   "style": "function",
+   "tool_name": "spawn_agent",
+   "task_name": "line_pricing",
+   "agent_type": "default",
+   "fork_field": "fork_turns",
+   "fork_value": "none",
+   "agent_ids": [],
+   "args_model": "gpt-6-luna",
+   "args_effort": "low",
+   "matches_role": "swarm workers",
+   "output": "{\"task_name\":\"/root/line_pricing\"}",
+   "child_contexts": [
+    [
+     "gpt-6-luna",
+     "low"
+    ]
+   ]
+  }
+ ],
+ "lead_multi_agent_version": "v2",
+ "children": [
+  {
+   "id": "01a1eb6f-9e0a-7700-b487-fc177fcd48bf",
+   "agent_path": "/root/tax_rounding",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6-luna",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb6f-d0a9-7a10-adbc-52991ca2d3c8",
+   "agent_path": "/root/discount_stacking",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6-luna",
+     "low"
+    ]
+   ]
+  },
+  {
+   "id": "01a1eb6f-fb88-7090-b0b4-c9ad74558608",
+   "agent_path": "/root/line_pricing",
+   "agent_role": "default",
+   "multi_agent_version": "v2",
+   "turn_contexts": [
+    [
+     "gpt-6-luna",
+     "low"
+    ]
+   ]
+  }
+ ],
+ "spawn_fired": true,
+ "problems": [],
+ "verdict": "PASS"
+}
