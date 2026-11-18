@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # usage: config-forms.sh > results/config-forms.txt
-# Shows what `codex features enable|disable multi_agent_v2` does to each form of the setting, and which second key Codex rejects.
 set -uo pipefail
 home=$(mktemp -d)
 trap 'rm -rf "$home"' EXIT
@@ -25,3 +24,7 @@ try "enable on a file with [features] and no multi_agent_v2" '[features]\nmulti_
 try "second key: [features] multi_agent_v2 = true beside the table" '[features.multi_agent_v2]\nenabled = false\n\n[features]\nmulti_agent_v2 = true\n' codex features list
 try "second key: [features] multi_agent_v2 = true beside a top-level dotted key" 'features.multi_agent_v2 = false\n\n[features]\nmulti_agent_v2 = true\n' codex features list
 try "second [features] table" '[features]\nmulti_agent = true\n\n[features]\nmulti_agent_v2 = true\n' codex features list
+try "enable on a file whose only feature key is a dotted features.multi_agent = false" 'features.multi_agent = false\n' codex features enable multi_agent_v2
+try "second form: a [features] table after the dotted key, with no duplicate key" 'features.multi_agent = false\n\n[features]\nmulti_agent_v2 = true\n' codex features list
+try "dotted features.multi_agent_v2 = true beside the dotted key, before any table" 'features.multi_agent = false\nfeatures.multi_agent_v2 = true\n\n[agents]\nenabled = false\n' codex features list
+try "dotted features.multi_agent_v2 = true after an [agents] header lands in that table" 'features.multi_agent = false\n\n[agents]\nenabled = false\nfeatures.multi_agent_v2 = true\n' codex features list

@@ -1,0 +1,46 @@
+{
+  "cell": "dotted-edit-3",
+  "checks": {
+    "HOME and CODEX_HOME are private to the cell": true,
+    "every proposal keeps the starting keys": true,
+    "every proposal turns multi_agent_v2 on": true,
+    "every proposed file and command loads": true,
+    "never offers multi_agent = true": true,
+    "never read the host ~/.codex": true,
+    "offers multi_agent_v2": true,
+    "proposes an edit": true,
+    "proposes the file edit": true,
+    "ran codex --version": true,
+    "read the branch copy of setup-pstack": true,
+    "says it is optional": true,
+    "spawn_agent tool as the kind expects": true
+  },
+  "codex_version": "codex-cli 0.167.0",
+  "config_toml": "features.multi_agent = false\n",
+  "features": {
+    "multi_agent": "false",
+    "multi_agent_v2": "false"
+  },
+  "isolation": {
+    "CODEX_HOME": "home",
+    "HOME": "user-home"
+  },
+  "kind": "dotted-edit",
+  "offers": [
+    "Optional: manually add `features.multi_agent_v2 = true` to the user config, overriding the existing disable."
+  ],
+  "proposals": [
+    {
+      "form": "file",
+      "keeps_starting_keys": true,
+      "loads": true,
+      "multi_agent_v2": "true"
+    }
+  ],
+  "reply": "Codex 0.167.0; `spawn_agent` is callable through deferred `multi_agent_v1`, using the `fork_context` shape. `multi_agent_v2` is false, and the user config has `features.multi_agent = false`. No edit was made. The probe covered one v1 and one v2 model; this session\u2019s release is the probed release. Project config was absent.\n\n## OFFERS\n\nOptional: manually add `features.multi_agent_v2 = true` to the user config, overriding the existing disable.\n\n## PROPOSED\n\n```toml\nfeatures.multi_agent = false\nfeatures.multi_agent_v2 = true\n```",
+  "root_model": "gpt-5.6-luna",
+  "skill_blob": "df0d2d51a9c545120e9f6dd438d8ee0900715abe",
+  "skill_reads": [
+    "$CODEX_HOME/skills/setup-pstack/SKILL.md"
+  ]
+}

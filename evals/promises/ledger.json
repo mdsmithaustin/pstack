@@ -7565,15 +7565,6 @@
    ],
    "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) requires deslop's [Before each commit check](../../skills/deslop/SKILL.md#before-each-commit) before each push, and before every commit or amend on the intensive route."
   },
-  "4b84fcd1e65d": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "setup-checks-codex-multi-agent",
-   "sources": [
-    "port"
-   ],
-   "text": "Otherwise it reports what it saw and the causes it cannot rule out."
-  },
   "4b9ab4831e43": {
    "class": "promise",
    "file": "03-understand.md",
@@ -8614,6 +8605,15 @@
     "port"
    ],
    "text": "\"repro first\" and a checkable outcome are all the routing signal `/poteto-mode` needs."
+  },
+  "67f3dfb72e8f": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "setup-checks-codex-multi-agent",
+   "sources": [
+    "port"
+   ],
+   "text": "When there is nothing to offer, it reports what it saw and the causes it cannot rule out."
   },
   "67f4b1f21de2": {
    "class": "context",

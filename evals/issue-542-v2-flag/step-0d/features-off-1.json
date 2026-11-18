@@ -22,12 +22,13 @@
   },
   "kind": "features-off",
   "offers": [
-    "In `$CODEX_HOME/config.toml`, delete `enabled = false` under `[agents]`, or change it to `enabled = true`.",
-    "Alternatively, run `codex features enable multi_agent_v2` to add `multi_agent_v2 = true` under the existing `[features]` table. This leaves the agents line in place and overrides the user\u2019s explicit disable."
+    "Delete `enabled = false` under `[agents]` in `$CODEX_HOME/config.toml`, or set it to `true`.",
+    "Alternatively, run `codex features enable multi_agent_v2`. This leaves the agents line in place and overrides the user\u2019s explicit disable."
   ],
-  "reply": "Step 0d completed. No files were edited and no child was spawned.\n\n- `spawn_agent` is unavailable, including after searching deferred tools. Neither parameter shape (`task_name`/`fork_turns` or `fork_context`) is exposed.\n- Codex version: **0.167.0**. Feature rows: `multi_agent = false`, `multi_agent_v2 = false`.\n- `$CODEX_HOME/config.toml` contains `[agents] enabled = false` and `[features] multi_agent = false`. It has no `multi_agent_v2` setting. The project config is absent.\n- These are signals, not proof of the cause. Launch `-c` flags, the selected model, spawn depth, and unreadable config layers remain possible causes.\n- The skill\u2019s probe covered one v1 model and one v2 model on 0.167.0. It supports no edit offer for `multi_agent = false`.\n\n## OFFERS\n\n1. In `$CODEX_HOME/config.toml`, delete `enabled = false` under `[agents]`, or change it to `enabled = true`.\n2. Alternatively, run `codex features enable multi_agent_v2` to add `multi_agent_v2 = true` under the existing `[features]` table. This leaves the agents line in place and overrides the user\u2019s explicit disable.\n\nEither change applies from the next session.",
+  "proposals": [],
+  "reply": "Step 0d completed. No files were edited or children spawned.\n\n- Codex version: **0.167.0**.\n- `spawn_agent` is unavailable, including after searching deferred tools. Neither parameter shape (`task_name`/`fork_turns` or `fork_context`) is exposed.\n- Feature signals: `multi_agent = false`, `multi_agent_v2 = false`.\n- `$CODEX_HOME/config.toml` contains `[agents] enabled = false` and `[features] multi_agent = false`. Project `.codex/config.toml` is absent.\n\nThe skill\u2019s probe covered one v1 model and one v2 model on this same release. The agents setting is a possible cause; launch `-c` flags, the selected model, spawn depth, and unreadable config layers remain possible causes too. The probe does not support repairing `multi_agent = false` on this release.\n\n## OFFERS\n\n1. Delete `enabled = false` under `[agents]` in `$CODEX_HOME/config.toml`, or set it to `true`.\n2. Alternatively, run `codex features enable multi_agent_v2`. This leaves the agents line in place and overrides the user\u2019s explicit disable.\n\nEither change applies from the next session.",
   "root_model": "gpt-6.1-sol",
-  "skill_blob": "ec29702265e86107ef49e7ad6a5b97d20cd08b20",
+  "skill_blob": "df0d2d51a9c545120e9f6dd438d8ee0900715abe",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

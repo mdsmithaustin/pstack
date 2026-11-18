@@ -1,0 +1,45 @@
+{
+  "cell": "dotted-2",
+  "checks": {
+    "HOME and CODEX_HOME are private to the cell": true,
+    "every proposal keeps the starting keys": true,
+    "every proposal turns multi_agent_v2 on": true,
+    "every proposed file and command loads": true,
+    "never offers multi_agent = true": true,
+    "never read the host ~/.codex": true,
+    "offers multi_agent_v2": true,
+    "proposes an edit": true,
+    "ran codex --version": true,
+    "read the branch copy of setup-pstack": true,
+    "says it is optional": true,
+    "spawn_agent tool as the kind expects": true
+  },
+  "codex_version": "codex-cli 0.167.0",
+  "config_toml": "features.multi_agent = false\n",
+  "features": {
+    "multi_agent": "false",
+    "multi_agent_v2": "false"
+  },
+  "isolation": {
+    "CODEX_HOME": "home",
+    "HOME": "user-home"
+  },
+  "kind": "dotted",
+  "offers": [
+    "Optional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`."
+  ],
+  "proposals": [
+    {
+      "form": "command",
+      "keeps_starting_keys": true,
+      "loads": true,
+      "multi_agent_v2": "true"
+    }
+  ],
+  "reply": "`spawn_agent` is callable in this session via deferred `multi_agent_v1`; its shape is `fork_context`, not `task_name`/`fork_turns`.\n\nCodex is `0.167.0`. Feature signals: `multi_agent=false`, `multi_agent_v2=false`. User config has `features.multi_agent = false`; no readable project config was found. Spawning is confirmed, so no repair is required. The probe covered one v1 and one v2 model; this session exposes the v1 shape. No child was spawned.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`.\n\n## PROPOSED\n\n`codex features enable multi_agent_v2`",
+  "root_model": "gpt-5.6-luna",
+  "skill_blob": "df0d2d51a9c545120e9f6dd438d8ee0900715abe",
+  "skill_reads": [
+    "$CODEX_HOME/skills/setup-pstack/SKILL.md"
+  ]
+}

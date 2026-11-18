@@ -56,3 +56,35 @@ exit 1
 | [features]
 | multi_agent_v2 = true
 Error: failed to load bootstrap configuration
+
+== enable on a file whose only feature key is a dotted features.multi_agent = false
+exit 0
+| features.multi_agent = false
+| features.multi_agent_v2 = true
+row: true
+
+== second form: a [features] table after the dotted key, with no duplicate key
+exit 1
+| features.multi_agent = false
+| 
+| [features]
+| multi_agent_v2 = true
+Error: failed to load bootstrap configuration
+
+== dotted features.multi_agent_v2 = true beside the dotted key, before any table
+exit 0
+| features.multi_agent = false
+| features.multi_agent_v2 = true
+| 
+| [agents]
+| enabled = false
+row: true
+
+== dotted features.multi_agent_v2 = true after an [agents] header lands in that table
+exit 0
+| features.multi_agent = false
+| 
+| [agents]
+| enabled = false
+| features.multi_agent_v2 = true
+row: false
