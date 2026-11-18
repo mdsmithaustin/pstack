@@ -64,6 +64,7 @@
    "agent_type": "trail reviewer",
    "fork_field": "fork_turns",
    "fork_value": "none",
+   "agent_ids": [],
    "args_model": "gpt-6-astra",
    "args_effort": "medium",
    "matches_role": "trail reviewer",

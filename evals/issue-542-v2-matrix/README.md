@@ -12,7 +12,7 @@ Each spawn was checked on four things, read from the rollouts and never from the
 
 - `spawn_agent` fired.
 - The fork field was set explicitly. On v2 that is `fork_turns`, and a spawn that passes a model must use `"none"`. On v1 it is `fork_context`, and a spawn that passes a model must use `false`.
-- The child's own `turn_context` model and effort equal what the spawn asked for. A v2 child is matched to its call by task name. A v1 child has no task name, so it is matched by agent type and passes when it ran a model and effort that some spawn of its agent type asked for.
+- The child's own `turn_context` model and effort equal what the spawn asked for. A v2 child is matched to its call by task name. A v1 child has no task name, so it is matched by the `agent_id` that its call's output lists, and passes when it ran a model and effort that a spawn site of that call asked for, under the agent type that site asked for.
 - That model and effort are an arm of `setup-pstack/scripts/check-models-config.py --resolve --harness codex` for the row's roles, run against the fixture project. The row's roles include the roles of skills it calls, so `architect` also resolves the `how`, `why`, and `arena` roles.
 
 | Row | Lead model | Flag | Spawns | Fork field | Agent type | Resolved vs observed | Attempts | Result |
@@ -54,7 +54,7 @@ Two attempts did not reach their row and one failed it.
 - `models.md` copied to the project's `.agents/pstack-models.md`. It sets a different low or medium effort per role and spreads panels over `gpt-6.1-sol`, `gpt-6-luna`, `gpt-6.1-terra` and `gpt-6-astra`, so a child that ignores its spawn arguments shows up. The skill defaults would run most roles at max.
 - The lead defaults to `gpt-6.1-sol` high, with `approval_policy=never` and a `workspace-write` sandbox. `rows.json` holds each row's roles, models and prompts as of the last attempt. The prompts of `reflect` attempt 1 and `poteto-mode` attempt 1 survive only in the `lead_prompts` of their extracts.
 
-`reduce.py RUN_DIR --out EXTRACT.json` reads the rollouts under `RUN_DIR/codex-home/sessions` and writes the extract. Per spawn the extract keeps the style, tool name, task name, agent type, fork field and value, the model and effort asked for, the spawn's output, and the model and effort of the child's own `turn_context`. It also keeps `cli_versions`, the resolved roles, the lead's prompts, the child threads' ids, roles and contexts, and the verdict with its problems. It holds no spawn message, model answer or credential, and the spawn arguments themselves are not kept. Rollout paths are replaced with `<run>`. `regen.sh RUNS_DIR` rebuilds every extract, and `python3 -m unittest test_reduce` checks the reducer.
+`reduce.py RUN_DIR --out EXTRACT.json` reads the rollouts under `RUN_DIR/codex-home/sessions` and writes the extract. Per spawn the extract keeps the style, tool name, task name, agent type, fork field and value, the model and effort asked for, the spawn's output, the child ids that output lists, and the model and effort of the child's own `turn_context`. It also keeps `cli_versions`, the resolved roles, the lead's prompts, the child threads' ids, roles and contexts, and the verdict with its problems. It holds no spawn message, model answer or credential, and the spawn arguments themselves are not kept. Rollout paths are replaced with `<run>`. `regen.sh RUNS_DIR` rebuilds every extract, and `python3 -m unittest test_reduce` checks the reducer.
 
 ## Not covered
 
@@ -63,7 +63,7 @@ Two attempts did not reach their row and one failed it.
 - A `PASS` does not mean the skill's output was good, only that its spawns were well formed.
 - `gpt-5.6-luna` is the only v1 model tried, and only on `how`.
 - `gpt-6.1-sol` is the only v2 lead model tried. The other v2 models in Codex's model cache (`gpt-6.1-terra`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`) were not run as leads.
-- A v1 child is matched to its spawn by agent type, and the recorded v1 spawns carry no child id. Two v1 spawns of one agent type that ask for different models cannot be told apart, so a child passes if it ran either ask. A v1 spawn that started no child of its type fails.
+- A v1 child is matched to its spawn site by the `agent_id` lines in the output of the code-mode `exec` call that ran the site. Two sites in one `exec` call share that output, so a child cannot be attributed between them and passes if it ran either ask. A script that never prints the spawn results lists no ids, so its spawn fails as having no child rollout, and so does a child that no output lists.
 - The `trail-reviewer` row ran against the skills at `a29fb3e8`, before #549 changed how Codex trail-reviewer resolution reads the session model. The fixture config names the role, so `check-models-config.py --resolve` gives the same pair on current trunk, but no live run covers #549.
 - `automate-me`, `no-comments` and `recall` spawn agents and have no row ([#555](https://github.com/mdsmithaustin/pstack/issues/555)).
 - The `multi_agent_v2` flag was not tested on a v2 model with the flag off. That belongs to the step 0d test.

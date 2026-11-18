@@ -49,6 +49,11 @@
    "agent_type": "explorer",
    "fork_field": null,
    "fork_value": null,
+   "agent_ids": [
+    "01a1eb7f-d4ca-7420-af4f-3f418de9a4b0",
+    "01a1eb7f-d502-7552-a4f6-283518988978",
+    "01a1eb7f-d52e-72f2-85b0-6a3b9ae74525"
+   ],
    "args_model": null,
    "args_effort": null,
    "matches_role": null,
@@ -62,6 +67,9 @@
    "agent_type": "default",
    "fork_field": "fork_context",
    "fork_value": false,
+   "agent_ids": [
+    "01a1eb82-bc53-7c01-84ef-67110dce75f5"
+   ],
    "args_model": null,
    "args_effort": null,
    "matches_role": null,

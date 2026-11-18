@@ -49,6 +49,11 @@
    "agent_type": "explorer",
    "fork_field": "fork_context",
    "fork_value": false,
+   "agent_ids": [
+    "01a1eb86-b301-7683-bbe8-d3e8b93c9655",
+    "01a1eb86-b32f-7e93-9900-4a443f3fc524",
+    "01a1eb86-b362-7dd3-9882-95018f0f361e"
+   ],
    "args_model": "gpt-6.1-sol",
    "args_effort": "low",
    "matches_role": "how explorer",
@@ -62,6 +67,9 @@
    "agent_type": "default",
    "fork_field": "fork_context",
    "fork_value": false,
+   "agent_ids": [
+    "01a1eb87-bc83-7152-8f31-5ca18e3968f6"
+   ],
    "args_model": "gpt-6.1-sol",
    "args_effort": "medium",
    "matches_role": "how explainer",
