@@ -8,9 +8,11 @@ DIR is a fresh directory. The run builds the `shop` fixture and installs this ch
 """
 
 import argparse
+import contextlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tarfile
@@ -49,8 +51,6 @@ def prepare(root):
     fixture.build(project)
     install_skills(project / ".agents" / "skills")
     shutil.copy(HERE / "models.md", project / ".agents" / "pstack-models.md")
-    shutil.copy(Path.home() / ".codex" / "auth.json", root / "codex-home" / "auth.json")
-    (root / "codex-home" / "auth.json").chmod(0o600)
     script = project / ".agents" / "skills" / "pstack-harness" / "scripts" / "subagents.py"
     installed = subprocess.run([sys.executable, str(script), "install", "--harness", "codex", "--project", str(project)],
                                check=True, capture_output=True, text=True).stdout
@@ -58,6 +58,39 @@ def prepare(root):
     exclude = project / ".git" / "info" / "exclude"
     exclude.write_text(exclude.read_text() + ".agents/\n.codex/\n")
     return project
+
+
+def repository_roots():
+    roots = [REPO]
+    common = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                            capture_output=True, text=True)
+    if common.returncode == 0:
+        roots.append(Path(common.stdout.strip()).parent)
+    return roots
+
+
+def inside_repository(root):
+    real = root.resolve()
+    tops = repository_roots()
+    return any(ancestor.exists() and any(ancestor.samefile(top) for top in tops) for ancestor in (real, *real.parents))
+
+
+@contextlib.contextmanager
+def private_login(source, dest):
+    def stop(signum, frame):
+        raise SystemExit(128 + signum)
+
+    signals = (signal.SIGINT, signal.SIGTERM)
+    previous = {number: signal.signal(number, stop) for number in signals}
+    try:
+        with os.fdopen(os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb") as out:
+            os.fchmod(out.fileno(), 0o600)
+            out.write(source.read_bytes())
+        yield
+    finally:
+        dest.unlink(missing_ok=True)
+        for number, handler in previous.items():
+            signal.signal(number, handler)
 
 
 def env_for(root):
@@ -88,12 +121,29 @@ def thread_id(stream):
             return record["thread_id"]
 
 
-def main():
+def login_source():
+    return Path.home() / ".codex" / "auth.json"
+
+
+def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("row", choices=sorted(ROWS))
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--timeout", type=int, default=3000)
     args = parser.parse_args()
+    if inside_repository(args.root):
+        parser.error(f"--root {args.root} resolves inside the repository; choose a directory outside it")
+    if args.root.exists() and not args.root.is_dir():
+        parser.error(f"--root {args.root} exists and is not a directory")
+    if args.timeout < 1:
+        parser.error("--timeout must be at least 1 second")
+    if not login_source().is_file():
+        parser.error(f"no Codex login at {login_source()}")
+    return args
+
+
+def main():
+    args = parse_args()
     root = args.root.resolve()
     root.mkdir(parents=True, exist_ok=True)
     row = ROWS[args.row]
@@ -102,21 +152,22 @@ def main():
     env = env_for(root)
     session = None
     turns = []
-    for index, prompt in enumerate(row["turns"]):
-        stream, errors, last = (root / "transcripts" / f"turn-{index}.{ext}" for ext in ("jsonl", "err", "last-message.txt"))
-        resume = ["resume"] if index else []
-        tail = ["--json", "-o", str(last), "--", *([session] if index else []), prompt]
-        argv = ["codex", "exec", *resume, *flags(root, project, model, LEAD_EFFORT, row.get("v2_flag", True)), *tail]
-        with open(stream, "wb") as out, open(errors, "wb") as err:
-            try:
-                code = subprocess.run(argv, cwd=project, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
-                                      timeout=args.timeout).returncode
-            except subprocess.TimeoutExpired:
-                code = "timeout"
-        session = session or thread_id(stream)
-        turns.append({"index": index, "exit": code, "session": session})
-        if code != 0:
-            break
+    with private_login(login_source(), root / "codex-home" / "auth.json"):
+        for index, prompt in enumerate(row["turns"]):
+            stream, errors, last = (root / "transcripts" / f"turn-{index}.{ext}" for ext in ("jsonl", "err", "last-message.txt"))
+            resume = ["resume"] if index else []
+            tail = ["--json", "-o", str(last), "--", *([session] if index else []), prompt]
+            argv = ["codex", "exec", *resume, *flags(root, project, model, LEAD_EFFORT, row.get("v2_flag", True)), *tail]
+            with open(stream, "wb") as out, open(errors, "wb") as err:
+                try:
+                    code = subprocess.run(argv, cwd=project, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
+                                          timeout=args.timeout).returncode
+                except subprocess.TimeoutExpired:
+                    code = "timeout"
+            session = session or thread_id(stream)
+            turns.append({"index": index, "exit": code, "session": session})
+            if code != 0:
+                break
     (root / "run.json").write_text(json.dumps({"row": args.row, "model": model, "effort": LEAD_EFFORT, "v2_flag": row.get("v2_flag", True), "prompts": row["turns"], "skills_at":
         subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip(),
         "turns": turns}, indent=1) + "\n")

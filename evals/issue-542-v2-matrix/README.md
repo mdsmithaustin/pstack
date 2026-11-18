@@ -46,15 +46,15 @@ Two attempts did not reach their row and one failed it.
 
 ## How a row runs
 
-`run_row.py ROW --root DIR` builds everything under `DIR`, a fresh directory outside this repository.
+`run_row.py ROW --root DIR` builds everything under `DIR`, a fresh directory outside this repository. It refuses a `DIR` that resolves inside the repository or its main checkout, and checks its arguments before it creates anything.
 
-- A private `CODEX_HOME` and `HOME`. Only `auth.json` is copied from the real login. The user's `~/.codex/config.toml` and feature flags are never read or changed.
+- A private `CODEX_HOME` and `HOME`. Only `auth.json` is copied from the real login, with mode 0600 and only while codex runs. The driver removes it when the run ends, including on an error, SIGINT or SIGTERM. The user's `~/.codex/config.toml` and feature flags are never read or changed.
 - A throwaway `shop` repository from `fixture.py`, three commits whose messages hold the reasons that `why` asks about.
 - The skills from this checkout's `HEAD`, installed to `.agents/skills`, and the personas registered through `subagents.py install --harness codex`, which writes `.codex/agents`.
 - `models.md` copied to the project's `.agents/pstack-models.md`. It sets a different low or medium effort per role and spreads panels over `gpt-6.1-sol`, `gpt-6-luna`, `gpt-6.1-terra` and `gpt-6-astra`, so a child that ignores its spawn arguments shows up. The skill defaults would run most roles at max.
 - The lead defaults to `gpt-6.1-sol` high, with `approval_policy=never` and a `workspace-write` sandbox. `rows.json` holds each row's roles, models and prompts as of the last attempt. The prompts of `reflect` attempt 1 and `poteto-mode` attempt 1 survive only in the `lead_prompts` of their extracts.
 
-`reduce.py RUN_DIR --out EXTRACT.json` reads the rollouts under `RUN_DIR/codex-home/sessions` and writes the extract. Per spawn the extract keeps the style, tool name, task name, agent type, fork field and value, the model and effort asked for, the spawn's output, the child ids that output lists, and the model and effort of the child's own `turn_context`. It also keeps `cli_versions`, the resolved roles, the lead's prompts, the child threads' ids, roles and contexts, and the verdict with its problems. It holds no spawn message, model answer or credential, and the spawn arguments themselves are not kept. Rollout paths are replaced with `<run>`. `regen.sh RUNS_DIR` rebuilds every extract, and `python3 -m unittest test_reduce` checks the reducer.
+`reduce.py RUN_DIR --out EXTRACT.json` reads the rollouts under `RUN_DIR/codex-home/sessions` and writes the extract. Per spawn the extract keeps the style, tool name, task name, agent type, fork field and value, the model and effort asked for, the spawn's output, the child ids that output lists, and the model and effort of the child's own `turn_context`. It also keeps `cli_versions`, the resolved roles, the lead's prompts, the child threads' ids, roles and contexts, and the verdict with its problems. It holds no spawn message, model answer or credential, and the spawn arguments themselves are not kept. Rollout paths are replaced with `<run>`. `regen.sh RUNS_DIR` rebuilds every extract, and `python3 -m unittest test_reduce test_run_row` checks the reducer and the driver.
 
 ## Not covered
 
