@@ -535,7 +535,7 @@ class Resolve(ResolveRunner, unittest.TestCase):
         )
 
     def test_ultra_is_kept_on_the_models_that_take_it(self):
-        for model in ("gpt-6.1-sol", "gpt-6-sol", "gpt-6-astra"):
+        for model in ("gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-astra"):
             with self.subTest(model=model):
                 [arm] = cmc.resolve_role("feature", "codex", [Layer("user flat", {"feature": [(model, "ultra")]})])
                 self.assertEqual((arm.model, arm.effort, arm.notes), (model, "ultra", ()))
@@ -629,6 +629,13 @@ class CodexListedRelease(ResolveRunner, unittest.TestCase):
                 "role": "feature", "arm": 1, "model": "gpt-6.1-sol", "effort": "high", "source": "user flat",
                 "notes": ["gpt-6-sol runs as gpt-6.1-sol, the newest release this Codex lists with effort high"],
             },
+        )
+
+    def test_an_older_release_runs_as_the_listed_6_2_release(self):
+        arm = self.only("feature", "feature, refactoring: gpt-6.1-sol@high\n", catalog_json("gpt-6.2-sol", "gpt-6.1-sol"))
+        self.assertEqual(
+            (arm["model"], arm["effort"], arm["notes"]),
+            ("gpt-6.2-sol", "high", ["gpt-6.1-sol runs as gpt-6.2-sol, the newest release this Codex lists with effort high"]),
         )
 
     def test_shipped_default_follows_the_catalog(self):
@@ -929,6 +936,17 @@ class TrailReviewerStep(ReviewerRunner, unittest.TestCase):
             {
                 "role": "trail reviewer", "arm": 1, "model": "gpt-6-astra", "effort": "high", "source": "user ## codex",
                 "notes": ["trail reviewer matched work model gpt-6.1-sol; stepped up to gpt-6-astra (allowed by arena cross-judge pool)"], "step": "up",
+            },
+        )
+
+    def test_codex_steps_up_within_the_6_2_release(self):
+        catalog = catalog_json("gpt-6.2-sol", "gpt-6.2-astra", "gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna")
+        user = "## codex\ntrail reviewer: gpt-6.2-sol@xhigh\narena cross-judge pool: gpt-6.2-astra@high, gpt-6.2-sol@xhigh\n"
+        self.assertEqual(
+            self.reviewer("codex", "gpt-6.2-sol@medium", user=user, codex_catalog=catalog),
+            {
+                "role": "trail reviewer", "arm": 1, "model": "gpt-6.2-astra", "effort": "high", "source": "user ## codex",
+                "notes": ["trail reviewer matched work model gpt-6.2-sol; stepped up to gpt-6.2-astra (allowed by arena cross-judge pool)"], "step": "up",
             },
         )
 

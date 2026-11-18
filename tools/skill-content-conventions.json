@@ -4,7 +4,7 @@
     "pstack/skills/": "use the installed or verified-source root instead of the upstream monorepo path",
     "named-role contract": "say persona contract; a role is only a models-config role",
     "native role": "say native persona or native agent; a role is only a models-config role",
-    "gpt-5.6": "name gpt-6 models; the resolver runs gpt-6.1 where Codex lists it",
+    "gpt-5.6": "Use GPT-6 model slugs. See rule 6 in skills/setup-pstack/references/models-config.md for how the resolver chooses the newest listed release.",
     "environment: \"cloud\"": "workers are local; spawn a background agent in its own worktree",
     "cloud_base_branch": "give the worker a worktree at the branch's SHA and name it in the brief",
     "cloud-sleeper": "arm the audit tick through the harness loop facility",
