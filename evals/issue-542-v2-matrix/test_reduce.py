@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import tempfile
@@ -176,6 +177,27 @@ class RunDirectory(unittest.TestCase):
                 else:
                     self.assertEqual(len(extract["problems"]), 1)
                     self.assertIn("explain: child ran", extract["problems"][0])
+
+    def test_roles_resolve_against_the_catalog_of_the_run_and_not_the_host(self):
+        def catalog(home, slug):
+            home.mkdir(parents=True, exist_ok=True)
+            levels = [{"effort": effort} for effort in ("low", "medium", "high")]
+            (home / "models_cache.json").write_text(json.dumps({"models": [{"slug": slug, "supported_reasoning_levels": levels}]}))
+
+        arguments = dict(task_name="explain", agent_type="default", fork_turns="none",
+                         model="gpt-6.1-sol", reasoning_effort="medium", message="Explain totals")
+        call = {"type": "function_call", "name": "spawn_agent", "call_id": "spawn-1", "arguments": json.dumps(arguments)}
+        for run_lists, host_lists, expected_model in [(None, "gpt-6.2-sol", "gpt-6.1-sol"), ("gpt-6.2-sol", None, "gpt-6.2-sol")]:
+            with self.subTest(run_lists=run_lists, host_lists=host_lists), tempfile.TemporaryDirectory() as tmp:
+                root, host = Path(tmp) / "run", Path(tmp) / "host"
+                write_run(root, [("lead", None, "high", [call]), ("explain", "lead", "medium", [])])
+                for home, slug in ((root / "codex-home", run_lists), (host, host_lists)):
+                    if slug:
+                        catalog(home, slug)
+                with patch.dict(os.environ, {"CODEX_HOME": str(host)}):
+                    extract = reduce_run(root)
+                self.assertEqual({arm["model"] for arm in extract["resolved"]}, {expected_model})
+                self.assertEqual(extract["verdict"], "PASS" if expected_model == "gpt-6.1-sol" else "FAIL")
 
     def test_v1_children_are_attributed_to_their_call_site_by_the_ids_in_its_output(self):
         for third, expected in [("low", "PASS"), ("medium", "FAIL")]:

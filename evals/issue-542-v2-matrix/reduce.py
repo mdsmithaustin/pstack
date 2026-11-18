@@ -8,6 +8,7 @@ ROOT is a `run_row.py` run directory. See README.md for verdict criteria and v1 
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -102,13 +103,13 @@ def thread(path, root):
             "turn_contexts": sorted({c for c in contexts}, key=str), "prompts": scrub(prompts, root), "calls": scrub(calls, root)}
 
 
-def resolve(project, roles, work_model, home):
-    argv = [sys.executable, str(RESOLVER), "--resolve", "--harness", "codex", "--project", str(project),
-            "--user-file", str(home / ".agents" / "pstack-models.md")]
+def resolve(root, roles, work_model):
+    argv = [sys.executable, str(RESOLVER), "--resolve", "--harness", "codex", "--project", str(root / "project"),
+            "--user-file", str(root / "home" / ".agents" / "pstack-models.md")]
     if work_model:
         argv += ["--work-model", work_model]
     argv += roles
-    done = subprocess.run(argv, capture_output=True, text=True)
+    done = subprocess.run(argv, capture_output=True, text=True, env={**os.environ, "CODEX_HOME": str(root / "codex-home")})
     if done.returncode:
         raise SystemExit(f"resolver failed: {done.stderr}")
     return [json.loads(line) for line in done.stdout.splitlines() if line.startswith("{")]
@@ -192,7 +193,7 @@ def main():
     threads = [thread(p, root) for p in paths]
     leads = [t for t in threads if not t["parent"]]
     children = [t for t in threads if t["parent"]]
-    resolved = resolve(root / "project", row["roles"], row.get("work_model"), root / "home")
+    resolved = resolve(root, row["roles"], row.get("work_model"))
     lead = {"id": leads[0]["id"], "turn_contexts": leads[0]["turn_contexts"], "calls": []}
     for t in leads:
         lead["calls"] += t["calls"]
