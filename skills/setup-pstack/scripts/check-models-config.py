@@ -89,6 +89,8 @@ CLIS: dict[str, Cli] = {
 }
 
 MODEL_EFFORTS: dict[str, frozenset[str]] = {
+    "gpt-6.2-sol": ALLOWED_EFFORTS - {"none"},
+    "gpt-6.2-astra": ALLOWED_EFFORTS - {"none"},
     "gpt-6.1-sol": ALLOWED_EFFORTS - {"none"},
     "gpt-6.1-terra": ALLOWED_EFFORTS - {"none"},
     "gpt-6-astra": ALLOWED_EFFORTS - {"none"},
@@ -105,7 +107,7 @@ XHIGH_FLOOR_ROLES = {
     "reflect synthesizer", "arena cross-judge pool", "architect runners",
     "trail reviewer",
 }
-GPT6_RELEASES_NEWEST_FIRST = ("gpt-6.1-", "gpt-6-")
+GPT6_RELEASES_NEWEST_FIRST = ("gpt-6.2-", "gpt-6.1-", "gpt-6-")
 TIER_FAMILIES = (
     ("fable", "opus", "sonnet", "haiku"),
     ("astra", "sol", "terra", "luna"),
