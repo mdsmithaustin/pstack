@@ -74,6 +74,8 @@ The edit rules below rest on one Codex 0.167.0 probe. It ran one model whose cat
 - **The config signals.** Run `codex --version` and `codex features list` from the project root, in the environment the user starts Codex in, including any wrapper's `CODEX_HOME`, and report the version and the `multi_agent` and `multi_agent_v2` rows. For the edit rules below, treat an unknown version as 0.167.0. Then read `[agents]` `enabled` from `config.toml` under `$CODEX_HOME` or `~/.codex/`, and from the project's `.codex/config.toml` when the project is trusted, because `codex features list` does not report it. Report these as signals, not as a verdict on spawning.
 - **When `codex` is not on PATH**, as when this skill runs from another CLI or from an app-bundled Codex, report the config signals as unverified. A live session's answer still stands.
 
+For the edit rules below, on a confirmed release before 0.167.0, treat a `multi_agent_v2` row absent from a successful `codex features list` as `false`, not as an unverified row. This applies to both the agents-line repair and the older feature-key repair. A failed listing remains unverified.
+
 A key in a file you read is a possible cause, not a proven one, because `multi_agent_v2` or a layer you cannot read can override it. Offer an edit only when a Codex session confirms `spawn_agent` is missing, and only for a possible cause a config file shows. The one exception is the optional switch below, which repairs nothing. The agents-line repair applies on every release:
 
 - `[agents]` `enabled = false` in a file you read, while the `multi_agent_v2` row reads `false` and no readable file of higher precedence sets it `true` (a trusted project's file beats the user's): offer to delete that line or set it to `true`, first.
