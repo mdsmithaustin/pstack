@@ -2,6 +2,7 @@
   "cell": "dotted-3",
   "checks": {
     "HOME and CODEX_HOME are private to the cell": true,
+    "does not claim an explicit disable": true,
     "every proposal keeps the starting keys": true,
     "every proposal turns multi_agent_v2 on": true,
     "every proposed file and command loads": true,
@@ -36,9 +37,9 @@
       "multi_agent_v2": "true"
     }
   ],
-  "reply": "Step 0d completed. `spawn_agent` is callable via deferred `multi_agent_v1`, using the `fork_context` shape. Codex is 0.167.0; `multi_agent=false` and `multi_agent_v2=false`. No project config or `[agents]` setting was found. The probe covered one v1 and one v2 model; this session exposes the v1 shape.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2` to make `spawn_agent` directly visible.\n\n## PROPOSED\n\n```sh\ncodex features enable multi_agent_v2\n```",
+  "reply": "Step 0d completed. `spawn_agent` is callable via deferred `multi_agent_v1`, with the `fork_context` shape. Codex is 0.167.0; `multi_agent=false` and `multi_agent_v2=false`. No `[agents] enabled=false` setting was found. The probe covered one v1 and one v2 model, so spawning is confirmed for this session; config remains only signals.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2` to make `spawn_agent` directly visible.\n\n## PROPOSED\n\n```sh\ncodex features enable multi_agent_v2\n```",
   "root_model": "gpt-5.6-luna",
-  "skill_blob": "19ccd862d38d3b06f763bdfc13b93dab7c8347ce",
+  "skill_blob": "a73c3d54b9a282a5ddbc540a83bb98e6bb5f2fc7",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

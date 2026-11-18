@@ -2,6 +2,7 @@
   "cell": "dotted-2",
   "checks": {
     "HOME and CODEX_HOME are private to the cell": true,
+    "does not claim an explicit disable": true,
     "every proposal keeps the starting keys": true,
     "every proposal turns multi_agent_v2 on": true,
     "every proposed file and command loads": true,
@@ -26,7 +27,7 @@
   },
   "kind": "dotted",
   "offers": [
-    "Optional: enable `multi_agent_v2`, which would make `spawn_agent` directly visible."
+    "Optional: enable `multi_agent_v2`."
   ],
   "proposals": [
     {
@@ -36,9 +37,9 @@
       "multi_agent_v2": "true"
     }
   ],
-  "reply": "Step 0d complete.\n\n- `spawn_agent` is callable via deferred `multi_agent_v1`; its shape is `fork_context` (v1), not `task_name`/`fork_turns` (v2).\n- Codex version: `0.167.0`.\n- `multi_agent`: false; `multi_agent_v2`: false.\n- No `[agents] enabled = false` setting found.\n- Probe basis: one v1 and one v2 model on Codex 0.167.0. The live session confirms v1 availability; v2 remains optional.\n- No files were edited and no subagent was spawned.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2`, which would make `spawn_agent` directly visible.\n\n## PROPOSED\n\n```sh\ncodex features enable multi_agent_v2\n```",
+  "reply": "`spawn_agent` is callable via deferred `multi_agent_v1`, with `fork_context` parameters. Codex is `0.167.0`; `multi_agent=false`, `multi_agent_v2=false`; no project config or `[agents] enabled` setting was found. Spawning is confirmed, so no repair is required. The probe covered one v1 and one v2 model; this session exposes the v1 shape.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2`.\n\n## PROPOSED\n\n```sh\ncodex features enable multi_agent_v2\n```",
   "root_model": "gpt-5.6-luna",
-  "skill_blob": "19ccd862d38d3b06f763bdfc13b93dab7c8347ce",
+  "skill_blob": "a73c3d54b9a282a5ddbc540a83bb98e6bb5f2fc7",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

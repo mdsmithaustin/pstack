@@ -25,9 +25,9 @@
     "Optional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`."
   ],
   "proposals": [],
-  "reply": "Step 0d completed; no files were edited and no agent was spawned.\n\n- `spawn_agent` is callable via deferred `multi_agent_v1`; its parameters use `fork_context`.\n- Codex version: `0.167.0`.\n- Features: `multi_agent=true`, `multi_agent_v2=false`.\n- User config: `$CODEX_HOME/config.toml` exists but contains no relevant settings.\n- Project config: none found.\n- Probe context: covered one v1 and one v2 model; this session exposes the `fork_context` shape.\n\n## OFFERS\n\n1. Optional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`.",
+  "reply": "Step 0d completed.\n\n- `spawn_agent` is callable via deferred `multi_agent_v1`; its shape is `fork_context`.\n- Codex version: `0.167.0` (the probe version; not later).\n- `multi_agent`: stable, enabled.\n- `multi_agent_v2`: stable, disabled.\n- No readable `[agents] enabled = false` setting was found.\n- No existing `multi_agent_v2` setting was found.\n- User config checked: `$CODEX_HOME/config.toml`.\n- Project `.codex/config.toml` was absent.\n\nSpawning is confirmed, so no repair is needed. The skill permits one optional switch offer.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`.",
   "root_model": "gpt-5.6-luna",
-  "skill_blob": "19ccd862d38d3b06f763bdfc13b93dab7c8347ce",
+  "skill_blob": "a73c3d54b9a282a5ddbc540a83bb98e6bb5f2fc7",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

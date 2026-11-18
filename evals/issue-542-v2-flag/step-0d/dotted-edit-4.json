@@ -1,10 +1,12 @@
 {
-  "cell": "dotted-edit-3",
+  "cell": "dotted-edit-4",
   "checks": {
     "HOME and CODEX_HOME are private to the cell": true,
+    "does not claim an explicit disable": true,
     "every proposal keeps the starting keys": true,
     "every proposal turns multi_agent_v2 on": true,
     "every proposed file and command loads": true,
+    "names the config file path": true,
     "never offers multi_agent = true": true,
     "never read the host ~/.codex": true,
     "offers multi_agent_v2": true,
@@ -27,7 +29,7 @@
   },
   "kind": "dotted-edit",
   "offers": [
-    "Optional: override `multi_agent_v2` by hand in the user config, adding `features.multi_agent_v2 = true`."
+    "Optional: enable `multi_agent_v2` by hand in `$CODEX_HOME/config.toml`."
   ],
   "proposals": [
     {
@@ -37,9 +39,9 @@
       "multi_agent_v2": "true"
     }
   ],
-  "reply": "Step 0d completed. No files were edited and no subagent was spawned.\n\n- `spawn_agent` is callable via deferred `multi_agent_v1`; this session exposes the `fork_context` shape.\n- Codex version: `0.167.0`.\n- `multi_agent`: false.\n- `multi_agent_v2`: false.\n- User config contains `features.multi_agent = false`; no project config was present.\n- The probe covered one v1 and one v2 model. Since this session can spawn, no repair is required. The optional v2 switch would make `spawn_agent` directly visible.\n- The configured command is assumed unavailable, so the offer is a hand edit.\n\n## OFFERS\n\nOptional: override `multi_agent_v2` by hand in the user config, adding `features.multi_agent_v2 = true`.\n\n## PROPOSED\n\n```toml\nfeatures.multi_agent = false\nfeatures.multi_agent_v2 = true\n```",
+  "reply": "## OFFERS\n\nOptional: enable `multi_agent_v2` by hand in `$CODEX_HOME/config.toml`.\n\n## PROPOSED\n\n```toml\nfeatures.multi_agent = false\nfeatures.multi_agent_v2 = true\n```\n\n`spawn_agent` is callable through the deferred `multi_agent_v1` namespace, with the v1 shape (`fork_context`). Codex is `0.167.0`; both `multi_agent` and `multi_agent_v2` are currently false. The config signal is not a spawning verdict. The probe covered one v1 and one v2 model.",
   "root_model": "gpt-5.6-luna",
-  "skill_blob": "19ccd862d38d3b06f763bdfc13b93dab7c8347ce",
+  "skill_blob": "a73c3d54b9a282a5ddbc540a83bb98e6bb5f2fc7",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

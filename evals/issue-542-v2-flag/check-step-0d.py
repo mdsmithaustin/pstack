@@ -83,7 +83,7 @@ def main(out, cell, kind):
             call = payload.get("arguments", "") + payload.get("input", "")
             calls_text += call
             reads += re.findall(r"[^\s\"']*setup-pstack/SKILL\.md", call)
-            ran_version = ran_version or "codex --version" in call
+            ran_version = ran_version or bool(re.search(r"codex\W{1,12}--version", call))
     skill = cell_dir / "home/skills/setup-pstack/SKILL.md"
     private_env = dict(line.split("=", 1) for line in (cell_dir / "env.txt").read_text().splitlines())
     real_codex = str(Path.home().resolve() / ".codex")

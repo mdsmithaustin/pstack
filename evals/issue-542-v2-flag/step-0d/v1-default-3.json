@@ -25,9 +25,9 @@
     "Optional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`."
   ],
   "proposals": [],
-  "reply": "Step 0d completed.\n\n- `spawn_agent` is callable via the deferred `multi_agent_v1` namespace.\n- This session exposes the v1 shape: `task_name` with `fork_turns` is not shown; the available tool uses `fork_context`.\n- Codex version: `0.167.0`.\n- `multi_agent`: enabled.\n- `multi_agent_v2`: disabled.\n- No readable `[agents] enabled` setting or project config was found.\n- The probe covered one v1 model and one v2 model; this session\u2019s tool is v1-shaped. Spawn availability is confirmed, so no repair is required.\n- No files were edited and no child agent was spawned.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`.",
+  "reply": "Step 0d complete. No files were edited and no child agent was spawned.\n\n- `spawn_agent` is callable in this session via the deferred `multi_agent_v1` namespace.\n- Its parameters show the v1 shape: `fork_context`, not `task_name`/`fork_turns`.\n- Codex version: `0.167.0`.\n- Features: `multi_agent = true`; `multi_agent_v2 = false`.\n- Readable config: `$CODEX_HOME/config.toml`; it contains no relevant `[agents]` or feature settings.\n- No project `.codex/config.toml` was present.\n- Spawning is confirmed for this session. The config signals are not a verdict.\n- The referenced probe covered one v1 model and one v2 model; this session exposes the v1 shape on version 0.167.0.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`.",
   "root_model": "gpt-5.6-luna",
-  "skill_blob": "19ccd862d38d3b06f763bdfc13b93dab7c8347ce",
+  "skill_blob": "a73c3d54b9a282a5ddbc540a83bb98e6bb5f2fc7",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

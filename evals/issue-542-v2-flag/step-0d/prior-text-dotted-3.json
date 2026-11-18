@@ -2,6 +2,7 @@
   "cell": "prior-dotted-3",
   "checks": {
     "HOME and CODEX_HOME are private to the cell": true,
+    "does not claim an explicit disable": true,
     "every proposal keeps the starting keys": true,
     "every proposal turns multi_agent_v2 on": true,
     "every proposed file and command loads": true,

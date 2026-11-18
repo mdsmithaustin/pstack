@@ -2,6 +2,7 @@
   "cell": "dotted-1",
   "checks": {
     "HOME and CODEX_HOME are private to the cell": true,
+    "does not claim an explicit disable": true,
     "every proposal keeps the starting keys": true,
     "every proposal turns multi_agent_v2 on": true,
     "every proposed file and command loads": true,
@@ -26,9 +27,15 @@
   },
   "kind": "dotted",
   "offers": [
-    "Optional: enable `multi_agent_v2` in the user config."
+    "Optional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`."
   ],
   "proposals": [
+    {
+      "form": "file",
+      "keeps_starting_keys": true,
+      "loads": true,
+      "multi_agent_v2": "true"
+    },
     {
       "form": "command",
       "keeps_starting_keys": true,
@@ -36,9 +43,9 @@
       "multi_agent_v2": "true"
     }
   ],
-  "reply": "Step 0d completed.\n\n- `spawn_agent` is callable via deferred `multi_agent_v1`; its shape is `fork_context` (v1), not `task_name`/`fork_turns`.\n- Codex version: `0.167.0`.\n- Feature signals: `multi_agent = false`, `multi_agent_v2 = false`.\n- User config contains `features.multi_agent = false`; no readable `[agents] enabled` setting or `multi_agent_v2` setting was found.\n- Spawning is confirmed for this session. The probe covered one v1 and one v2 model; this session exposes the v1 shape.\n- The optional `multi_agent_v2` switch can make `spawn_agent` directly visible. It is only an offer; no changes were made.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2` in the user config.\n\n## PROPOSED\n\n```sh\ncodex features enable multi_agent_v2\n```",
+  "reply": "Step 0d result:\n\n- `spawn_agent` is callable in this session via deferred `multi_agent_v1`; its shape uses `fork_context`.\n- Codex version: `0.167.0`.\n- `multi_agent`: false; `multi_agent_v2`: false.\n- User config: `$CODEX_HOME/config.toml`, containing `features.multi_agent = false`.\n- Project config: absent.\n- Spawning is confirmed. The probe covered one v1 and one v2 model; this session exposes the `fork_context` shape.\n- No repair is required. The optional `multi_agent_v2` switch may make `spawn_agent` directly visible.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`.\n\n## PROPOSED\n\n```toml\nfeatures.multi_agent = false\nfeatures.multi_agent_v2 = true\n```",
   "root_model": "gpt-5.6-luna",
-  "skill_blob": "19ccd862d38d3b06f763bdfc13b93dab7c8347ce",
+  "skill_blob": "a73c3d54b9a282a5ddbc540a83bb98e6bb5f2fc7",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

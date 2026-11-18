@@ -25,12 +25,12 @@
   },
   "kind": "v2-disabled",
   "offers": [
-    "Optional: override your explicit disable of `multi_agent_v2` by running `codex features enable multi_agent_v2`."
+    "Optional: override your explicit disable of `multi_agent_v2` with `codex features enable multi_agent_v2`."
   ],
   "proposals": [],
-  "reply": "Step 0d completed.\n\n- Codex version: `0.167.0`\n- `multi_agent`: on\n- `multi_agent_v2`: off\n- `spawn_agent`: callable via deferred `multi_agent_v1`; parameters use `fork_context`, not `task_name`/`fork_turns`.\n- `[agents] enabled`: not present in the readable config.\n- Readable config: `$CODEX_HOME/config.toml`, with an explicit `[features.multi_agent_v2] enabled = false`.\n- Spawning is confirmed for this session. The probe referenced by the skill covered one v1 and one v2 model; this session exposes the v1 shape.\n- No child was spawned.\n\n## OFFERS\n\nOptional: override your explicit disable of `multi_agent_v2` by running `codex features enable multi_agent_v2`.",
+  "reply": "Step 0d completed.\n\n- `spawn_agent` is callable through the deferred `multi_agent_v1` namespace.\n- This session exposes the `fork_context` shape, indicating v1-style spawning.\n- Codex version: `0.167.0`.\n- Features: `multi_agent=true`, `multi_agent_v2=false`.\n- User config contains `[features.multi_agent_v2] enabled = false`.\n- No `[agents] enabled = false` setting was found.\n- No project `.codex/config.toml` was found.\n- The referenced probe covered one v1 and one v2 model; this session exposes the v1 shape. The config is a possible cause, not proof that it prevents spawning.\n\n## OFFERS\n\nOptional: override your explicit disable of `multi_agent_v2` with `codex features enable multi_agent_v2`.",
   "root_model": "gpt-5.6-luna",
-  "skill_blob": "19ccd862d38d3b06f763bdfc13b93dab7c8347ce",
+  "skill_blob": "a73c3d54b9a282a5ddbc540a83bb98e6bb5f2fc7",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

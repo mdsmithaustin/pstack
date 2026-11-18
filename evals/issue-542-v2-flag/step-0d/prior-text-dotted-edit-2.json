@@ -2,9 +2,11 @@
   "cell": "prior-dotted-edit-2",
   "checks": {
     "HOME and CODEX_HOME are private to the cell": true,
+    "does not claim an explicit disable": true,
     "every proposal keeps the starting keys": true,
     "every proposal turns multi_agent_v2 on": true,
     "every proposed file and command loads": true,
+    "names the config file path": false,
     "never offers multi_agent = true": true,
     "never read the host ~/.codex": true,
     "offers multi_agent_v2": true,
