@@ -25,12 +25,12 @@
   },
   "kind": "v2-disabled",
   "offers": [
-    "Optional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`; this overrides the current explicit disable."
+    "Optional: override your explicit disable of `multi_agent_v2` with `codex features enable multi_agent_v2`."
   ],
   "proposals": [],
-  "reply": "Step 0d completed only. No files were edited and no child agent was spawned.\n\n- Codex version: `0.167.0`\n- `multi_agent`: on\n- `multi_agent_v2`: off\n- `[agents].enabled`: not present in the readable config\n- Project config: not present/readable\n- `spawn_agent`: callable via deferred `multi_agent_v1`; this session uses the `fork_context` shape.\n- The referenced probe covered one v1 and one v2 model. This session is on the probe\u2019s release.\n\nBecause spawning is already confirmed, no repair is required.\n\n## OFFERS\n\n1. Optional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`; this overrides the current explicit disable.",
+  "reply": "Step 0d completed without edits or spawning a child.\n\n- Codex: `0.167.0`\n- `spawn_agent`: callable via `multi_agent_v1`; this session exposes `fork_context` (not `task_name`/`fork_turns`).\n- Features: `multi_agent=true`; `multi_agent_v2=false`.\n- Config has an explicit user-level `multi_agent_v2` disable.\n- The referenced probe covered one v1 and one v2 model; this session\u2019s shape is v1-compatible. Project config was not present.\n\n### OFFERS\n\n1. Optional: override your explicit disable of `multi_agent_v2` with `codex features enable multi_agent_v2`.",
   "root_model": "gpt-5.6-luna",
-  "skill_blob": "df0d2d51a9c545120e9f6dd438d8ee0900715abe",
+  "skill_blob": "19ccd862d38d3b06f763bdfc13b93dab7c8347ce",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

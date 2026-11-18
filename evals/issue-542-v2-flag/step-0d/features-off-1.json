@@ -23,12 +23,12 @@
   "kind": "features-off",
   "offers": [
     "Delete `enabled = false` under `[agents]` in `$CODEX_HOME/config.toml`, or set it to `true`.",
-    "Alternatively, run `codex features enable multi_agent_v2`. This leaves the agents line in place and overrides the user\u2019s explicit disable."
+    "Alternatively, run `codex features enable multi_agent_v2`, leaving the agents line in place. This overrides your explicit agents disable; it restored spawning on both probed models."
   ],
   "proposals": [],
-  "reply": "Step 0d completed. No files were edited or children spawned.\n\n- Codex version: **0.167.0**.\n- `spawn_agent` is unavailable, including after searching deferred tools. Neither parameter shape (`task_name`/`fork_turns` or `fork_context`) is exposed.\n- Feature signals: `multi_agent = false`, `multi_agent_v2 = false`.\n- `$CODEX_HOME/config.toml` contains `[agents] enabled = false` and `[features] multi_agent = false`. Project `.codex/config.toml` is absent.\n\nThe skill\u2019s probe covered one v1 model and one v2 model on this same release. The agents setting is a possible cause; launch `-c` flags, the selected model, spawn depth, and unreadable config layers remain possible causes too. The probe does not support repairing `multi_agent = false` on this release.\n\n## OFFERS\n\n1. Delete `enabled = false` under `[agents]` in `$CODEX_HOME/config.toml`, or set it to `true`.\n2. Alternatively, run `codex features enable multi_agent_v2`. This leaves the agents line in place and overrides the user\u2019s explicit disable.\n\nEither change applies from the next session.",
+  "reply": "Step 0d completed. No files edited and no child spawned.\n\n- Codex: **0.167.0**.\n- `spawn_agent`: unavailable after searching available tools, including deferred tools. Neither parameter shape (`task_name`/`fork_turns` or `fork_context`) is exposed.\n- Feature signals: `multi_agent = false`, `multi_agent_v2 = false`.\n- `$CODEX_HOME/config.toml`: `[agents] enabled = false`; no `multi_agent_v2` setting.\n- Project `.codex/config.toml`: absent.\n\nThe skill\u2019s probe covered one v1 model and one v2 model on this same release. The agents setting is a possible cause; launch `-c` flags, the selected model, spawn depth, and unreadable config layers remain unresolved. The probe does not support offering a repair for `multi_agent = false` on this release.\n\n## OFFERS\n\n1. Delete `enabled = false` under `[agents]` in `$CODEX_HOME/config.toml`, or set it to `true`.\n2. Alternatively, run `codex features enable multi_agent_v2`, leaving the agents line in place. This overrides your explicit agents disable; it restored spawning on both probed models.\n\nEither change applies from the next session.",
   "root_model": "gpt-6.1-sol",
-  "skill_blob": "df0d2d51a9c545120e9f6dd438d8ee0900715abe",
+  "skill_blob": "19ccd862d38d3b06f763bdfc13b93dab7c8347ce",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

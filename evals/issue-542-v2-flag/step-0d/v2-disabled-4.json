@@ -1,5 +1,5 @@
 {
-  "cell": "v2-disabled-3",
+  "cell": "v2-disabled-4",
   "checks": {
     "HOME and CODEX_HOME are private to the cell": true,
     "adds no second multi_agent_v2 key": true,
@@ -25,12 +25,12 @@
   },
   "kind": "v2-disabled",
   "offers": [
-    "Optional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`; this overrides the current explicit disable and makes `spawn_agent` directly visible."
+    "Optional: override your explicit disable of `multi_agent_v2` by running `codex features enable multi_agent_v2`. This applies next session."
   ],
   "proposals": [],
-  "reply": "Step 0d completed. No files were edited and no subagent was spawned.\n\n- `spawn_agent` is callable through the deferred `multi_agent_v1` namespace.\n- This session exposes the `fork_context` shape.\n- Codex version: `0.167.0`.\n- `multi_agent`: enabled.\n- `multi_agent_v2`: disabled in the user config.\n- No project `.codex/config.toml` was present.\n- The referenced probe covered one v1 model and one v2 model; this session\u2019s version matches the probe release.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`; this overrides the current explicit disable and makes `spawn_agent` directly visible.",
+  "reply": "Step 0d completed.\n\n- `spawn_agent` is callable via deferred `multi_agent_v1`; its shape is `fork_context`.\n- Codex version: `0.167.0` (the probe version).\n- `multi_agent`: stable, enabled.\n- `multi_agent_v2`: stable, disabled.\n- `[agents] enabled` is not set.\n- No project config was found; user config has `[features.multi_agent_v2] enabled = false`.\n- Spawning is confirmed for this session. The probe covered one v1 and one v2 model.\n\n## OFFERS\n\n1. Optional: override your explicit disable of `multi_agent_v2` by running `codex features enable multi_agent_v2`. This applies next session.",
   "root_model": "gpt-5.6-luna",
-  "skill_blob": "df0d2d51a9c545120e9f6dd438d8ee0900715abe",
+  "skill_blob": "19ccd862d38d3b06f763bdfc13b93dab7c8347ce",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

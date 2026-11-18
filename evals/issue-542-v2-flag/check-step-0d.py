@@ -146,6 +146,6 @@ if __name__ == "__main__":
     cell_home = Path(sys.argv[1]).resolve() / sys.argv[2] / "home"
     for known in (str(cell_home), str(Path(sys.argv[1]).absolute() / sys.argv[2] / "home")):
         text = text.replace(known, "$CODEX_HOME")
-    text = re.sub(r"[^\s`\"']*/\.\.\./home\b", "$CODEX_HOME", text)
+    text = re.sub(r"(?:[^\s`\"']*/)?\.\.\./home\b", "$CODEX_HOME", text)
     print(text.replace(str(Path.home().resolve()), "$HOME").replace(str(Path.home()), "$HOME"))
     sys.exit(0 if all(record["checks"].values()) else 1)

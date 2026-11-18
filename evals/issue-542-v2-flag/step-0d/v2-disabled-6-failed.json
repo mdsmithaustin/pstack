@@ -1,0 +1,37 @@
+{
+  "cell": "v2-disabled-6",
+  "checks": {
+    "HOME and CODEX_HOME are private to the cell": true,
+    "adds no second multi_agent_v2 key": true,
+    "edits the existing table in place, or uses the command": true,
+    "never offers multi_agent = true": true,
+    "never read the host ~/.codex": true,
+    "only offer is multi_agent_v2": true,
+    "ran codex --version": true,
+    "read the branch copy of setup-pstack": true,
+    "says it is optional": true,
+    "says the offer overrides the disable": false,
+    "spawn_agent tool as the kind expects": true
+  },
+  "codex_version": "codex-cli 0.167.0",
+  "config_toml": "[features.multi_agent_v2]\nenabled = false\n",
+  "features": {
+    "multi_agent": "true",
+    "multi_agent_v2": "false"
+  },
+  "isolation": {
+    "CODEX_HOME": "home",
+    "HOME": "user-home"
+  },
+  "kind": "v2-disabled",
+  "offers": [
+    "Optional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`."
+  ],
+  "proposals": [],
+  "reply": "Step 0d completed; no files were edited and no agents were spawned.\n\n- `spawn_agent` is callable via the deferred `multi_agent_v1` namespace, with `fork_context`.\n- Codex version: `0.167.0`.\n- `multi_agent`: on.\n- `multi_agent_v2`: off.\n- No readable user or project config contained `[agents] enabled = false` or a `multi_agent_v2` setting.\n- The probe covered one v1 and one v2 model; this session exposes the v1-style shape. Spawning is confirmed for this session.\n- No config-based repair is indicated.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`.",
+  "root_model": "gpt-5.6-luna",
+  "skill_blob": "19ccd862d38d3b06f763bdfc13b93dab7c8347ce",
+  "skill_reads": [
+    "$CODEX_HOME/skills/setup-pstack/SKILL.md"
+  ]
+}

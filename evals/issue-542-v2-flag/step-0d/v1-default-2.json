@@ -22,12 +22,12 @@
   },
   "kind": "v1-default",
   "offers": [
-    "Optional: run `codex features enable multi_agent_v2` to make `spawn_agent` directly visible."
+    "Optional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`."
   ],
   "proposals": [],
-  "reply": "## Step 0d \u2014 Codex subagents\n\n- `spawn_agent` is callable through the deferred `multi_agent_v1` namespace.\n- Tool shape: `fork_context` (not `task_name`/`fork_turns`).\n- Codex version: `0.167.0`.\n- Feature signals: `multi_agent=true`; `multi_agent_v2=false`.\n- No readable `[agents] enabled` setting or `multi_agent_v2` setting was found in the active user config. No project `.codex/config.toml` was found.\n- The probe covered one v1 model and one v2 model. This session exposes the v1 shape; its exact model catalog entry is not available from the tool description.\n- No repair is needed because spawning is callable. No child was spawned.\n\n## OFFERS\n\nOptional: run `codex features enable multi_agent_v2` to make `spawn_agent` directly visible.",
+  "reply": "Step 0d completed; no files were edited and no subagent was spawned.\n\n- `spawn_agent` is callable through deferred `multi_agent_v1`; this session uses the `fork_context` shape.\n- Codex version: `0.167.0`.\n- Feature signals: `multi_agent=true`, `multi_agent_v2=false`.\n- No readable `[agents]` or `multi_agent_v2` setting was found in the user config; no project config was found.\n- The probe covered one v1 and one v2 model. This session matches the v1 shape, and the version is the probe\u2019s covered version.\n- Spawning is confirmed available. The only possible cause not ruled out for the v2 state is an unreadable higher-precedence config layer.\n\n## OFFERS\n\nOptional: enable `multi_agent_v2` with `codex features enable multi_agent_v2`.",
   "root_model": "gpt-5.6-luna",
-  "skill_blob": "df0d2d51a9c545120e9f6dd438d8ee0900715abe",
+  "skill_blob": "19ccd862d38d3b06f763bdfc13b93dab7c8347ce",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

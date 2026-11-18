@@ -22,9 +22,9 @@
   "kind": "features-off-flag",
   "offers": [],
   "proposals": [],
-  "reply": "Step 0d completed. No files were edited and no child was spawned.\n\n- Codex version: **0.167.0**.\n- `spawn_agent` is unavailable, including after searching deferred tools. Neither parameter shape (`task_name`/`fork_turns` or `fork_context`) is exposed.\n- Feature signals: `multi_agent = false`, `multi_agent_v2 = false`.\n- `$CODEX_HOME/config.toml` contains `[features] multi_agent = false`; no `[agents] enabled` or `multi_agent_v2` setting exists. Project `.codex/config.toml` is absent.\n\nThe skill\u2019s probe covered one v1 model and one v2 model on 0.167.0. Neither lost spawning from `multi_agent = false`, so that setting warrants no edit here. Possible causes remain a config key, launch `-c` flag, selected model, spawn depth, or an unreadable config layer.\n\n## OFFERS\n\nnone",
+  "reply": "Step 0d completed. No files edited or children spawned.\n\n- Codex version: **0.167.0**.\n- `spawn_agent` is unavailable, including after searching deferred tools. Neither parameter shape (`task_name`/`fork_turns` or `fork_context`) is exposed.\n- Feature signals: `multi_agent = false`, `multi_agent_v2 = false`.\n- `$CODEX_HOME/config.toml` contains `[features] multi_agent = false`; no `[agents] enabled` or `multi_agent_v2` setting. Project config is absent.\n\nThe skill\u2019s probe covered one v1 model and one v2 model. On this release, `multi_agent = false` alone warrants no edit offer. Possible causes remain a config key, launch `-c` flag, selected model, spawn depth, or an unreadable config layer.\n\n## OFFERS\n\nnone",
   "root_model": "gpt-6.1-sol",
-  "skill_blob": "df0d2d51a9c545120e9f6dd438d8ee0900715abe",
+  "skill_blob": "19ccd862d38d3b06f763bdfc13b93dab7c8347ce",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]
