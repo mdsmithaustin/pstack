@@ -210,10 +210,9 @@ class LoginCopy(Sandbox):
                 self.assert_stopped_clean(driver, pid, 128 + number)
 
     def test_it_is_gone_after_the_process_group_gets_a_hangup(self):
-        stubs = {"codex dies of it": self.stub("time.sleep(120)"),
-                 "codex ignores it": self.stub("time.sleep(120)", "signal.signal(signal.SIGHUP, signal.SIG_IGN)")}
-        for name, env in stubs.items():
-            with self.subTest(case=name):
+        for handler in (signal.SIG_DFL, signal.SIG_IGN):
+            with self.subTest(child_hangup_handler=handler.name):
+                env = self.stub("time.sleep(120)", f"signal.signal(signal.SIGHUP, signal.{handler.name})")
                 driver, pid = self.start_driver(env, start_new_session=True)
                 os.killpg(driver.pid, signal.SIGHUP)
                 self.assert_stopped_clean(driver, pid, 128 + signal.SIGHUP)

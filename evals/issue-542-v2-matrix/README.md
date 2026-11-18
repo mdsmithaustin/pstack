@@ -12,7 +12,7 @@ Each spawn was checked on four things, read from the rollouts and never from the
 
 - `spawn_agent` fired.
 - The fork field was set explicitly. On v2 that is `fork_turns`, and a spawn that passes a model must use `"none"`. On v1 it is `fork_context`, and a spawn that passes a model must use `false`.
-- The child's own `turn_context` model and effort equal what the spawn asked for. A v2 child is matched to its call by task name. A v1 child has no task name, so it is matched by the `agent_id` that its call's output lists, and passes when it ran a model and effort that a spawn site of that call asked for, under the agent type that site asked for.
+- The child's own `turn_context` model and effort match the spawn request. The reducer matches a v2 child to its call by task name. See the [v1 attribution limits](#not-covered) for the checks on v1 children.
 - That model and effort are an arm of `setup-pstack/scripts/check-models-config.py --resolve --harness codex` for the row's roles, run against the fixture project. The row's roles include the roles of skills it calls, so `architect` also resolves the `how`, `why`, and `arena` roles.
 
 | Row | Lead model | Flag | Spawns | Fork field | Agent type | Resolved vs observed | Attempts | Result |
@@ -46,9 +46,9 @@ Two attempts did not reach their row and one failed it.
 
 ## How a row runs
 
-`run_row.py ROW --root DIR` builds everything under `DIR`, a fresh directory outside this repository. It refuses a `DIR` that resolves inside the repository, its main checkout or any linked worktree of it, or that holds a `codex-home` symlink, and checks its arguments before it creates anything.
+Run `run_row.py ROW --root DIR` with a fresh output directory. Before creating anything, the driver rejects a root that resolves to or inside the main checkout or any linked worktree. It skips worktree entries whose directories are gone. It also rejects a root with a `codex-home` symlink. The driver prepares the run under `DIR`.
 
-- A private `CODEX_HOME` and `HOME`. Only `auth.json` is copied from the real login, with mode 0600 and only while codex runs. The driver replaces any file or link already at that path and removes the copy when the run ends, including on an error, SIGINT, SIGTERM, SIGHUP or SIGQUIT. The user's `~/.codex/config.toml` and feature flags are never read or changed.
+- A private `CODEX_HOME` and `HOME`. The driver copies the login from `~/.codex/auth.json` without using the user's Codex config or feature flags. It removes any existing file or link at `DIR/codex-home/auth.json`, then creates the copy exclusively with mode `0600` and without following links. The driver removes the copy and restores its signal handlers when the Codex session ends, including on error. On `SIGINT`, `SIGTERM`, `SIGHUP`, or `SIGQUIT`, the driver stops any running Codex child before removing the copy. This also applies when the process group receives `SIGHUP` and the child ignores it.
 - A throwaway `shop` repository from `fixture.py`, three commits whose messages hold the reasons that `why` asks about.
 - The skills from this checkout's `HEAD`, installed to `.agents/skills`, and the personas registered through `subagents.py install --harness codex`, which writes `.codex/agents`.
 - `models.md` copied to the project's `.agents/pstack-models.md`. It sets a different low or medium effort per role and spreads panels over `gpt-6.1-sol`, `gpt-6-luna`, `gpt-6.1-terra` and `gpt-6-astra`, so a child that ignores its spawn arguments shows up. The skill defaults would run most roles at max.
@@ -63,7 +63,7 @@ Two attempts did not reach their row and one failed it.
 - A `PASS` does not mean the skill's output was good, only that its spawns were well formed.
 - `gpt-5.6-luna` is the only v1 model tried, and only on `how`.
 - `gpt-6.1-sol` is the only v2 lead model tried. The other v2 models in Codex's model cache (`gpt-6.1-terra`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`) were not run as leads.
-- A v1 child is matched to its spawn site by the `agent_id` lines in the output of the code-mode `exec` call that ran the site. Two sites in one `exec` call share that output, so a child cannot be attributed between them and passes if it ran either ask. A script that never prints the spawn results lists no ids, so its spawn fails as having no child rollout, and so does a child that no output lists.
+- For v1, the reducer links a child to a code-mode `exec` call by the `agent_id` in the call's output. Sites in the same call share the output. The reducer checks the child's model and effort pair and its agent type against the sites in that call independently. It reports a missing rollout if the output lists no child IDs or lists an ID without a rollout. It also rejects a child whose ID appears in no spawn output.
 - The `trail-reviewer` row ran against the skills at `a29fb3e8`, before #549 changed how Codex trail-reviewer resolution reads the session model. The fixture config names the role, so `check-models-config.py --resolve` gives the same pair on current trunk, but no live run covers #549.
 - `automate-me`, `no-comments` and `recall` spawn agents and have no row ([#555](https://github.com/mdsmithaustin/pstack/issues/555)).
 - The `multi_agent_v2` flag was not tested on a v2 model with the flag off. That belongs to the step 0d test.
