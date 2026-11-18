@@ -94,11 +94,11 @@ class StepZeroDChecker(unittest.TestCase):
             self.assertNotIn(leaked, check.stdout)
         self.assertFalse((self.tmp / "real" / "out" / "cell" / "home" / "auth.json").exists())
 
-    def check_dotted(self, reply):
+    def check_dotted(self, reply, kind="dotted"):
         self.env["STUB_REPLY"] = reply
-        run = self.run_in_link("bash", str(SUITE / "run-step-0d.sh"), "out", "cell", "dotted")
+        run = self.run_in_link("bash", str(SUITE / "run-step-0d.sh"), "out", "cell", kind)
         self.assertEqual(run.returncode, 0, run.stderr)
-        check = self.run_in_link(sys.executable, "-I", str(SUITE / "check-step-0d.py"), "out", "cell", "dotted")
+        check = self.run_in_link(sys.executable, "-I", str(SUITE / "check-step-0d.py"), "out", "cell", kind)
         return check.returncode, json.loads(check.stdout)
 
     def test_dotted_proposal_beside_the_dotted_key_passes(self):
@@ -138,6 +138,37 @@ class StepZeroDChecker(unittest.TestCase):
         code, record = self.check_dotted("## OFFERS\n\n- Optional: turn on `multi_agent_v2`.\n")
         self.assertEqual(code, 1)
         self.assertFalse(record["checks"]["proposes an edit"])
+
+    def test_dotted_offers_reject_false_disable_claims(self):
+        for kind in ("dotted", "dotted-edit"):
+            for claim in ("override", "overrides", "overriding", "explicit disable"):
+                with self.subTest(kind=kind, claim=claim):
+                    reply = (
+                        f"## OFFERS\n\n- Optional: {claim} with `multi_agent_v2` in `$CODEX_HOME/config.toml`.\n\n"
+                        "## PROPOSED\n\n```toml\nfeatures.multi_agent = false\nfeatures.multi_agent_v2 = true\n```\n"
+                    )
+                    code, record = self.check_dotted(reply, kind)
+                    self.assertEqual(code, 1, record["checks"])
+
+    def test_dotted_edit_requires_config_path_in_offer(self):
+        for location, expected in (("user config", 1), ("config.toml", 1),
+                                   ("$CODEX_HOME/config.toml", 0), ("~/.codex/config.toml", 0)):
+            with self.subTest(location=location):
+                reply = (
+                    f"## OFFERS\n\n- Optional: add `features.multi_agent_v2 = true` in `{location}`.\n\n"
+                    "## PROPOSED\n\n```toml\nfeatures.multi_agent = false\nfeatures.multi_agent_v2 = true\n```\n"
+                )
+                code, record = self.check_dotted(reply, "dotted-edit")
+                self.assertEqual(code, expected, record["checks"])
+
+    def test_command_fenced_as_toml_is_graded_as_command(self):
+        reply = (
+            "## OFFERS\n\n- Optional: enable `multi_agent_v2`.\n\n"
+            "## PROPOSED\n\n```toml\ncodex features enable multi_agent_v2\n```\n"
+        )
+        code, record = self.check_dotted(reply)
+        self.assertEqual(code, 0, record["checks"])
+        self.assertEqual([p["form"] for p in record["proposals"]], ["command"])
 
     def test_unknown_kind_exits_before_copying_credentials(self):
         run = self.run_in_link("bash", str(SUITE / "run-step-0d.sh"), "out", "cell", "no-such-kind")

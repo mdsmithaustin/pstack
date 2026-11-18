@@ -87,6 +87,7 @@ Apply the agents-line repair on Codex 0.160.0 as well, because there the `[agent
 
 - With `multi_agent_v2` on, offer nothing for the agents key, because the key did not block spawning on either probed model when `multi_agent_v2` was on.
 - **The optional switch.** The session's `spawn_agent` is the deferred `multi_agent_v1` namespace, and the `multi_agent_v2` row reads `false`: the session confirmed the tool is callable, so nothing needs repair. Still list enabling `multi_agent_v2` among the offers and begin the offer with the word Optional, even when a file you read disables it, because the probed v1 model got the direct `spawn_agent` with `task_name` and `fork_turns` once the flag was on.
+  Describe an override only when a file you read sets `multi_agent_v2` itself to false, as a boolean, dotted key, or table with `enabled = false`, or sets `[agents] enabled = false`; `multi_agent = false` is a different key, so with only that key describe the offer simply as an optional switch to directly visible spawning.
   When a file you read disables `multi_agent_v2`, begin the offer with "Optional: override your explicit disable of `multi_agent_v2`", followed by the command or file edit from the rules below. Keep the warning and the action together in the offer, even if the report already explains the override. Say only that a session that searches the deferred namespace can spawn and that the switch makes `spawn_agent` directly visible, because the probe's first pass had the v1 model miss the deferred tool when its prompt did not say to search.
 - `multi_agent = false` in a file you read: offer nothing for it, because it removed `spawn_agent` from neither probed model. When no other rule applies, name the causes you cannot rule out instead of offering an edit.
 
@@ -96,7 +97,7 @@ Before 0.167.0, also apply the older feature-key rule below alongside the agents
 - Codex's source on 2026-11-12 marks `multi_agent` deprecated beside a stable `multi_agent_v2`, and the key still parses. So when that edit changes nothing, report that and offer no second edit.
 - When no file you read turns it off, the cause is a layer you cannot read, so name that instead of offering an edit.
 
-Write each offer to enable `multi_agent_v2` with the exact command, or the file and the edit, because a vague offer leaves the user to guess the form. The offer overrides any setting that disables it, so when a file you read holds one, say so in the offer.
+Write each offer to enable `multi_agent_v2` with the exact command, or the file and the edit, because a vague offer leaves the user to guess the form. Apply the override rule in the optional switch bullet above. Every hand-edit offer must name the path of the file read, using its actual `$CODEX_HOME` or `~/.codex/` location for user config, because a custom home changes which file the user must edit.
 
 - **Offer the command when the setting belongs in the user config**, meaning the setting sits in `config.toml` under `$CODEX_HOME` or `~/.codex/`, or no file holds one: `codex features enable multi_agent_v2`, because in the probe it edited each form of the setting in place and appended the key in the file's own form, and it never wrote a second key or table, as a hand edit can.
 - **Otherwise edit the file that holds the setting in its own form**, as when a trusted project's `.codex/config.toml` holds it, because the command writes the user config, and a project file of higher precedence would still win. Edit an existing setting in place, and never add a second `multi_agent_v2` key, because Codex 0.167.0 exits 1 on the duplicate:
@@ -104,11 +105,6 @@ Write each offer to enable `multi_agent_v2` with the exact command, or the file 
   - Change a top-level `features.multi_agent_v2 = false` to `true`.
   - Set `enabled = true` under a `[features.multi_agent_v2]` table.
 - **When a hand edit adds the key** because the file has no `multi_agent_v2` setting, add it the way the file already sets its features. Under an existing `[features]` table, add `multi_agent_v2 = true`, because a second `[features]` table makes Codex 0.167.0 exit 1 on a duplicate key. Beside dotted keys such as `features.multi_agent = false`, add `features.multi_agent_v2 = true` next to them and above any table header, because Codex 0.167.0 fails to load a `[features]` table after a dotted `features.` key, and a dotted key placed below another table's header joins that table and leaves the row `false`. Create a `[features]` table only when the file sets no `features` key in either form.
-
-```toml
-[features]
-multi_agent_v2 = true
-```
 
 Edit a file only after the user says yes, and keep every other key. The change applies from the next session. Without a session to confirm, report the signals and any possible causes, say spawning is unverified, and offer no edit.
 

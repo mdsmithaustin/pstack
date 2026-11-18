@@ -64,7 +64,8 @@ def grade(form, config_text, start, command=None):
 
 def proposals(start_text, offers, proposed_text):
     start = tomllib.loads(start_text)
-    graded = [grade("file", block, start) for block in re.findall(r"```(?:toml)?\n(.*?)```", proposed_text, flags=re.S)]
+    graded = [grade("file", block, start) for block in re.findall(r"```(?:toml)?\n(.*?)```", proposed_text, flags=re.S)
+              if block.strip() != ENABLE]
     if ENABLE in offers + proposed_text:
         graded.append(grade("command", start_text, start, ENABLE))
     return graded
@@ -118,12 +119,14 @@ def main(out, cell, kind):
         checks["says it is optional"] = bool(re.search(r"optional|not (a )?repair|nothing (needs|to) repair|no (config )?repair (is )?(needed|required)|repairs nothing", reply, re.I))
     graded = []
     if dotted:
+        checks["does not claim an explicit disable"] = not re.search(r"\b(?:overrides?|overriding|explicit\s+disable)\b", offers, re.I)
         graded = proposals((cell_dir / "config.toml").read_text(), offers, proposed_text)
         checks["proposes an edit"] = bool(graded)
         checks["every proposed file and command loads"] = all(g["loads"] for g in graded)
         checks["every proposal turns multi_agent_v2 on"] = all(g["multi_agent_v2"] == "true" for g in graded)
         checks["every proposal keeps the starting keys"] = all(g["keeps_starting_keys"] for g in graded)
     if kind == "dotted-edit":
+        checks["names the config file path"] = bool(re.search(r"[^\s`\"']+/config\.toml\b", offers))
         checks["proposes the file edit"] = any(g["form"] == "file" for g in graded)
     if kind == "v2-disabled":
         offer = " ".join(items)
