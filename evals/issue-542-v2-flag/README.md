@@ -41,7 +41,7 @@ Every cell that had a tool spawned a child on the model the root ran on at effor
 | `agents-off` | `gpt-6.1-sol` (v2) | `[agents] enabled = false` | delete the line first, then name `multi_agent_v2` as the alternative that overrides the disable | 2 of 2 runs |
 | `features-off` | `gpt-6.1-sol` (v2) | `[features] multi_agent = false` and `[agents] enabled = false` | the same two offers, and nothing for `multi_agent = false` | 1 of 1 run |
 | `features-off-flag` | `gpt-6.1-sol` (v2) | `[features] multi_agent = false`, and `-c agents.enabled=false` at launch, which no file shows | no offer: the only key a file shows is inert, so name the unreadable cause | 2 of 2 runs offered none |
-| `v1-default` | `gpt-5.6-luna` (v1) | default config | the deferred `multi_agent_v1` tool counts as callable, and `multi_agent_v2` is an optional switch to the direct tool | 3 of 3 runs offered only that |
+| `v1-default` | `gpt-5.6-luna` (v1) | default config | the deferred `multi_agent_v1` tool counts as callable, and `multi_agent_v2` is an optional switch to the direct tool | 5 of 5 runs offered only that |
 
 `main-text-features-off-flag.json` and `main-text-v1-default.json` run the same configs with step 0d from `origin/main` at `a29fb3e8` (`PSTACK_REPO` pointing at an export of that commit). The first offers `multi_agent = true`. The second offers nothing and never runs `codex --version`. Both fail the checker, so the scenarios tell the old text from the new one.
 
@@ -51,7 +51,7 @@ evals/issue-542-v2-flag/run-step-0d.sh "$out" v1-default-1 v1-default
 python3 -I evals/issue-542-v2-flag/check-step-0d.py "$out" v1-default-1 v1-default
 ```
 
-What these runs do not show. The sessions ran code mode and shell reads, so the checker reads `custom_tool_call` inputs for the skill path. The text's older-release rule (`multi_agent = true` before 0.167.0) was not run, because only Codex 0.167.0 was installed. No run put the key in a project `.codex/config.toml`, and a session's reply is graded on its OFFERS list, not on an edit it never made. In an earlier batch the checker failed two of eight runs on format alone, an unbulleted OFFERS line and the word "overrode" where it looked for "override". It now reads either, and those two transcripts were regraded, not rerun. The recorded batch ran later, on the text that `skill_blob` names.
+What these runs do not show. The sessions ran code mode and shell reads, so the checker reads `custom_tool_call` inputs for the skill path. The text's older-release rule (`multi_agent = true` before 0.167.0) was not run, because only Codex 0.167.0 was installed. No run put the key in a project `.codex/config.toml`, and a session's reply is graded on its OFFERS list, not on an edit it never made. In an earlier batch the checker failed two of eight runs on format alone, an unbulleted OFFERS line and the word "overrode" where it looked for "override". It now reads either, and those two transcripts were regraded, not rerun. The recorded batch ran later, on the text that `skill_blob` names. In that batch one `v1-default` session spawned a child to test `spawn_agent`, and the checker read the child's rollout instead of the root's. It now skips subagent rollouts, and that run was regraded, not rerun.
 
 ## Rerun
 

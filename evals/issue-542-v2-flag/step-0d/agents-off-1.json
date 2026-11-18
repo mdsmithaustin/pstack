@@ -16,12 +16,12 @@
   },
   "kind": "agents-off",
   "offers": [
-    "Delete `[agents] enabled = false` or set it to `true`.",
-    "Alternatively, enable `multi_agent_v2 = true` under `[features]`, leaving the agents line intact. This overrides the explicit disable on both models probed by the skill."
+    "Delete `[agents] enabled = false` from the active user config, or set it to `true`.",
+    "Alternatively, enable `multi_agent_v2 = true` under `[features]`, keeping any existing table. This overrides the explicit agents disable on both probed models."
   ],
-  "reply": "`spawn_agent` is unavailable, including after searching deferred tools.\n\nCodex reports version `0.167.0`, `multi_agent = true`, and `multi_agent_v2 = false`. The active `$CODEX_HOME/config.toml` has `[agents] enabled = false`; no project config exists.\n\nThat disable is a possible cause. Launch `-c` flags, the selected model, spawn depth, and unreadable config layers remain possible causes too. No files were edited.\n\n## OFFERS\n\n1. Delete `[agents] enabled = false` or set it to `true`.\n2. Alternatively, enable `multi_agent_v2 = true` under `[features]`, leaving the agents line intact. This overrides the explicit disable on both models probed by the skill.\n\nEither change applies from the next session.",
+  "reply": "`spawn_agent` is unavailable in this session, including the deferred tool catalog.\n\nCodex reports version 0.167.0, with `multi_agent = true` and `multi_agent_v2 = false`. The active `$CODEX_HOME/config.toml` contains `[agents] enabled = false`; the project config is absent.\n\nThat disable is a possible cause. Launch `-c` flags, the selected model, spawn depth, and unreadable config layers remain possible causes too. Step 0d\u2019s evidence comes from two models on 0.167.0, not other releases or project configs.\n\nNo files were edited.\n\n## OFFERS\n\n1. Delete `[agents] enabled = false` from the active user config, or set it to `true`.\n2. Alternatively, enable `multi_agent_v2 = true` under `[features]`, keeping any existing table. This overrides the explicit agents disable on both probed models.\n\nEither change applies from the next session.",
   "root_model": "gpt-6.1-sol",
-  "skill_blob": "2f9799d8599f3136ce872c0c988ecb600cf41696",
+  "skill_blob": "290a54aeded93bae8e8f48b5363f7b345bf80f0a",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

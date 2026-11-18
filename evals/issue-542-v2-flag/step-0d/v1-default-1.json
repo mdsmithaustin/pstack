@@ -16,11 +16,11 @@
   },
   "kind": "v1-default",
   "offers": [
-    "Optionally set `multi_agent_v2 = true` to switch to the direct `spawn_agent` tool shape with `task_name` and `fork_turns`; this changes the tool shape, not whether spawning works."
+    "Optionally set `multi_agent_v2 = true` to switch to the direct spawn-agent interface; spawning already works."
   ],
-  "reply": "Step 0d completed.\n\n- `spawn_agent` is callable via deferred `multi_agent_v1`.\n- Codex version: `0.167.0`.\n- Feature signals: `multi_agent = true`; `multi_agent_v2 = false`.\n- No readable `[agents] enabled` setting was found.\n- No project `.codex/config.toml` was found.\n- Spawning works; no repair is needed. The v2 feature remains optional.\n\n## OFFERS\n\n1. Optionally set `multi_agent_v2 = true` to switch to the direct `spawn_agent` tool shape with `task_name` and `fork_turns`; this changes the tool shape, not whether spawning works.",
+  "reply": "Step 0d completed.\n\n- `spawn_agent`: callable through deferred `multi_agent_v1`.\n- Codex version: `0.167.0`.\n- Features: `multi_agent=true`, `multi_agent_v2=false`.\n- Readable config layers showed no `[agents] enabled` setting.\n- Project config was absent; `CODEX_HOME` config had no relevant setting.\n- No files were edited.\n\n## OFFERS\n\n- Optionally set `multi_agent_v2 = true` to switch to the direct spawn-agent interface; spawning already works.",
   "root_model": "gpt-5.6-luna",
-  "skill_blob": "2f9799d8599f3136ce872c0c988ecb600cf41696",
+  "skill_blob": "290a54aeded93bae8e8f48b5363f7b345bf80f0a",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

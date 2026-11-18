@@ -1,0 +1,27 @@
+{
+  "cell": "v1-default-5",
+  "checks": {
+    "never offers multi_agent = true": true,
+    "only offer is multi_agent_v2": true,
+    "ran codex --version": true,
+    "read the branch copy of setup-pstack": true,
+    "says it is optional": true,
+    "spawn_agent tool as the kind expects": true
+  },
+  "codex_version": "codex-cli 0.167.0",
+  "config_toml": "",
+  "features": {
+    "multi_agent": "true",
+    "multi_agent_v2": "false"
+  },
+  "kind": "v1-default",
+  "offers": [
+    "`multi_agent_v2 = true` \u2014 optional switch to change the `spawn_agent` tool shape to direct v2 spawning; it does not repair spawning."
+  ],
+  "reply": "Step 0d completed. No files were edited.\n\n- `spawn_agent` is callable through deferred `multi_agent_v1`.\n- Codex version: `0.167.0`.\n- Feature signals: `multi_agent=true`, `multi_agent_v2=false`.\n- No readable `[agents] enabled = false` setting was found.\n- The project has no readable `.codex/config.toml`.\n- Spawning is confirmed; config signals are not, by themselves, a verdict. The skill\u2019s probe covered only specific models/releases.\n\n## OFFERS\n\n`multi_agent_v2 = true` \u2014 optional switch to change the `spawn_agent` tool shape to direct v2 spawning; it does not repair spawning.",
+  "root_model": "gpt-5.6-luna",
+  "skill_blob": "290a54aeded93bae8e8f48b5363f7b345bf80f0a",
+  "skill_reads": [
+    "$CODEX_HOME/skills/setup-pstack/SKILL.md"
+  ]
+}

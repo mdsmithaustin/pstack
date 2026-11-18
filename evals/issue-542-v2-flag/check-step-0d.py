@@ -20,10 +20,16 @@ def blob_sha(path):
     return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
 
 
+def is_root(rollout):
+    source = json.loads(open(rollout).readline())["payload"]["source"]
+    return not (isinstance(source, dict) and "subagent" in source)
+
+
 def main(out, cell, kind):
     cell_dir = Path(out).absolute() / cell
     base = summarize.main(out, cell)
-    rollout = glob.glob(str(cell_dir / "home/sessions/**/*.jsonl"), recursive=True)[0]
+    rollouts = glob.glob(str(cell_dir / "home/sessions/**/*.jsonl"), recursive=True)
+    rollout = next(r for r in rollouts if is_root(r))
     reads, ran_version = [], False
     for line in open(rollout):
         payload = json.loads(line)["payload"]
