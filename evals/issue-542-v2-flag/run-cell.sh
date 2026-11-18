@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 # usage: run-cell.sh <out-dir> <cell> <model> [enable:<feature> | disable:<feature> | agents-off]...
 set -euo pipefail
-out=$1 cell=$2 model=$3
+umask 077
+if [ $# -lt 3 ]; then echo "usage: run-cell.sh <out-dir> <cell> <model> [step]..." >&2; exit 2; fi
+for step in "${@:4}"; do
+  case $step in
+    enable:* | disable:* | agents-off) ;;
+    *) echo "unknown step $step" >&2; exit 2 ;;
+  esac
+done
+out=$(mkdir -p "$1" && cd "$1" && pwd)
+cell=$2 model=$3
 shift 3
 home=$out/$cell/home
 mkdir -p "$home" "$out/$cell/work"
-cp "$HOME/.codex/auth.json" "$home/auth.json"
+trap 'rm -f "$home/auth.json"' EXIT
+install -m 600 "$HOME/.codex/auth.json" "$home/auth.json"
 : >"$home/config.toml"
 export CODEX_HOME=$home
 for step in "$@"; do
@@ -13,7 +23,6 @@ for step in "$@"; do
     enable:*) codex features enable "${step#enable:}" >>"$out/$cell/setup.txt" 2>&1 ;;
     disable:*) codex features disable "${step#disable:}" >>"$out/$cell/setup.txt" 2>&1 ;;
     agents-off) printf '\n[agents]\nenabled = false\n' >>"$home/config.toml" ;;
-    *) echo "unknown step $step" >&2; exit 2 ;;
   esac
 done
 cp "$home/config.toml" "$out/$cell/config.toml"

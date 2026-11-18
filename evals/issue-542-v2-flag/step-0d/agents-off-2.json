@@ -1,0 +1,28 @@
+{
+  "cell": "agents-off-2",
+  "checks": {
+    "first offer is the agents line": true,
+    "names multi_agent_v2 as the override alternative": true,
+    "never offers multi_agent = true": true,
+    "ran codex --version": true,
+    "read the branch copy of setup-pstack": true,
+    "spawn_agent tool as the kind expects": true
+  },
+  "codex_version": "codex-cli 0.167.0",
+  "config_toml": "[agents]\nenabled = false\n",
+  "features": {
+    "multi_agent": "true",
+    "multi_agent_v2": "false"
+  },
+  "kind": "agents-off",
+  "offers": [
+    "Delete `[agents] enabled = false` or set it to `true`.",
+    "Alternatively, enable `multi_agent_v2 = true` under `[features]`, leaving the disable in place. In the skill's two-model probe, this overrode the user's explicit disable."
+  ],
+  "reply": "Step 0d completed. No files changed.\n\n- Live catalog search found no callable `spawn_agent`.\n- Codex version: `0.167.0`.\n- Feature signals: `multi_agent = true`, `multi_agent_v2 = false`.\n- Effective `$CODEX_HOME/config.toml` contains `[agents] enabled = false`. The project's `.codex/config.toml` is absent.\n\nThe disable is a possible cause, not a proven one. Launch `-c` flags, the selected model, spawn depth, and unreadable config layers remain possible causes.\n\n## OFFERS\n\n1. Delete `[agents] enabled = false` or set it to `true`.\n2. Alternatively, enable `multi_agent_v2 = true` under `[features]`, leaving the disable in place. In the skill's two-model probe, this overrode the user's explicit disable.\n\nEither change applies from the next session.",
+  "root_model": "gpt-6.1-sol",
+  "skill_blob": "09b2c4873a5e1af28f237a6f3b97d771be1972e8",
+  "skill_reads": [
+    "$CODEX_HOME/skills/setup-pstack/SKILL.md"
+  ]
+}

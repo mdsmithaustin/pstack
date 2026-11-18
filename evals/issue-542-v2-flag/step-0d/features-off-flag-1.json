@@ -1,23 +1,23 @@
 {
-  "cell": "c1-features-off-flag",
+  "cell": "features-off-flag-1",
   "checks": {
-    "first offer matches": true,
     "never offers multi_agent = true": true,
-    "no spawn_agent tool in the rollout": true,
-    "offers multi_agent_v2": true,
-    "offers section has items": true,
-    "read the branch copy of setup-pstack": true
+    "offers none": true,
+    "ran codex --version": true,
+    "read the branch copy of setup-pstack": true,
+    "spawn_agent tool as the kind expects": true
   },
+  "codex_version": "codex-cli 0.167.0",
   "config_toml": "[features]\nmulti_agent = false\n",
   "features": {
     "multi_agent": "false",
     "multi_agent_v2": "false"
   },
   "kind": "features-off-flag",
-  "offers": [
-    "Set `multi_agent_v2 = true` under `[features]` in `$CODEX_HOME/config.toml`, or run `codex features enable multi_agent_v2`. This applies from the next session."
-  ],
-  "reply": "Step 0d checked on Codex 0.167.0.\n\n- `spawn_agent` is unavailable, including after searching deferred tools.\n- `codex features list` reports `multi_agent = false` and `multi_agent_v2 = false`.\n- `$CODEX_HOME/config.toml` contains `[features] multi_agent = false`; `[agents].enabled` is absent. The project config is missing.\n\nThese are signals, not proof of the cause. A config key, launch `-c` flag, selected model, spawn depth, or unreadable config layer could explain the missing tool. No files were edited.\n\n## OFFERS\n\n1. Set `multi_agent_v2 = true` under `[features]` in `$CODEX_HOME/config.toml`, or run `codex features enable multi_agent_v2`. This applies from the next session.",
+  "offers": [],
+  "reply": "Step 0d checked. No files edited.\n\n- Live tool search found no callable `spawn_agent`.\n- Codex version: `0.167.0`.\n- Feature signals: `multi_agent = false`, `multi_agent_v2 = false`.\n- Active `$CODEX_HOME/config.toml` sets `[features] multi_agent = false`; `[agents] enabled` is absent. Project config is absent.\n\nThe skill offers no edit for `multi_agent = false` on this version because it blocked spawning on neither probed model. The cause remains unresolved: a config key, launch `-c` flag, selected model, spawn depth, or unreadable config layer.\n\n## OFFERS\n\nnone",
+  "root_model": "gpt-6.1-sol",
+  "skill_blob": "09b2c4873a5e1af28f237a6f3b97d771be1972e8",
   "skill_reads": [
     "$CODEX_HOME/skills/setup-pstack/SKILL.md"
   ]

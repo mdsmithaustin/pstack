@@ -1,0 +1,27 @@
+{
+  "cell": "v1-default-2",
+  "checks": {
+    "never offers multi_agent = true": true,
+    "only offer is multi_agent_v2": true,
+    "ran codex --version": true,
+    "read the branch copy of setup-pstack": true,
+    "says it is optional": true,
+    "spawn_agent tool as the kind expects": true
+  },
+  "codex_version": "codex-cli 0.167.0",
+  "config_toml": "",
+  "features": {
+    "multi_agent": "true",
+    "multi_agent_v2": "false"
+  },
+  "kind": "v1-default",
+  "offers": [
+    "Optionally set `multi_agent_v2 = true` to use the direct `spawn_agent` tool shape with `task_name` and `fork_turns`; this changes the tool shape, not whether spawning works."
+  ],
+  "reply": "Step 0d complete.\n\n- `spawn_agent` is callable via deferred `multi_agent_v1`; spawning works.\n- Codex version: `0.167.0`.\n- Feature signals: `multi_agent = true`; `multi_agent_v2 = false`.\n- Readable user config contains no `[agents] enabled` setting.\n- Project config was not evaluated because this project is not marked trusted.\n- No repair is needed. The feature signals are configuration evidence, not a complete verdict on all possible sessions.\n\n## OFFERS\n\n- Optionally set `multi_agent_v2 = true` to use the direct `spawn_agent` tool shape with `task_name` and `fork_turns`; this changes the tool shape, not whether spawning works.",
+  "root_model": "gpt-5.6-luna",
+  "skill_blob": "09b2c4873a5e1af28f237a6f3b97d771be1972e8",
+  "skill_reads": [
+    "$CODEX_HOME/skills/setup-pstack/SKILL.md"
+  ]
+}

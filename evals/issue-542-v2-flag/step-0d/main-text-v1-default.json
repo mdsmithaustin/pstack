@@ -1,0 +1,25 @@
+{
+  "cell": "main-text-v1-default",
+  "checks": {
+    "never offers multi_agent = true": true,
+    "only offer is multi_agent_v2": false,
+    "ran codex --version": false,
+    "read the branch copy of setup-pstack": true,
+    "says it is optional": false,
+    "spawn_agent tool as the kind expects": true
+  },
+  "codex_version": "codex-cli 0.167.0",
+  "config_toml": "",
+  "features": {
+    "multi_agent": "true",
+    "multi_agent_v2": "false"
+  },
+  "kind": "v1-default",
+  "offers": [],
+  "reply": "Step 0d complete.\n\n- `spawn_agent` is callable in this Codex session.\n- `codex features list` reports:\n  - `multi_agent`: `true`\n  - `multi_agent_v2`: `false`\n- No readable `[agents] enabled = false` or feature-off setting was found in the checked config files.\n- Spawning is therefore confirmed available; no configuration edit is indicated.\n\n## OFFERS\n\nnone",
+  "root_model": "gpt-5.6-luna",
+  "skill_blob": "e3aae95650af8e6e2b4282126d798b2613b8b96b",
+  "skill_reads": [
+    "$CODEX_HOME/skills/setup-pstack/SKILL.md"
+  ]
+}
