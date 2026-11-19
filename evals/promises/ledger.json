@@ -3885,7 +3885,7 @@
   },
   "sharpen-frames-task-before-work": {
    "check": "static",
-   "claim": "/sharpen names what a top professional would add, the rawest material, specific methods and tools, and an outside check, then returns a rewritten prompt and leaves the user's choices open.",
+   "claim": "/sharpen names what a top professional would add, the rawest material, specific methods and tools, and an outside check, then returns a rewritten prompt that asks the agent to prototype any choice an experiment can settle and leaves product and preference choices to the user.",
    "evidence": [
     {
      "file": "skills/sharpen/SKILL.md",
@@ -3909,7 +3909,7 @@
     },
     {
      "file": "skills/sharpen/SKILL.md",
-     "quote": "Leave choices that are mine to make open instead of deciding them."
+     "quote": "Leave product or preference choices that no experiment can settle for me to make."
     }
    ],
    "harness_sensitive": false,
@@ -5281,7 +5281,6 @@
    "file": "03-understand.md",
    "promise": "investigation-routes-code-to-how-and-external-to-research",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "It runs `/how`, adds `/why` for questions about motivation, and returns a cited explanation."
@@ -5587,6 +5586,15 @@
     "port"
    ],
    "text": "From here you can type normal follow-ups."
+  },
+  "19097e7a2948": {
+   "class": "cursor-only",
+   "file": "10-recipes-and-pitfalls.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "**Enumerating skills in the prompt.** \"use /architect then /arena then /interrogate\" reorders steps the playbook already sequences. State the goal and constraints. Name a skill only to override a default."
   },
   "1944cfceb998": {
    "class": "context",
@@ -5969,6 +5977,15 @@
    ],
    "text": "Give `/loop` a predicate that can pass or fail."
   },
+  "22bfa4ea5ec1": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "The defaults are the same as the `large` budget."
+  },
   "22e61eb012d5": {
    "class": "promise",
    "file": "07-overnight.md",
@@ -6110,6 +6127,15 @@
     "port"
    ],
    "text": "```text\n/poteto-mode plan the migration of our ui library to the new styling system. small verifiable PRs, each with visual regression checks. the result must match the original exactly, bugs included.\n```"
+  },
+  "2517a3c15108": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "That run replaces the old defaults it recognizes, tells you which, and keeps your other choices."
   },
   "252545d9278d": {
    "class": "promise",
@@ -6266,18 +6292,6 @@
    ],
    "text": "```text\n/benchmark-checklist vet this 40% speedup before it goes in the pr description\n```"
   },
-  "2ae33e5230ff": {
-   "class": "substituted",
-   "file": "04-design.md",
-   "ported_as": [
-    "921f7d7de9fb"
-   ],
-   "promise": "arena-readonly-cross-judge",
-   "sources": [
-    "upstream"
-   ],
-   "text": "A read-only judge from a different model family scores every candidate against a rubric."
-  },
   "2b2895947649": {
    "class": "promise",
    "file": "README.md",
@@ -6326,18 +6340,6 @@
     "port"
    ],
    "text": "For a migration, state the bar in the prompt:"
-  },
-  "2c7eb061fed3": {
-   "class": "substituted",
-   "file": "01-setup.md",
-   "ported_as": [
-    "a83ccde08cc1"
-   ],
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "upstream"
-   ],
-   "text": "`unlimited` lifts each model to its highest tier, up to `max`."
   },
   "2d0c8c50d7dc": {
    "class": "cursor-only",
@@ -6430,6 +6432,15 @@
    ],
    "text": "```text\n/poteto-mode read this thread. restate the underlying issue in your own words, in plain english. don't change any code yet.\n```"
   },
+  "2e9050fbc6c7": {
+   "class": "cursor-only",
+   "file": "03-understand.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "It traces the code, adds `/why` for questions about motivation, and returns a cited explanation."
+  },
   "2ec1f4de7e47": {
    "class": "context",
    "file": "01-setup.md",
@@ -6485,6 +6496,15 @@
     "port"
    ],
    "text": "The qualifiers do real work."
+  },
+  "3063bffa8b3e": {
+   "class": "cursor-only",
+   "file": "04-design.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "When no model from another vendor can run, the coordinator skips the judge and picks the base itself."
   },
   "30ef830976b1": {
    "class": "promise",
@@ -6887,6 +6907,15 @@
    ],
    "text": "You're auditing decisions, not re-reading the whole night."
   },
+  "3a72de7bf566": {
+   "class": "cursor-only",
+   "file": "03-understand.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "[`/why`](../../skills/why/SKILL.md) answers from the record, not the code."
+  },
   "3a95635bdfca": {
    "class": "promise",
    "file": "09-make-it-yours.md",
@@ -6969,7 +6998,6 @@
    "file": "03-understand.md",
    "promise": "why-reports-null-results",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "A null result gets reported too, because \"nobody wrote down why\" is itself an answer."
@@ -6992,6 +7020,15 @@
    ],
    "text": "Then [build the lever](../../skills/principle-build-the-lever/SKILL.md)."
   },
+  "3bbd750ced23": {
+   "class": "cursor-only",
+   "file": "03-understand.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "It starts one read-only subagent that explores the code and writes the explanation."
+  },
   "3c254e22a554": {
    "class": "promise",
    "file": "03-understand.md",
@@ -7001,6 +7038,15 @@
     "port"
    ],
    "text": "`/recall` rebuilds your own recent context on a topic."
+  },
+  "3c3adb49f9c6": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "The hardest changes run at `max`, and the review panels and swarm workers run at `high`."
   },
   "3c65e7242410": {
    "class": "context",
@@ -7326,6 +7372,15 @@
    ],
    "text": "On a base branch with a merge queue, owners stop at merge-ready, and the final reply lists those PRs as open operator gates."
   },
+  "4502d69a9048": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "`medium` lowers each role one level and `small` lowers it two, and both spend fewer tokens."
+  },
   "450d5fe5f2af": {
    "class": "promise",
    "file": "01-setup.md",
@@ -7435,7 +7490,6 @@
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "**Enumerating skills in the prompt.** \"use /how then /architect then /arena\" reorders steps the playbook already sequences. State the goal and constraints. Name a skill only to override a default."
@@ -7590,6 +7644,15 @@
     "port"
    ],
    "text": "**Pitfall:** don't skip this page's skills because \"the agent will read the code anyway.\" An agent that starts editing without a traced model tends to fix the symptom at the first plausible spot."
+  },
+  "4c38863ca74b": {
+   "class": "cursor-only",
+   "file": "03-understand.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "It reads the commits and PR discussions that introduced the code and each later change, and looks at other sources when that trail is thin."
   },
   "4c5cb33af9ed": {
    "class": "context",
@@ -7768,18 +7831,6 @@
    ],
    "text": "Cursor confirms the plugin is installed."
   },
-  "532d47076a7c": {
-   "class": "substituted",
-   "file": "01-setup.md",
-   "ported_as": [
-    "f87f981bda52"
-   ],
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "upstream"
-   ],
-   "text": "Grok tops out at `xhigh`, so it stays there."
-  },
   "533e4c6014e3": {
    "class": "promise",
    "file": "04-design.md",
@@ -7859,6 +7910,16 @@
     "port"
    ],
    "text": "Rich `--help` text."
+  },
+  "5617b8feefea": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "sharpen-frames-task-before-work",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "The rewrite asks the agent to prototype any choice an experiment can settle and to recommend an option from what it observed, and it leaves product and preference choices to you."
   },
   "5660b76238e6": {
    "class": "context",
@@ -8654,21 +8715,6 @@
    ],
    "text": "It records five risk facts with evidence, and a script maps them to a lightweight, standard, or intensive route."
   },
-  "68d84dbb65ba": {
-   "class": "substituted",
-   "file": "01-setup.md",
-   "ported_as": [
-    "eead1319fd44",
-    "f13df52c09ea",
-    "73b6d094eabc",
-    "7368fe56929d"
-   ],
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "upstream"
-   ],
-   "text": "The defaults run at `xhigh` reasoning, the same as the `large` budget."
-  },
   "6918480c3779": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -8925,6 +8971,15 @@
    ],
    "text": "[Understand the code](./03-understand.md). A read-only investigation, then `/how`, `/why`, `/poteto-teach`, and `/recall` before you edit anything."
   },
+  "6eaa12e52887": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Gemini tops out at `high`, so it stays there."
+  },
   "6fabd625dacc": {
    "class": "promise",
    "file": "05-build-and-clean.md",
@@ -8962,6 +9017,15 @@
     "port"
    ],
    "text": "Forcing a test through brittle mocks proves less than running the real command, and the playbook is allowed to say so."
+  },
+  "70ce5cdf1368": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "`unlimited` raises each role one level, up to `max`."
   },
   "70dd8431c562": {
    "class": "promise",
@@ -10133,7 +10197,6 @@
    "file": "04-design.md",
    "promise": "architect-grounds-with-how-and-why",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "[`/architect`](../../skills/architect/SKILL.md) grounds itself first, running `/how` over the code the design touches and `/why` when it moves ownership or layers."
@@ -10352,10 +10415,18 @@
    "file": "03-understand.md",
    "promise": "why-queries-evidence-categories-in-parallel",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "[`/why`](../../skills/why/SKILL.md) starts from source control, then queries whatever evidence categories your MCPs expose, such as the issue tracker, long-form docs, team chat, observability, error tracking, and analytics, all in parallel."
+  },
+  "95224d2be518": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "When a default changes, a rule written before the change still pins the old default until you run `/setup-pstack` again."
   },
   "95b16a88e71c": {
    "class": "context",
@@ -10655,16 +10726,6 @@
     "port"
    ],
    "text": "[Feature step 4](../../skills/poteto-mode/playbooks/feature.md) defines acceptance checks and specification edges, including when existing coverage suffices."
-  },
-  "9ead3f17f124": {
-   "class": "promise",
-   "file": "02-poteto-mode.md",
-   "promise": "sharpen-frames-task-before-work",
-   "sources": [
-    "port",
-    "upstream"
-   ],
-   "text": "Then it rewrites your prompt to ask for exactly that, deeper but not bigger, and leaves your choices open."
   },
   "9ecb08f71efa": {
    "class": "context",
@@ -11546,18 +11607,6 @@
    ],
    "text": "Name a skill only when you want to override a specific choice."
   },
-  "b1559fb3dc93": {
-   "class": "substituted",
-   "file": "04-design.md",
-   "ported_as": [
-    "9b878a349774"
-   ],
-   "promise": "arena-skips-judge-without-other-model",
-   "sources": [
-    "upstream"
-   ],
-   "text": "When no model from another family can run, the coordinator skips the judge and picks the base itself."
-  },
   "b1de7266e82e": {
    "class": "promise",
    "file": "04-design.md",
@@ -11728,17 +11777,15 @@
    ],
    "text": "When it refuses, it lists every gate that failed."
   },
-  "b61923c61339": {
-   "class": "substituted",
-   "file": "01-setup.md",
-   "ported_as": [
-    "45f5cc237f9a"
-   ],
-   "promise": "setup-rerun-keeps-changed-roles",
+  "b6210260791a": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "sharpen-frames-task-before-work",
    "sources": [
+    "port",
     "upstream"
    ],
-   "text": "When a default changes, a rule written before the change still pins the old default, so delete those role lines, or delete the file, then run `/setup-pstack` again."
+   "text": "Then it rewrites your prompt to ask for exactly that, deeper but not bigger."
   },
   "b65ab2ff9ff8": {
    "class": "context",
@@ -12460,6 +12507,15 @@
    ],
    "text": "It matches the Bug fix playbook, tracks progress under the mode's [worklist and completion rules](../../skills/poteto-mode/SKILL.md#playbooks), and calls the right skills as each step fires."
   },
+  "c7cc71770bb8": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "To drop a pin it does not recognize, delete that role's line or the file first."
+  },
   "c8066657f094": {
    "class": "context",
    "file": "07-overnight.md",
@@ -12483,7 +12539,6 @@
    "file": "03-understand.md",
    "promise": "how-fans-out-explorers-for-big-subsystem",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "For a big subsystem it fans out two to four read-only explorers first."
@@ -12584,7 +12639,6 @@
    "file": "03-understand.md",
    "promise": "how-narrow-question-no-explorers",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "For a narrow question it just reads and explains."
@@ -12801,19 +12855,6 @@
    ],
    "text": "Ask for a few, and pick from evidence you can see:"
   },
-  "d1920996f970": {
-   "class": "substituted",
-   "file": "01-setup.md",
-   "ported_as": [
-    "a83ccde08cc1",
-    "b7618cfbba23"
-   ],
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "upstream"
-   ],
-   "text": "`medium` and `small` lower the reasoning and spend fewer tokens."
-  },
   "d1b46ae55235": {
    "class": "promise",
    "file": "10-recipes-and-pitfalls.md",
@@ -12911,6 +12952,15 @@
     "port"
    ],
    "text": "The plan is the deliverable."
+  },
+  "d432eb47c068": {
+   "class": "cursor-only",
+   "file": "04-design.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "A read-only judge from a different model vendor scores every candidate against a rubric."
   },
   "d482034ab4ad": {
    "class": "promise",
@@ -13108,6 +13158,15 @@
     "port"
    ],
    "text": "Writing a skill matches the [Authoring or modifying a skill playbook](../../skills/poteto-mode/playbooks/authoring-a-skill.md), which drafts the `SKILL.md` in the [agentskills.io](https://agentskills.io) format, validates the frontmatter and links, and ships the result through the Opening a PR playbook."
+  },
+  "dbdc27c95100": {
+   "class": "cursor-only",
+   "file": "04-design.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "[`/architect`](../../skills/architect/SKILL.md) grounds itself first, tracing the code the design touches and running `/why` when it moves ownership or layers."
   },
   "dbf2d6ecabb8": {
    "class": "context",
@@ -13367,6 +13426,15 @@
    ],
    "text": "[Test Behavior, Not Implementation](../../skills/principle-test-behavior-not-implementation/SKILL.md) asserts what the code's users can observe, so a test fails when that behavior breaks and survives a change to the internals."
   },
+  "e0aa78b9e2cc": {
+   "class": "cursor-only",
+   "file": "03-understand.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "The answer cites what the authors wrote, marks the agent's own inferences as inferences, and says what the record does not answer, because \"nobody wrote down why\" is itself an answer."
+  },
   "e0acb193f9ba": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -13469,7 +13537,6 @@
    "file": "03-understand.md",
    "promise": "why-reports-cited-history",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "The report cites everything, separates direct evidence from inference, and says \"appears to\" when the record is thin."
@@ -13839,6 +13906,15 @@
    ],
    "text": "An agent that can check its own work keeps going until the check passes."
   },
+  "ea58255dcfc5": {
+   "class": "cursor-only",
+   "file": "02-poteto-mode.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "**Pitfall:** don't enumerate skills in your prompt (\"use /architect, then /arena, then /interrogate...\")."
+  },
   "ea6975bcbf53": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -13947,7 +14023,6 @@
    "class": "context",
    "file": "02-poteto-mode.md",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "**Pitfall:** don't enumerate skills in your prompt (\"use /how, then /architect, then /arena...\")."
@@ -14402,18 +14477,6 @@
    ],
    "text": "Say \"no PR\" or \"don't commit\" in the prompt to stop it earlier."
   },
-  "f9b43d345e9f": {
-   "class": "substituted",
-   "file": "01-setup.md",
-   "ported_as": [
-    "a83ccde08cc1"
-   ],
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "upstream"
-   ],
-   "text": "Opus goes to `max`."
-  },
   "fae075f9ac87": {
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
@@ -14602,6 +14665,15 @@
     "upstream"
    ],
    "text": "When you're unsure whether a prompt is aimed right, run [`/sharpen`](../../skills/sharpen/SKILL.md) on it before you send it:"
+  },
+  "ff51c6fa6563": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "held, needs judgment: upstream #1236 (bf0c7cd8) changes the new defaults, one-file why and how, or vendor judge wording; the port keeps its current skills and guide text (PORTING.md, Single-model upstream cuts)",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Most roles run at `xhigh` reasoning."
   },
   "ff8926f17118": {
    "also": [
