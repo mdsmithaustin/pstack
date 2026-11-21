@@ -56,6 +56,16 @@ class Preserve(unittest.TestCase):
             capture_output=True, text=True, env=env,
         )
 
+    def assert_setup_problem(self, result, *fragments):
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, '')
+        self.assertEqual(len(result.stderr.strip().splitlines()), 1, result.stderr)
+        for fragment in (*fragments, 'pass --python <interpreter>'):
+            self.assertIn(fragment, result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
+        self.assertNotIn('code fix', result.stderr)
+        self.assertFalse((self.repo / '.git/preserve-backup').exists())
+
     def test_project_command_uses_the_projects_test_selection(self):
         (self.repo / 'fixtures').mkdir()
         saved = self.repo / 'fixtures/test_saved.py'
@@ -206,9 +216,7 @@ class Preserve(unittest.TestCase):
         isolated = self.repo / 'isolated'
         venv.EnvBuilder(with_pip=False).create(isolated)
         result = self.run_preserve('--python', str(isolated / 'bin/python'))
-        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn('with pytest', result.stdout)
-        self.assertIn('ERROR', result.stdout)
+        self.assert_setup_problem(result, f"interpreter {isolated / 'bin/python'} cannot import pytest;")
 
     @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
     def test_unittest_pytest_import_selects_pytest_when_available(self):
@@ -257,6 +265,7 @@ class Preserve(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('nothing to preserve', result.stdout)
         self.assertIn('own runner by hand', result.stdout)
+        self.assertNotIn('in another language,', result.stdout)
 
     @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
     def test_function_style_tests_without_a_pytest_marker_still_run(self):
@@ -293,10 +302,92 @@ class Preserve(unittest.TestCase):
         isolated = self.repo / 'isolated'
         venv.EnvBuilder(with_pip=False).create(isolated)
         result = self.run_preserve('--python', str(isolated / 'bin/python'))
-        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn('pytest', result.stdout)
-        self.assertIn('ERROR', result.stdout)
+        self.assert_setup_problem(result, f"interpreter {isolated / 'bin/python'} cannot import pytest;")
         self.assertNotIn('All earlier tests still pass', result.stdout)
+
+    def test_configured_suite_requires_pytest_when_unavailable(self):
+        (self.repo / 'pytest.ini').write_text('[pytest]\npython_files = test_*.py\n')
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'pytest configuration')
+        isolated = self.repo / 'isolated'
+        venv.EnvBuilder(with_pip=False).create(isolated)
+        for command in ((), ('--command', sys.executable, '-m', 'unittest', 'discover', '-s', 'tests')):
+            with self.subTest(command=command):
+                result = self.run_preserve('--python', str(isolated / 'bin/python'), *command)
+                self.assert_setup_problem(result, f"interpreter {isolated / 'bin/python'} cannot import pytest in isolated mode (-I)")
+
+    def test_missing_interpreter_is_a_setup_problem(self):
+        missing = str(self.repo / 'missing/bin/python')
+        edited = TESTS.replace('"a"', '"b"')
+        (self.repo / 'tests/test_mod.py').write_text(edited)
+        for configuration in ('', '[pytest]\npython_files = test_*.py\n'):
+            with self.subTest(configuration=configuration):
+                (self.repo / 'pytest.ini').write_text(configuration)
+                git(self.repo, 'add', 'pytest.ini')
+                git(self.repo, 'commit', '-q', '-m', 'configuration')
+                result = self.run_preserve('--python', missing)
+                self.assert_setup_problem(result, f'interpreter {missing} does not exist or is not executable;')
+                self.assertEqual((self.repo / 'tests/test_mod.py').read_text(), edited)
+
+    def test_missing_third_party_dependency_is_a_setup_problem(self):
+        for runner in ('unittest', 'pytest') if HAS_PYTEST else ('unittest',):
+            with self.subTest(runner=runner):
+                if runner == 'pytest':
+                    (self.repo / 'conftest.py').write_text('')
+                (self.repo / 'tests/test_mod.py').write_text('import absent_example_dependency.client\n' + TESTS)
+                git(self.repo, 'add', '-A')
+                git(self.repo, 'commit', '-q', '-m', 'third-party import')
+                result = self.run_preserve()
+                self.assert_setup_problem(result, f'interpreter {sys.executable} cannot import absent_example_dependency,')
+                self.assertEqual((self.repo / 'tests/test_mod.py').read_text(), 'import absent_example_dependency.client\n' + TESTS)
+
+    def test_removed_project_module_stays_a_failure(self):
+        (self.repo / 'pkg').mkdir()
+        (self.repo / 'pkg/__init__.py').write_text('')
+        (self.repo / 'pkg/helpers.py').write_text(MODULE)
+        (self.repo / 'tests/test_mod.py').write_text(TESTS.replace('from mod import', 'from pkg.helpers import'))
+        for runner in ('unittest', 'pytest') if HAS_PYTEST else ('unittest',):
+            with self.subTest(runner=runner):
+                if runner == 'pytest':
+                    (self.repo / 'conftest.py').write_text('')
+                git(self.repo, 'add', '-A')
+                git(self.repo, 'commit', '-q', '-m', 'package import')
+                for removed in ('pkg/helpers.py', 'pkg/__init__.py'):
+                    (self.repo / removed).unlink()
+                result = self.run_preserve()
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn(f'with {runner}', result.stdout)
+                self.assertIn('ERROR', result.stdout)
+                self.assertIn('code fix', result.stdout)
+                git(self.repo, 'checkout', '-q', '--', 'pkg')
+
+    def test_command_failure_wording_follows_the_execution_evidence(self):
+        for output, expected in (
+            ('2 failed, 493 passed in 0.12s', 'ERROR  command ran its tests and failed with exit 1: 2 failed, 493 passed in 0.12s'),
+            ('no summary', 'ERROR  command exited 1 before running the tests: no summary'),
+        ):
+            with self.subTest(output=output):
+                result = self.run_preserve('--command', sys.executable, '-c', f'print({output!r}); raise SystemExit(1)')
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn(expected, result.stdout)
+                self.assertEqual('before running the tests' in result.stdout, output == 'no summary')
+
+    def test_other_language_tests_are_reported_as_unchecked(self):
+        for name in ('src/app.test.ts', 'src/app.spec.js', 'pkg/app_test.go', 'src/test/java/AppTest.java', 'tests/data.spec.js'):
+            (self.repo / name).parent.mkdir(parents=True, exist_ok=True)
+            (self.repo / name).write_text('baseline\n')
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'other languages')
+        result = self.run_preserve('--command', sys.executable, '-m', 'unittest', 'discover', '-s', 'tests')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('3 earlier test file(s) in another language, such as pkg/app_test.go, were not restored', result.stdout)
+        git(self.repo, 'rm', '-q', 'tests/test_mod.py')
+        git(self.repo, 'commit', '-q', '-m', 'no Python tests')
+        result = self.run_preserve()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('holds no Python test files', result.stdout)
+        self.assertIn("5 test file(s) in another language, such as pkg/app_test.go, were not restored or run; "
+                      "--command <argv...> runs the project's own test command.", result.stdout)
 
     @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
     def test_mixed_unittest_and_function_tests_all_run(self):
@@ -351,9 +442,7 @@ class Preserve(unittest.TestCase):
                 git(self.repo, 'add', 'tests/test_mod.py')
                 git(self.repo, 'commit', '-q', '-m', 'mixed class tests')
                 result = self.run_preserve('--python', str(isolated / 'bin/python'))
-                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-                self.assertIn('pytest', result.stdout)
-                self.assertIn('ERROR', result.stdout)
+                self.assert_setup_problem(result, f"interpreter {isolated / 'bin/python'} cannot import pytest;")
                 self.assertNotIn('All earlier tests still pass', result.stdout)
 
     @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')

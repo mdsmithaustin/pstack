@@ -398,8 +398,9 @@ class PreserveFileSelection(unittest.TestCase):
         self.contract()
         result = self.preserve(python=str(isolated / 'bin/python'))
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-        self.assertIn('baseline pytest file patterns', result.stderr)
-        self.assertIn('pytest', result.stderr)
+        self.assertIn(f"interpreter {isolated / 'bin/python'} cannot import pytest in isolated mode (-I)", result.stderr)
+        self.assertIn('baseline pytest configuration', result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
 
     @unittest.skipUnless(HAS_PYTEST, 'requires pytest in the selected interpreter')
     def test_invalid_baseline_config_cannot_omit_custom_test(self):
