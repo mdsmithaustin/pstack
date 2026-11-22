@@ -1162,12 +1162,19 @@ class ShellReadCredit(unittest.TestCase):
 
     def test_a_failed_call_discredits_only_a_viewer_of_one_file(self):
         self.assertEqual(self.verdict("cat {p} /w/missing.md", ok=False), PASS)
+        self.assertEqual(self.verdict("cat {p} MISSING", ok=False), PASS)
         self.assertEqual(self.verdict("python3 {p}", ok=False), PASS)
         self.assertEqual(self.verdict("sed -n 1,9p {p}", ok=False), FAIL)
 
     def test_find_that_runs_a_reader_shows_the_file(self):
         self.assertEqual(self.verdict("find {p} -exec cat {{}} +"), PASS)
         self.assertEqual(self.verdict("find {p} -name '*.md'"), FAIL)
+        for command in ("find {p} -exec echo {{}} +", "find {p} -exec grep -c step {{}} +"):
+            with self.subTest(command=command):
+                self.assertEqual(self.verdict(command), FAIL)
+
+    def test_count_options_after_the_pattern_still_hide_the_lines(self):
+        self.assertEqual(self.verdict("rg step --count {p}"), FAIL)
 
     def test_a_pattern_after_the_option_terminator_is_not_a_flag(self):
         self.assertEqual(self.verdict("grep -- -q {p}"), PASS)
