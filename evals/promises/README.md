@@ -264,7 +264,7 @@ No other listed edge is recorded as moving a verdict. Fix one only after a recor
 
 ### Passes a do-nothing run must not earn
 
-The edges above are found from FAIL verdicts, because a person reads each FAIL trace before it counts. Nothing reads a PASS by default, so an oracle that is too lenient stays unseen. `test_null_trace.py` grades two do-nothing traces against every runnable case with no project on disk. One has no events. In the other, every turn replies "Done." and calls no tool. No promise may pass either.
+The edges above are found from FAIL verdicts, because a person reads each FAIL trace before it counts. Nothing reads a PASS by default, so an oracle that is too lenient stays unseen. `test_null_trace.py` grades three traces against every runnable case with no project on disk. The first has no events. In the second, every turn replies "Done." and calls no tool. No promise may pass either of these two traces.
 
 Six oracles used to pass them, because each read the absence of a bad action as success. Each now also requires a sign that the agent did the work, and returns `INCONCLUSIVE` without one:
 

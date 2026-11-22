@@ -429,19 +429,22 @@ def single_file_viewer(words):
 
 
 def fold_heredocs(command):
-    lines, header, end = [], None, None
-    for line in command.split("\n"):
-        if end is not None:
-            if line.strip() == end:
-                end = None
-            else:
-                lines[header] += " " + " ".join(shlex.quote(path) for path in shell_paths(line))
-            continue
-        lines.append(line)
+    lines = iter(command.split("\n"))
+    folded = []
+    for line in lines:
         match = HEREDOC.search(line)
         if match:
-            header, end = len(lines) - 1, match.group(2)
-    return "\n".join(lines)
+            paths = []
+            for body_line in lines:
+                if body_line.strip() == match.group(2):
+                    break
+                paths.extend(shell_paths(body_line))
+            if paths:
+                separator = SHELL_SEGMENT.search(line, match.end())
+                end = separator.start() if separator else len(line)
+                line = line[:end] + " " + shlex.join(paths) + line[end:]
+        folded.append(line)
+    return "\n".join(folded)
 
 
 def shell_reads(command):

@@ -1179,6 +1179,12 @@ class ShellReadCredit(unittest.TestCase):
         self.assertEqual(self.verdict(command), PASS)
         self.assertEqual(self.verdict("cd /w/.claude/skills/poteto-mode && sh <<'EOF'\ncat playbooks/feature.md\nEOF"), PASS)
 
+    def test_heredoc_credit_belongs_to_the_opening_command_on_a_shared_line(self):
+        body = "\ncat playbooks/feature.md\nEOF"
+        cd = "cd /w/.claude/skills/poteto-mode && "
+        self.assertEqual(self.verdict(cd + "sh <<'EOF'; cd .." + body), PASS)
+        self.assertEqual(self.verdict(cd + "wc -l <<'EOF'; pwd" + body), FAIL)
+
     def test_count_options_after_the_pattern_still_hide_the_lines(self):
         self.assertEqual(self.verdict("rg step --count {p}"), FAIL)
 
