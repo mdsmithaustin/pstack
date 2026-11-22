@@ -1134,8 +1134,6 @@ class BugFixOracles(unittest.TestCase):
 
 
 class ShellReadCredit(unittest.TestCase):
-    """Naming a playbook in a shell command is a read only when the command shows its text."""
-
     PLAYBOOK = "/w/.claude/skills/poteto-mode/playbooks/feature.md"
 
     def verdict(self, command, ok=True):
@@ -1159,8 +1157,38 @@ class ShellReadCredit(unittest.TestCase):
         self.assertEqual(self.verdict("cd /w/.claude/skills && cat poteto-mode/playbooks/feature.md", ok=False), FAIL)
 
     def test_a_read_in_a_chain_that_failed_later_keeps_its_credit(self):
-        # The trace records one result for the whole call, so the failure cannot be pinned on the read.
         self.assertEqual(self.verdict("cat {p} && python3 -m unittest", ok=False), PASS)
+        self.assertEqual(self.verdict("cat {p} && cd /missing", ok=False), PASS)
+
+    def test_a_failed_call_discredits_only_a_viewer_of_one_file(self):
+        self.assertEqual(self.verdict("cat {p} /w/missing.md", ok=False), PASS)
+        self.assertEqual(self.verdict("python3 {p}", ok=False), PASS)
+        self.assertEqual(self.verdict("sed -n 1,9p {p}", ok=False), FAIL)
+
+    def test_find_that_runs_a_reader_shows_the_file(self):
+        self.assertEqual(self.verdict("find {p} -exec cat {{}} +"), PASS)
+        self.assertEqual(self.verdict("find {p} -name '*.md'"), FAIL)
+
+    def test_a_pattern_after_the_option_terminator_is_not_a_flag(self):
+        self.assertEqual(self.verdict("grep -- -q {p}"), PASS)
+        self.assertEqual(self.verdict("grep -e -c {p}"), PASS)
+
+    def test_each_segment_is_judged_by_its_own_command(self):
+        self.assertEqual(self.verdict("echo feature.md | grep -c step {p}"), FAIL)
+        self.assertEqual(self.verdict("grep -c step {p}; cat {p}"), PASS)
+
+    def test_a_reader_piped_into_a_counter_shows_no_text(self):
+        for command in ("cat {p} | wc -l", "cat {p} | grep -c step", "sed -n 1,9p {p} | grep -q step"):
+            with self.subTest(command=command):
+                self.assertEqual(self.verdict(command), FAIL)
+
+    def test_the_adapter_read_list_does_not_restore_a_command_that_showed_nothing(self):
+        for command in ("wc -l {p}", "grep -c step {p}"):
+            with self.subTest(command=command):
+                text = command.format(p=self.PLAYBOOK)
+                trace = minimal(events=bash(0, text), final_reply="ok", files_read=claude_code.shell_reads(text, "/w"))
+                self.assertTrue(trace["files_read"])
+                self.assertEqual(grade("feature-prompt-routes-to-feature", trace, load_case("route-feature"))["verdict"], FAIL)
 
 
 class HowWhyOracles(unittest.TestCase):

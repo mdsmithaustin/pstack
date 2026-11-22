@@ -1,15 +1,3 @@
-"""An agent that does nothing must not earn a PASS.
-
-Three do-nothing traces are graded against every runnable case's promises with no project on disk. One has no
-events. In one, every turn replies "Done." and calls no tool. In the third, every turn calls no tool and replies with
-CLAIMS, a reply stuffed with the phrases reply-reading oracles look for.
-
-KNOWN lists the promises allowed to pass each trace. It is empty for the first two: an oracle that reads the absence
-of a bad action as success must also require a sign that the agent did the work. For the third it lists the oracles
-that still pass on the agent's own words alone. That list may only shrink: a new entry is a new false-pass path, and
-a fixed oracle must leave the list.
-"""
-
 import unittest
 
 import freshness
