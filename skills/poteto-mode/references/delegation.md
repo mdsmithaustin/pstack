@@ -28,6 +28,8 @@ You own every subagent's work. Review the diff and write your own summary, don't
 
 ## Preservation modes
 
+The preserve script needs `python3` 3.9 or newer. When the script cannot start for that reason, run the project's own test command, confirm with `git diff --stat <start commit>` that no earlier test file changed, and say in the reply that the preserve gate did not run and why. Never report the gate as passed.
+
 A repository task that requires its own selection or execution setup uses `--command <argv...>`. This mode requires Python test summaries and stays strict. The selected command must pass before a commit, and `--reasons` is unsupported.
 
 A playbook that permits an automatic-mode waiver uses `--reasons <file>`, one block per failure cause. Use this route only when automatic execution already meets the repository's required test task. When a required repository command needs a waiver, keep its selection and report preservation pending. There is no command-mode waiver route. Collection errors remain nonwaivable.

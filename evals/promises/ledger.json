@@ -3696,6 +3696,29 @@
    ],
    "scenario": "setup-run"
   },
+  "setup-checks-runtimes-first": {
+   "check": "static",
+   "claim": "Setup checks the bundled scripts' runtime requirements first and stops if it cannot use a supported python3.",
+   "evidence": [
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "### 0. Check the runtimes"
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "bash \"<this skill's base directory>/scripts/check-runtimes.sh\""
+    },
+    {
+     "file": "skills/setup-pstack/SKILL.md",
+     "quote": "stop and tell the user to install it before the steps below"
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/setup-pstack/SKILL.md",
+    "skills/setup-pstack/scripts/check-runtimes.sh"
+   ]
+  },
   "setup-checks-task-tool-switches": {
    "check": "live",
    "claim": "Setup reports whether Claude Code's task tools and Codex's plan tool are on, shows the exact setting when one is off, and writes it only after an explicit yes.",
@@ -5017,6 +5040,14 @@
    ],
    "text": "[Laziness Protocol](../../skills/principle-laziness-protocol/SKILL.md) prefers deletion and simplicity in the resulting design."
   },
+  "09ab2ced3cfa": {
+   "class": "context",
+   "file": "01-setup.md",
+   "sources": [
+    "port"
+   ],
+   "text": "If setup stops at the Python check, install a supported `python3` on your `PATH` and rerun `/setup-pstack`."
+  },
   "09cf932cf4ee": {
    "class": "context",
    "file": "09-make-it-yours.md",
@@ -6286,6 +6317,15 @@
     "port"
    ],
    "text": "[Build and clean the change](./05-build-and-clean.md). The build playbooks, `/poteto-tdd`, `/unslop`, and `/no-comments`."
+  },
+  "2b7dd285bae1": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "setup-checks-runtimes-first",
+   "sources": [
+    "port"
+   ],
+   "text": "Setup first checks the [runtime requirements](../../README.md#install)."
   },
   "2b8e5e4d4c4b": {
    "class": "promise",

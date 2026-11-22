@@ -40,6 +40,13 @@ npx skills add mdsmithaustin/pstack
 
 pick the targets you use at the prompt, including `hermes-agent` for hermes. `-g` installs user-level instead of per-project.
 
+a full `/setup-pstack` run checks these commands on your `PATH`. only `python3` is required to continue past this check.
+
+- **python3, 3.9 or newer.** runs the plan script, the model resolver, and the preserve gate.
+- **bun.** runs the GitHub PR watcher, the merge gate, and the orchestrate store. without bun on your `PATH`, babysit can poll with `gh`, PR recap can [run bun through npx](./skills/pr-recap/references/sketch.md#setup) to draw sketches, and node can run the attachment helper.
+- **node.** runs the multi-PR plan check. the [statechart launcher](./skills/statechart/scripts/statechart) accepts a node version with built-in TypeScript support, a supported bun version, or deno 2.0 or newer.
+- **gh.** the default CLI for opening, watching, and landing GitHub pull requests. the playbooks use the Origin CLI when it can resolve the repository.
+
 notes by CLI. confirm discovery in your installed version:
 
 - **hermes.** project skills require project trust. for global use, install into its native skills directory or add the shared `~/.agents/skills` directory to `skills.external_dirs`. the installer may skip a project hermes symlink when `.hermes` does not exist.
@@ -49,7 +56,7 @@ notes by CLI. confirm discovery in your installed version:
 
 two steps:
 
-1. run [`/setup-pstack`](./skills/setup-pstack/SKILL.md). it checks the bundled personas, offers to register native agents, sets claude code's skill listing, and asks for a reasoning budget and models. rerun it after `npx skills update`: until the listing step runs, claude code shows every pstack skill's description and can load one on its own.
+1. run [`/setup-pstack`](./skills/setup-pstack/SKILL.md). it checks the runtimes and the bundled personas, offers to register native agents, sets claude code's skill listing, and asks for a reasoning budget and models. rerun it after `npx skills update`: until the listing step runs, claude code shows every pstack skill's description and can load one on its own.
 2. use [`/poteto-mode`](./skills/poteto-mode/SKILL.md) whenever you're doing anything that requires rigor.
 
 new here? the [pstack guide](./docs/guide/README.md) walks you through a first real task, from setup and prompting through verification and overnight runs. stuck, or unsure which skill fits? ask [`/poteto-help`](./skills/poteto-help/SKILL.md).
@@ -114,7 +121,7 @@ when invoked it:
 3. routes to the other skills as the steps fire.
 4. writes unslopped replies framed for the consumer and the maintainer.
 
-the mode's [Playbooks section](./skills/poteto-mode/SKILL.md#playbooks) also owns the preservation gate required before every commit. the task runs to the endpoint you state. without one it stops at the furthest reviewable state your repository supports: a pull request, a pushed branch, or a local branch when there is no remote. the mode is designed to work with a mid-tier model in the lead, such as Sonnet 5.5, GPT-6.1 Sol, or Grok 4.7 at medium effort. that target is a design goal that no evaluation here has verified yet, as the [evaluation contract](./evals/framework.md#lead-model-floor-and-subtraction) records. the full rules and playbooks live in [`skills/poteto-mode/SKILL.md`](./skills/poteto-mode/SKILL.md).
+for the pre-commit preservation gate and its fallback when Python is unavailable, see [preservation modes](./skills/poteto-mode/references/delegation.md#preservation-modes). the task runs to the endpoint you state. without one it stops at the furthest reviewable state your repository supports: a pull request, a pushed branch, or a local branch when there is no remote. the mode is designed to work with a mid-tier model in the lead, such as Sonnet 5.5, GPT-6.1 Sol, or Grok 4.7 at medium effort. that target is a design goal that no evaluation here has verified yet, as the [evaluation contract](./evals/framework.md#lead-model-floor-and-subtraction) records. the full rules and playbooks live in [`skills/poteto-mode/SKILL.md`](./skills/poteto-mode/SKILL.md).
 
 [`/poteto-mode`](./skills/poteto-mode/SKILL.md) is also a sticky mode: once entered it stays on across turns, applying itself when a playbook matches or the task needs rigor and staying out of the way otherwise. opt out any time by saying so. after known compaction or truncation, the agent follows the mode's [recovery rule](./skills/poteto-mode/SKILL.md#recover-after-compaction-or-truncation) to continue the current task. runtime retention varies; see the [dated evidence](./skills/pstack-harness/references/skill-retention.md). if the mode stops applying, type `/poteto-mode` again.
 
