@@ -14,7 +14,7 @@ Choose the targets you use, including `hermes-agent` for Hermes. The installer d
 
 ## Pick your models
 
-Run setup to check the [runtime requirements](../../README.md#install) before choosing models.
+Run:
 
 ```text
 /setup-pstack
