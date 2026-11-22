@@ -58,6 +58,19 @@ class RouteTable(unittest.TestCase):
         self.assertEqual(result["route"], "pending")
         self.assertIn("Record the five risk facts", run("feature").stdout)
 
+    def test_a_pending_plan_already_binds_the_lightest_gates(self):
+        pending, lightest = plan("feature"), plan("feature", *LOW)
+        self.assertEqual(pending["route"], "pending")
+        self.assertEqual(pending["gates"], lightest["gates"])
+        self.assertIn("preserve", [gate["id"] for gate in pending["gates"]])
+        text = run("feature").stdout
+        for line in run("feature", *LOW).stdout.splitlines():
+            if line.startswith("- preserve:"):
+                self.assertIn(line, text)
+                break
+        else:
+            self.fail("the lightweight plan prints no preserve gate line")
+
     def test_bad_level_is_a_usage_error(self):
         done = run("feature", *facts(reach="tiny:x"))
         self.assertEqual(done.returncode, 2)
