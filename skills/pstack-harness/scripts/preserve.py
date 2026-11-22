@@ -126,6 +126,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from importlib.machinery import all_suffixes
 from pathlib import Path
 
 TEST_DIRS = {"test", "tests"}
@@ -353,9 +354,17 @@ def require_interpreter(python: str, project: Path):
 
 
 def absent_modules(overlay: InPlace, modules: list[str]) -> list[str]:
+    if not modules:
+        return []
     tracked = git(overlay.project, "ls-tree", "-r", "-z", "--name-only", overlay.commit).stdout.split("\0")
-    held = {part.split(".")[0] for path in tracked for part in path.split("/")}
-    return sorted({name for name in modules if name.split(".")[0] not in held})
+    paths = ["/" + path for path in tracked]
+    absent = []
+    for name in sorted(set(modules)):
+        module = "/" + name.replace(".", "/")
+        files = tuple(module + suffix for suffix in all_suffixes())
+        if not any(module + "/" in path or path.endswith(files) for path in paths):
+            absent.append(name)
+    return absent
 
 
 def baseline_pytest_configs(project: Path, test_files: list[str], commit: str) -> dict[str, bytes]:

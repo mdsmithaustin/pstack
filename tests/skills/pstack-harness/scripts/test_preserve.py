@@ -341,6 +341,22 @@ class Preserve(unittest.TestCase):
                 self.assert_setup_problem(result, f'interpreter {sys.executable} cannot import absent_example_dependency,')
                 self.assertEqual((self.repo / 'tests/test_mod.py').read_text(), 'import absent_example_dependency.client\n' + TESTS)
 
+    def test_missing_child_of_tracked_package_is_a_setup_problem(self):
+        (self.repo / 'delivery').mkdir()
+        (self.repo / 'delivery/__init__.py').touch()
+        (self.repo / 'tests/test_mod.py').write_text('import delivery.optional\n' + TESTS)
+        git(self.repo, 'add', '-A')
+        git(self.repo, 'commit', '-q', '-m', 'import optional module')
+        for runner in ('unittest', 'pytest') if HAS_PYTEST else ('unittest',):
+            if runner == 'pytest':
+                (self.repo / 'conftest.py').touch()
+                git(self.repo, 'add', 'conftest.py')
+                git(self.repo, 'commit', '-q', '-m', 'select pytest')
+            for flags in ((), ('--report-only',)):
+                with self.subTest(runner=runner, flags=flags):
+                    result = self.run_preserve(*flags)
+                    self.assert_setup_problem(result, f'interpreter {sys.executable} cannot import delivery.optional,')
+
     def test_removed_project_module_stays_a_failure(self):
         (self.repo / 'pkg').mkdir()
         (self.repo / 'pkg/__init__.py').write_text('')
@@ -354,11 +370,12 @@ class Preserve(unittest.TestCase):
                 git(self.repo, 'commit', '-q', '-m', 'package import')
                 for removed in ('pkg/helpers.py', 'pkg/__init__.py'):
                     (self.repo / removed).unlink()
-                result = self.run_preserve()
-                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-                self.assertIn(f'with {runner}', result.stdout)
-                self.assertIn('ERROR', result.stdout)
-                self.assertIn('code fix', result.stdout)
+                    with self.subTest(removed=removed):
+                        result = self.run_preserve()
+                        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                        self.assertIn(f'with {runner}', result.stdout)
+                        self.assertIn('ERROR', result.stdout)
+                        self.assertIn('code fix', result.stdout)
                 git(self.repo, 'checkout', '-q', '--', 'pkg')
 
     def test_command_failure_wording_follows_the_execution_evidence(self):
