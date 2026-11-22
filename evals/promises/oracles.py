@@ -390,13 +390,9 @@ def shows_text(words):
         for i, word in enumerate(words[:-1]):
             if word not in FIND_RUNNERS:
                 continue
-            viewer = os.path.basename(words[i + 1])
-            if viewer in VIEWER_VERBS:
+            end = next((j for j in range(i + 2, len(words)) if words[j] in (";", "+")), len(words))
+            if shows_text([os.path.basename(words[i + 1]), *words[i + 2:end]]):
                 return True
-            if viewer in COUNTING_FLAGS:
-                end = next((j for j in range(i + 2, len(words)) if words[j] in (";", "+")), len(words))
-                if not hides_matching_lines([viewer, *words[i + 2:end]]):
-                    return True
         return False
     return verb not in NO_CONTENT_VERBS and not hides_matching_lines(words)
 
@@ -433,8 +429,8 @@ def single_file_viewer(words):
 
 
 def shell_reads(command):
-    base, runs, found = "", [], []
-    for pipeline in SHELL_PIPELINE.split(expand_assignments(command)):
+    base, runs, found = "", [], [(path, True) for _, body in heredoc_bodies(command) for path in shell_paths(body)]
+    for pipeline in SHELL_PIPELINE.split(expand_assignments(strip_heredocs(command))):
         segments = [shell_words(segment) for segment in SHELL_SEGMENT.split(pipeline)]
         for index, words in enumerate(segments):
             if not words:
