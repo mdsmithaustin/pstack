@@ -40,12 +40,12 @@ npx skills add mdsmithaustin/pstack
 
 pick the targets you use at the prompt, including `hermes-agent` for hermes. `-g` installs user-level instead of per-project.
 
-the bundled scripts need these on your `PATH`. `/setup-pstack` checks them and says what stops without each:
+`/setup-pstack` checks these commands on your `PATH`. only `python3` is required to continue past this check.
 
-- **python3, 3.9 or newer.** required. the plan script, the model resolver, and the preserve gate run on it, with the standard library only.
-- **bun.** for the PR watcher and merge gate, the orchestrate store, and PR recap sketches and image upload. babysit falls back to `gh` without it.
-- **node.** for the multi-PR plan check. the statechart compiler needs bun or a node that runs TypeScript.
-- **gh.** for opening, watching, and landing GitHub pull requests.
+- **python3, 3.9 or newer.** runs the plan script, the model resolver, and the preserve gate.
+- **bun.** runs the GitHub PR watcher, the merge gate, and the orchestrate store. without bun, babysit can still poll with `gh`. for PR recap sketches, see the [sketch setup and fallback](./skills/pr-recap/references/sketch.md#setup).
+- **node.** runs the multi-PR plan check. the [statechart launcher](./skills/statechart/scripts/statechart) accepts supported versions of node, bun, or deno.
+- **gh.** the default CLI for opening, watching, and landing GitHub pull requests.
 
 notes by CLI. confirm discovery in your installed version:
 
@@ -121,7 +121,7 @@ when invoked it:
 3. routes to the other skills as the steps fire.
 4. writes unslopped replies framed for the consumer and the maintainer.
 
-the mode's [Playbooks section](./skills/poteto-mode/SKILL.md#playbooks) also owns the preservation gate required before every commit. the task runs to the endpoint you state. without one it stops at the furthest reviewable state your repository supports: a pull request, a pushed branch, or a local branch when there is no remote. the mode is designed to work with a mid-tier model in the lead, such as Sonnet 5.5, GPT-6.1 Sol, or Grok 4.7 at medium effort. that target is a design goal that no evaluation here has verified yet, as the [evaluation contract](./evals/framework.md#lead-model-floor-and-subtraction) records. the full rules and playbooks live in [`skills/poteto-mode/SKILL.md`](./skills/poteto-mode/SKILL.md).
+for the pre-commit preservation gate and its fallback when Python is unavailable, see [preservation modes](./skills/poteto-mode/references/delegation.md#preservation-modes). the task runs to the endpoint you state. without one it stops at the furthest reviewable state your repository supports: a pull request, a pushed branch, or a local branch when there is no remote. the mode is designed to work with a mid-tier model in the lead, such as Sonnet 5.5, GPT-6.1 Sol, or Grok 4.7 at medium effort. that target is a design goal that no evaluation here has verified yet, as the [evaluation contract](./evals/framework.md#lead-model-floor-and-subtraction) records. the full rules and playbooks live in [`skills/poteto-mode/SKILL.md`](./skills/poteto-mode/SKILL.md).
 
 [`/poteto-mode`](./skills/poteto-mode/SKILL.md) is also a sticky mode: once entered it stays on across turns, applying itself when a playbook matches or the task needs rigor and staying out of the way otherwise. opt out any time by saying so. after known compaction or truncation, the agent follows the mode's [recovery rule](./skills/poteto-mode/SKILL.md#recover-after-compaction-or-truncation) to continue the current task. runtime retention varies; see the [dated evidence](./skills/pstack-harness/references/skill-retention.md). if the mode stops applying, type `/poteto-mode` again.
 
