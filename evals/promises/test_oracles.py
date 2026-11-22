@@ -1169,9 +1169,14 @@ class ShellReadCredit(unittest.TestCase):
     def test_find_that_runs_a_reader_shows_the_file(self):
         self.assertEqual(self.verdict("find {p} -exec cat {{}} +"), PASS)
         self.assertEqual(self.verdict("find {p} -name '*.md'"), FAIL)
-        for command in ("find {p} -exec echo {{}} +", "find {p} -exec grep -c step {{}} +"):
+        self.assertEqual(self.verdict("find {p} -exec grep -c step {{}} +"), FAIL)
+        for command in ("find {p} -exec awk 1 {{}} +", "find {p} -exec sh -c 'cat {{}}' \\;", "find {p} -exec sort {{}} +"):
             with self.subTest(command=command):
-                self.assertEqual(self.verdict(command), FAIL)
+                self.assertEqual(self.verdict(command), PASS)
+
+    def test_a_heredoc_body_is_not_judged_as_shell_commands(self):
+        command = "python3 - <<'EOF'\nfile = '{p}'\nprint(open(file).read())\nEOF"
+        self.assertEqual(self.verdict(command), PASS)
 
     def test_count_options_after_the_pattern_still_hide_the_lines(self):
         self.assertEqual(self.verdict("rg step --count {p}"), FAIL)
