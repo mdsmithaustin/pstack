@@ -365,8 +365,10 @@ def hides_matching_lines(words):
     counting_flags = COUNTING_FLAGS[words[0]]
     args = iter(words[1:])
     for arg in args:
-        if arg == "--" or not arg.startswith("-") or arg == "-":
+        if arg == "--":
             return False
+        if not arg.startswith("-") or arg == "-":
+            continue
         if arg in COUNTING_LONG:
             return True
         if arg in SEARCH_VALUE_LONG:
@@ -385,14 +387,55 @@ def hides_matching_lines(words):
 def shows_text(words):
     verb = shell_verb(words)
     if verb == "find":
-        return any(word in FIND_RUNNERS and next_word not in NO_CONTENT_VERBS for word, next_word in zip(words, words[1:]))
+        for i, word in enumerate(words[:-1]):
+            if word not in FIND_RUNNERS:
+                continue
+            viewer = os.path.basename(words[i + 1])
+            if viewer in VIEWER_VERBS:
+                return True
+            if viewer in COUNTING_FLAGS:
+                end = next((j for j in range(i + 2, len(words)) if words[j] in (";", "+")), len(words))
+                if not hides_matching_lines([viewer, *words[i + 2:end]]):
+                    return True
+        return False
     return verb not in NO_CONTENT_VERBS and not hides_matching_lines(words)
+
+
+VIEWER_VALUE_OPTIONS = {
+    "head": {"-n", "-c", "--lines", "--bytes"},
+    "tail": {"-n", "-c", "-b", "--lines", "--bytes"},
+    "sed": {"-e", "-f", "--expression", "--file"},
+    "nl": {"-b", "-d", "-f", "-h", "-i", "-l", "-n", "-s", "-v", "-w"},
+    "bat": {"-l", "-r", "-H", "-t", "--language", "--line-range", "--highlight-line", "--style", "--theme", "--paging"},
+}
+
+
+def single_file_viewer(words):
+    verb, *args = words
+    if verb not in VIEWER_VERBS:
+        return False
+    operands = []
+    script_needed = verb == "sed"
+    args = iter(args)
+    for arg in args:
+        if arg == "--":
+            operands.extend(args)
+            break
+        if arg in VIEWER_VALUE_OPTIONS.get(verb, ()):
+            next(args, None)
+            if verb == "sed":
+                script_needed = False
+        elif verb == "sed" and arg.startswith(("-e", "-f", "--expression=", "--file=")):
+            script_needed = False
+        elif not arg.startswith("-") or arg == "-":
+            operands.append(arg)
+    return len(operands) == (2 if script_needed else 1)
 
 
 def shell_reads(command):
     base, runs, found = "", [], []
     for pipeline in SHELL_PIPELINE.split(expand_assignments(command)):
-        segments = [segment.strip().split() for segment in SHELL_SEGMENT.split(pipeline)]
+        segments = [shell_words(segment) for segment in SHELL_SEGMENT.split(pipeline)]
         for index, words in enumerate(segments):
             if not words:
                 continue
@@ -405,18 +448,25 @@ def shell_reads(command):
                 continue
             runs.append(words)
             shown = shows_text(words) and not any(later[:1] == ["wc"] or hides_matching_lines(later) for later in segments[index + 1:])
-            for token in shell_paths(" ".join(words)):
+            for token in path_words(words):
                 found.append((token if token.startswith("/") or not base else f"{base}/{token}", shown))
-    failure_is_the_read = len(runs) == 1 and len(found) == 1 and shell_verb(runs[0]) in VIEWER_VERBS
+    failure_is_the_read = len(runs) == 1 and len(found) == 1 and single_file_viewer(runs[0])
     return [(path, shown, failure_is_the_read) for path, shown in found]
 
 
-def shell_paths(command):
+def shell_words(command):
     try:
-        tokens = shlex.split(command.replace("\n", " "))
+        return shlex.split(command.replace("\n", " "))
     except ValueError:
-        tokens = command.split()
-    return [t for t in tokens if "/" in t or t.endswith((".md", ".py", ".ts", ".sh", ".json", ".txt", ".csv", ".tsv"))]
+        return command.split()
+
+
+def path_words(words):
+    return [t for t in words if "/" in t or t.endswith((".md", ".py", ".ts", ".sh", ".json", ".txt", ".csv", ".tsv"))]
+
+
+def shell_paths(command):
+    return path_words(shell_words(command))
 
 
 class View:
