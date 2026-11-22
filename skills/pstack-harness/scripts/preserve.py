@@ -41,19 +41,28 @@ plugins without those hints.
 
     preserve.py --since <commit> [--project <root>] [--python <exe>] [--reasons <file>] [--report-only]
 
-Exit 0 when the selected tests pass, all failures have allowed reasons, or there are no earlier
-Python tests in automatic mode. With a valid committed baseline, an explicit command still runs when
-file selection is empty. Exit 1 when a failure is uncovered, tests cannot run, or no test executes, including
-an all-skipped suite. Exit 2 when the arguments, overlay, or recovery are unusable, or when the selected
-interpreter is missing, cannot import pytest for a run that needs it, or cannot import a module that an
-earlier test file needs and the start commit does not hold. --report-only suppresses test-result failures;
-invalid arguments, refs, incompatible automatic naming, interpreter setup, and overlay setup still fail.
-Automatic mode does not run test files in other languages. Only those under a test or tests directory
-are restored, as support files.
+Exit 0 when the selected tests pass or all failures have allowed reasons. If the start commit has
+no Python tests, automatic mode also exits 0. It skips restoration and execution and reports any
+test files it recognizes in other languages. With a valid committed baseline, an explicit command
+still runs when Python test selection is empty.
+
+Invalid arguments or refs, incompatible automatic naming, and overlay or recovery errors exit 2.
+Interpreter setup errors also exit 2 with one line naming the interpreter and suggesting
+--python <interpreter>. This happens when the selected interpreter is unavailable or the run needs
+pytest and the interpreter cannot import it. In automatic mode, a missing module discovered while
+loading an earlier test file is a setup error if the start commit lacks that module. If the start
+commit contains the module, the import error remains a test failure. This setup check excludes
+imports through conftest.py and imports made by a project command.
+
+Exit 1 means a failure or runner error lacks an allowed reason, or no test executed (including an
+all-skipped suite). --report-only suppresses test-result failures. Setup errors still exit 2.
 
 Use --command <argv...> as the last argument when the repository has its own test task. It runs
 without a shell from the repository root, with baseline files restored. The task owns test selection
 and must provide unittest or pytest execution evidence. A command that proves no test execution fails.
+When the command exits nonzero, a positive execution count lets the script report that tests ran
+and show the failure summary. The report also counts recognized test files in other languages that
+the command saw at their working-tree versions because they fell outside the support-file selection.
 This strict mode cannot be combined with --reasons. For example:
 
     preserve.py --since <commit> --command mise run gate-test
