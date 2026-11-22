@@ -13,6 +13,16 @@ The inline defaults are written as short model aliases (`fable`, `opus`, `sonnet
 
 ## Steps
 
+### 0. Check the runtimes
+
+pstack's bundled scripts run on `python3` 3.9 or newer, `bun`, `node`, and `gh`. Run:
+
+```sh
+bash "<this skill's base directory>/scripts/check-runtimes.sh"
+```
+
+Failure signal: exit 1, which means `python3` is missing, does not run, or is older than 3.9. The plan script, the model resolver, and the preserve gate need it, so stop and tell the user to install it before the steps below. A missing `bun`, `node`, or `gh` exits 0. Relay each `missing` line with what it stops, and continue. Install nothing yourself.
+
 ### 0a. Check personas and optional native registration
 
 Read the [registration reference](../pstack-harness/references/registration.md) in full. Resolve its logical installed skills root through [portable-paths.md](../pstack-harness/references/portable-paths.md), then run:

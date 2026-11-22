@@ -40,6 +40,13 @@ npx skills add mdsmithaustin/pstack
 
 pick the targets you use at the prompt, including `hermes-agent` for hermes. `-g` installs user-level instead of per-project.
 
+the bundled scripts need these on your `PATH`. `/setup-pstack` checks them and says what stops without each:
+
+- **python3, 3.9 or newer.** required. the plan script, the model resolver, and the preserve gate run on it, with the standard library only.
+- **bun.** for the PR watcher and merge gate, the orchestrate store, and PR recap sketches and image upload. babysit falls back to `gh` without it.
+- **node.** for the multi-PR plan check. the statechart compiler needs bun or a node that runs TypeScript.
+- **gh.** for opening, watching, and landing GitHub pull requests.
+
 notes by CLI. confirm discovery in your installed version:
 
 - **hermes.** project skills require project trust. for global use, install into its native skills directory or add the shared `~/.agents/skills` directory to `skills.external_dirs`. the installer may skip a project hermes symlink when `.hermes` does not exist.
@@ -49,7 +56,7 @@ notes by CLI. confirm discovery in your installed version:
 
 two steps:
 
-1. run [`/setup-pstack`](./skills/setup-pstack/SKILL.md). it checks the bundled personas, offers to register native agents, sets claude code's skill listing, and asks for a reasoning budget and models. rerun it after `npx skills update`: until the listing step runs, claude code shows every pstack skill's description and can load one on its own.
+1. run [`/setup-pstack`](./skills/setup-pstack/SKILL.md). it checks the runtimes and the bundled personas, offers to register native agents, sets claude code's skill listing, and asks for a reasoning budget and models. rerun it after `npx skills update`: until the listing step runs, claude code shows every pstack skill's description and can load one on its own.
 2. use [`/poteto-mode`](./skills/poteto-mode/SKILL.md) whenever you're doing anything that requires rigor.
 
 new here? the [pstack guide](./docs/guide/README.md) walks you through a first real task, from setup and prompting through verification and overnight runs. stuck, or unsure which skill fits? ask [`/poteto-help`](./skills/poteto-help/SKILL.md).
