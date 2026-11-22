@@ -349,12 +349,139 @@ def resolved_shell_paths(command):
     return [path for _, path, _ in shell_path_verbs(command)]
 
 
-def shell_paths(command):
+NO_CONTENT_VERBS = {"ls", "tree", "stat", "du", "rm", "mkdir", "rmdir", "touch", "test", "[", "wc", "file", "find", "cmp",
+                    "shasum", "sha256sum", "md5", "md5sum", "cksum"}
+VIEWER_VERBS = {"cat", "head", "tail", "sed", "nl", "less", "more", "bat"}
+COUNTING_FLAGS = {"grep": "clLq", "egrep": "clLq", "fgrep": "clLq", "rg": "clq", "ag": "clLq"}
+COUNTING_LONG = {"--count", "--count-matches", "--files-with-matches", "--files-without-match", "--quiet", "--silent"}
+SEARCH_VALUE_FLAGS = set("efmABCgtTM")
+SEARCH_VALUE_LONG = {"--regexp", "--file", "--max-count", "--after-context", "--before-context", "--context", "--glob", "--type"}
+FIND_RUNNERS = {"-exec", "-execdir", "-ok", "-okdir"}
+
+
+def hides_matching_lines(words):
+    if not words or words[0] not in COUNTING_FLAGS:
+        return False
+    counting_flags = COUNTING_FLAGS[words[0]]
+    args = iter(words[1:])
+    for arg in args:
+        if arg == "--":
+            return False
+        if not arg.startswith("-") or arg == "-":
+            continue
+        if arg in COUNTING_LONG:
+            return True
+        if arg in SEARCH_VALUE_LONG:
+            next(args, None)
+        elif not arg.startswith("--"):
+            for i, flag in enumerate(arg[1:], 1):
+                if flag in counting_flags:
+                    return True
+                if flag in SEARCH_VALUE_FLAGS:
+                    if i == len(arg) - 1:
+                        next(args, None)
+                    break
+    return False
+
+
+def shows_text(words):
+    verb = shell_verb(words)
+    if verb == "find":
+        for i, word in enumerate(words[:-1]):
+            if word not in FIND_RUNNERS:
+                continue
+            end = next((j for j in range(i + 2, len(words)) if words[j] in (";", "+")), len(words))
+            if shows_text([os.path.basename(words[i + 1]), *words[i + 2:end]]):
+                return True
+        return False
+    return verb not in NO_CONTENT_VERBS and not hides_matching_lines(words)
+
+
+VIEWER_VALUE_OPTIONS = {
+    "head": {"-n", "-c", "--lines", "--bytes"},
+    "tail": {"-n", "-c", "-b", "--lines", "--bytes"},
+    "sed": {"-e", "-f", "--expression", "--file"},
+    "nl": {"-b", "-d", "-f", "-h", "-i", "-l", "-n", "-s", "-v", "-w"},
+    "bat": {"-l", "-r", "-H", "-t", "--language", "--line-range", "--highlight-line", "--style", "--theme", "--paging"},
+}
+
+
+def single_file_viewer(words):
+    verb, *args = words
+    if verb not in VIEWER_VERBS:
+        return False
+    operands = []
+    script_needed = verb == "sed"
+    args = iter(args)
+    for arg in args:
+        if arg == "--":
+            operands.extend(args)
+            break
+        if arg in VIEWER_VALUE_OPTIONS.get(verb, ()):
+            next(args, None)
+            if verb == "sed":
+                script_needed = False
+        elif verb == "sed" and arg.startswith(("-e", "-f", "--expression=", "--file=")):
+            script_needed = False
+        elif not arg.startswith("-") or arg == "-":
+            operands.append(arg)
+    return len(operands) == (2 if script_needed else 1)
+
+
+def fold_heredocs(command):
+    lines = iter(command.split("\n"))
+    folded = []
+    for line in lines:
+        match = HEREDOC.search(line)
+        if match:
+            paths = []
+            for body_line in lines:
+                if body_line.strip() == match.group(2):
+                    break
+                paths.extend(shell_paths(body_line))
+            if paths:
+                separator = SHELL_SEGMENT.search(line, match.end())
+                end = separator.start() if separator else len(line)
+                line = line[:end] + " " + shlex.join(paths) + line[end:]
+        folded.append(line)
+    return "\n".join(folded)
+
+
+def shell_reads(command):
+    base, runs, found = "", [], []
+    for pipeline in SHELL_PIPELINE.split(expand_assignments(fold_heredocs(command))):
+        segments = [shell_words(segment) for segment in SHELL_SEGMENT.split(pipeline)]
+        for index, words in enumerate(segments):
+            if not words:
+                continue
+            if words[0] == "cd":
+                if len(words) > 1:
+                    target = words[1].strip("\"'")
+                    base = target if target.startswith("/") or not base else f"{base}/{target}"
+                if runs:
+                    runs.append(words)
+                continue
+            runs.append(words)
+            shown = shows_text(words) and not any(later[:1] == ["wc"] or hides_matching_lines(later) for later in segments[index + 1:])
+            for token in path_words(words):
+                found.append((token if token.startswith("/") or not base else f"{base}/{token}", shown))
+    failure_is_the_read = len(runs) == 1 and len(found) == 1 and single_file_viewer(runs[0])
+    return [(path, shown, failure_is_the_read) for path, shown in found]
+
+
+def shell_words(command):
     try:
-        tokens = shlex.split(command.replace("\n", " "))
+        return shlex.split(command.replace("\n", " "))
     except ValueError:
-        tokens = command.split()
-    return [t for t in tokens if "/" in t or t.endswith((".md", ".py", ".ts", ".sh", ".json", ".txt", ".csv", ".tsv"))]
+        return command.split()
+
+
+def path_words(words):
+    return [t for t in words if "/" in t or t.endswith((".md", ".py", ".ts", ".sh", ".json", ".txt", ".csv", ".tsv"))]
+
+
+def shell_paths(command):
+    return path_words(shell_words(command))
 
 
 class View:
@@ -468,10 +595,11 @@ class View:
                             out.append((call.get("seq"), rel, self.read_returned(call)))
                         break
             elif name in SHELL_TOOLS:
-                for token in resolved_shell_paths(str(given.get(SHELL_TOOLS[name]) or "")):
+                failed = (self.results_for(call) or {}).get("ok") is False
+                for token, shown, failure_is_the_read in shell_reads(str(given.get(SHELL_TOOLS[name]) or "")):
                     rel = skill_rel(token)
                     if rel:
-                        out.append((call.get("seq"), rel, True))
+                        out.append((call.get("seq"), rel, shown and not (failed and failure_is_the_read)))
         return out
 
     def read_returned(self, call):

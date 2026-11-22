@@ -1133,6 +1133,91 @@ class BugFixOracles(unittest.TestCase):
         self.assertEqual(grade("steering-prompt-redirects-run", idle, case)["verdict"], INCONCLUSIVE)
 
 
+class ShellReadCredit(unittest.TestCase):
+    PLAYBOOK = "/w/.claude/skills/poteto-mode/playbooks/feature.md"
+
+    def verdict(self, command, ok=True):
+        trace = minimal(events=bash(0, command.format(p=self.PLAYBOOK), ok=ok), final_reply="ok")
+        return grade("feature-prompt-routes-to-feature", trace, load_case("route-feature"))["verdict"]
+
+    def test_commands_that_show_the_file_are_reads(self):
+        for command in ("cat {p}", "sed -n 1,80p {p}", "cat {p} | head -50", "grep -n step {p}", "ls {p}; cat {p}",
+                        "cd /w/.claude/skills && cat poteto-mode/playbooks/feature.md"):
+            with self.subTest(command=command):
+                self.assertEqual(self.verdict(command), PASS)
+
+    def test_commands_that_only_name_the_file_are_not_reads(self):
+        for command in ("ls -la {p}", "test -f {p} && echo yes", "wc -l {p}", "stat {p}", "grep -c step {p}", "rg -l step {p}",
+                        "grep --quiet step {p}", "cd /w/.claude/skills && ls poteto-mode/playbooks/feature.md"):
+            with self.subTest(command=command):
+                self.assertEqual(self.verdict(command), FAIL)
+
+    def test_a_lone_failed_read_is_not_a_read(self):
+        self.assertEqual(self.verdict("cat {p}", ok=False), FAIL)
+        self.assertEqual(self.verdict("cd /w/.claude/skills && cat poteto-mode/playbooks/feature.md", ok=False), FAIL)
+
+    def test_a_read_in_a_chain_that_failed_later_keeps_its_credit(self):
+        self.assertEqual(self.verdict("cat {p} && python3 -m unittest", ok=False), PASS)
+        self.assertEqual(self.verdict("cat {p} && cd /missing", ok=False), PASS)
+
+    def test_a_failed_call_discredits_only_a_viewer_of_one_file(self):
+        self.assertEqual(self.verdict("cat {p} /w/missing.md", ok=False), PASS)
+        self.assertEqual(self.verdict("cat {p} MISSING", ok=False), PASS)
+        self.assertEqual(self.verdict("python3 {p}", ok=False), PASS)
+        self.assertEqual(self.verdict("sed -n 1,9p {p}", ok=False), FAIL)
+
+    def test_find_that_runs_a_reader_shows_the_file(self):
+        self.assertEqual(self.verdict("find {p} -exec cat {{}} +"), PASS)
+        self.assertEqual(self.verdict("find {p} -name '*.md'"), FAIL)
+        self.assertEqual(self.verdict("find {p} -exec grep -c step {{}} +"), FAIL)
+        for command in ("find {p} -exec awk 1 {{}} +", "find {p} -exec sh -c 'cat {{}}' \\;", "find {p} -exec sort {{}} +"):
+            with self.subTest(command=command):
+                self.assertEqual(self.verdict(command), PASS)
+
+    def test_a_heredoc_body_is_not_judged_as_shell_commands(self):
+        command = "python3 - <<'EOF'\nfile = '{p}'\nprint(open(file).read())\nEOF"
+        self.assertEqual(self.verdict(command), PASS)
+        self.assertEqual(self.verdict("cd /w/.claude/skills/poteto-mode && sh <<'EOF'\ncat playbooks/feature.md\nEOF"), PASS)
+
+    def test_heredoc_credit_belongs_to_the_opening_command_on_a_shared_line(self):
+        body = "\ncat playbooks/feature.md\nEOF"
+        cd = "cd /w/.claude/skills/poteto-mode && "
+        self.assertEqual(self.verdict(cd + "sh <<'EOF'; cd .." + body), PASS)
+        self.assertEqual(self.verdict(cd + "wc -l <<'EOF'; pwd" + body), FAIL)
+
+    def test_count_options_after_the_pattern_still_hide_the_lines(self):
+        self.assertEqual(self.verdict("rg step --count {p}"), FAIL)
+
+    def test_a_pattern_after_the_option_terminator_is_not_a_flag(self):
+        self.assertEqual(self.verdict("grep -- -q {p}"), PASS)
+        self.assertEqual(self.verdict("grep -e -c {p}"), PASS)
+
+    def test_capital_L_follows_links_in_ripgrep_and_lists_files_in_other_searches(self):
+        for search, expected in (("rg -L", PASS), ("rg -nL", PASS), ("rg -Lc", FAIL),
+                                 ("rg --files-without-match", FAIL), ("grep -L", FAIL),
+                                 ("egrep -L", FAIL), ("fgrep -L", FAIL), ("ag -L", FAIL)):
+            for command in (search + " step {p}", "cat {p} | " + search + " step"):
+                with self.subTest(command=command):
+                    self.assertEqual(self.verdict(command), expected)
+
+    def test_each_segment_is_judged_by_its_own_command(self):
+        self.assertEqual(self.verdict("echo feature.md | grep -c step {p}"), FAIL)
+        self.assertEqual(self.verdict("grep -c step {p}; cat {p}"), PASS)
+
+    def test_a_reader_piped_into_a_counter_shows_no_text(self):
+        for command in ("cat {p} | wc -l", "cat {p} | grep -c step", "sed -n 1,9p {p} | grep -q step"):
+            with self.subTest(command=command):
+                self.assertEqual(self.verdict(command), FAIL)
+
+    def test_the_adapter_read_list_does_not_restore_a_command_that_showed_nothing(self):
+        for command in ("wc -l {p}", "grep -c step {p}"):
+            with self.subTest(command=command):
+                text = command.format(p=self.PLAYBOOK)
+                trace = minimal(events=bash(0, text), final_reply="ok", files_read=claude_code.shell_reads(text, "/w"))
+                self.assertTrue(trace["files_read"])
+                self.assertEqual(grade("feature-prompt-routes-to-feature", trace, load_case("route-feature"))["verdict"], FAIL)
+
+
 class HowWhyOracles(unittest.TestCase):
     def test_narrow_how_fails_on_explorers(self):
         case = load_case("how-run")

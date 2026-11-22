@@ -239,7 +239,7 @@ The sample is ordered by a digest of each receipt's identity, so it cannot favor
 These heuristic edges are open. Two have moved recorded verdicts.
 
 - **Pasted command.** The oracle requires the first 40 characters of a run command to appear in the reply after whitespace normalization. A reply that pastes only output goes to the judge. The edge sent `blast-radius-proves-one-fact-by-running-code` to `INCONCLUSIVE` and the judge in 8 recorded runs. Three are the [df58112 runs](results/2026-10-08-sync-df58112.md) on Claude Code (`relay-u7cognyo`), Hermes (`relay-triw8a0x`), and Grok (`relay-28yiwbfu`). Three are wave 1c runs on Claude Code (`relay-pam1l9xi`), Codex (`relay-yo00wgwx`), and Hermes (`relay-d39h4gvi`). Their verdicts are in the `blast-radius-proves-one-fact-by-running-code` row of the [2026-10-03 matrix](results/2026-10-03.md#matrix), which does not name the run ids. The ids come from the saved verdicts under `.audit`. Two more runs appear in no committed results file and exist only under `.audit`. They are Hermes `relay-06cr5uum` (`post-stack-20261004`) and Grok `relay-zetfpgwi` (`completion-20261005`). An environment-variable prefix defeats the 40-character match. Codex `relay-yo00wgwx` ran `PYTHONDONTWRITEBYTECODE=1 python3 /private/tmp/relay-blast-radius-proof.py --require-offset-isolation` and pasted the same command without `PYTHONDONTWRITEBYTECODE=1 `.
-- **Failed command chain.** A read inside a command chain gets no credit when a later command in the chain fails. `load_attempts` grades the whole shell call, so a failed chain records the read as `read-unknown`, which the Codex load rule does not accept. The edge moved four recorded verdicts on Codex. Two are `INCONCLUSIVE`. They are `rollup-hyi433r6` in the [2026-10-09 results](results/2026-10-09-name-only-listing.md#classification) and `rollup-tl62ryyy` in the [2026-10-10 results](results/2026-10-10-use-the-skill.md#classification). The other two are `FAIL`. They are `relay-__ceheht`, which the 2026-10-10 results name, and `relay-guxf3fp7`, which they do not. The id `relay-guxf3fp7` comes from the saved verdicts under `.audit`.
+- **Failed command chain.** For whole-skill loads, `load_attempts` records a read as `read-unknown` when a later command in the same shell call fails. The Codex load rule requires a successful load. [Playbook read credit](#shell-commands-that-name-a-file) uses a different failure rule. The edge moved four recorded verdicts on Codex. Two are `INCONCLUSIVE`. They are `rollup-hyi433r6` in the [2026-10-09 results](results/2026-10-09-name-only-listing.md#classification) and `rollup-tl62ryyy` in the [2026-10-10 results](results/2026-10-10-use-the-skill.md#classification). The other two are `FAIL`. They are `relay-__ceheht`, which the 2026-10-10 results name, and `relay-guxf3fp7`, which they do not. The id `relay-guxf3fp7` comes from the saved verdicts under `.audit`.
 
 No other listed edge is recorded as moving a verdict. Fix one only after a recorded run's verdict moves because of it. Work it red-first, and run a differential over every saved corpus against `main`. Both counts must be 0: correct replies that fail at head but pass on `main`, and negated replies that pass at head but fail on `main`. A new FAIL needs proof of the defect. See [Run live cases](#run-live-cases) for unresolved evidence and judge referrals.
 
@@ -264,7 +264,7 @@ No other listed edge is recorded as moving a verdict. Fix one only after a recor
 
 ### Passes a do-nothing run must not earn
 
-The edges above are found from FAIL verdicts, because a person reads each FAIL trace before it counts. Nothing reads a PASS by default, so an oracle that is too lenient stays unseen. `test_null_trace.py` grades two do-nothing traces against every runnable case with no project on disk. One has no events. In the other, every turn replies "Done." and calls no tool. No promise may pass either.
+The edges above are found from FAIL verdicts, because a person reads each FAIL trace before it counts. Nothing reads a PASS by default, so an oracle that is too lenient stays unseen. `test_null_trace.py` grades three traces against every runnable case with no project on disk. The first has no events. In the second, every turn replies "Done." and calls no tool. No promise may pass either of these two traces.
 
 Six oracles used to pass them, because each read the absence of a bad action as success. Each now also requires a sign that the agent did the work, and returns `INCONCLUSIVE` without one:
 
@@ -278,7 +278,21 @@ Six oracles used to pass them, because each read the absence of a bad action as 
 
 A correct run can now grade `INCONCLUSIVE` where it graded PASS, for example a follow-up turn answered in text alone. Those go to a reader. Verdicts recorded before this change were graded by the lenient oracles; record a new run before citing a PASS on these six promises. The [freshness rules](#keep-live-evidence-aligned-with-changes) explain why saved regrades cannot refresh receipts. Regrading saved runs kept without their project turns real PASS verdicts into `INCONCLUSIVE` on `interrogate-read-only-when-asked`, which requires readable git state, and on `design-ladder-spares-small-changes` when the trace contains no source edit.
 
-These traces are the cheapest false-pass probe, not a complete one. They do not cover oracles that pass on a keyword in the reply or on a command that names a file without reading it.
+A third trace calls no tool and replies with text stuffed with the phrases reply-reading oracles look for. Five promises still pass it on the agent's own words: `arena-second-opinion-includes-current-design`, `interrogate-keeps-run-proven-findings`, `technical-writing-picks-mode-then-sentences`, `why-reports-cited-history`, and `why-reports-null-results`. `test_null_trace.py` pins that list. A new promise that passes the trace fails the test, and so does a fixed oracle that is still listed. A PASS on these five is weak evidence until its trace is read; take them first in `freshness.py audit-sample` reviews.
+
+These traces are the cheapest false-pass probe, not a complete one. A reply that pairs its claims with unrelated tool calls is not covered.
+
+### Shell commands that name a file
+
+For lead reads, including playbook routing, the grader infers whether a shell command showed the skill file's text. It checks each command segment separately. File listings, metadata checks, counts, and checksums such as `ls`, `stat`, `wc`, and `sha256sum` earn no read credit. A plain `find` also earns none. `find -exec <command>` earns credit when `<command>` would earn it on its own, as in `find skills/poteto-mode/playbooks/feature.md -exec cat {} +`.
+
+The grader reads a heredoc body as input to the command that opens it, not as shell commands. A path in the body is judged with that command and resolved against any earlier `cd`, so `cd skills/poteto-mode && sh <<'EOF'` followed by `cat playbooks/feature.md` earns credit.
+
+A search can earn credit when it prints matching lines. Count, filename-only, and quiet options suppress credit, including when a viewer pipes its output into that search. Piping a viewer into `wc` also suppresses credit. The grader interprets options for each search command. For example, `rg -L` follows symlinks and can show matching lines, while `grep -L` prints filenames. In `grep -e -c feature.md` and `grep -- -c feature.md`, `-c` is the pattern. The first command takes it as the value of `-e`, and the second ends option parsing at `--`.
+
+A failed shell call loses otherwise eligible credit only when a single viewer names a single file, after any leading `cd`. The trace records one result for the whole call. If a later command or another file caused the failure, the viewer may already have shown the skill file.
+
+When no read attempt names the file, the grader accepts the adapter's entry for it in the lead read list (`files_read` on traces without a lead-specific list). An event that earns no credit blocks that fallback for the same file. A separate credited read of the file still counts.
 
 ## Parent grading authority
 
