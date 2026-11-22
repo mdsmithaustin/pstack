@@ -40,7 +40,7 @@ npx skills add mdsmithaustin/pstack
 
 pick the targets you use at the prompt, including `hermes-agent` for hermes. `-g` installs user-level instead of per-project.
 
-`/setup-pstack` checks these commands on your `PATH`. only `python3` is required to continue past this check.
+a full `/setup-pstack` run checks these commands on your `PATH`. only `python3` is required to continue past this check.
 
 - **python3, 3.9 or newer.** runs the plan script, the model resolver, and the preserve gate.
 - **bun.** runs the GitHub PR watcher, the merge gate, and the orchestrate store. without bun on your `PATH`, babysit can poll with `gh`, PR recap can [run bun through npx](./skills/pr-recap/references/sketch.md#setup) to draw sketches, and node can run the attachment helper.
