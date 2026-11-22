@@ -284,7 +284,7 @@ These traces are the cheapest false-pass probe, not a complete one. A reply that
 
 ### Shell commands that name a file
 
-For lead reads, including playbook routing, the grader infers whether a shell command showed the skill file's text. It checks each command segment separately. File listings, metadata checks, counts, and checksums such as `ls`, `stat`, `wc`, and `sha256sum` earn no read credit. A plain `find` also earns none. A command such as `find skills/poteto-mode/playbooks/feature.md -exec cat {} +` can earn credit because it runs a viewer.
+For lead reads, including playbook routing, the grader infers whether a shell command showed the skill file's text. It checks each command segment separately. File listings, metadata checks, counts, and checksums such as `ls`, `stat`, `wc`, and `sha256sum` earn no read credit. A plain `find` also earns none. `find -exec <command>` earns credit when `<command>` would earn it on its own, as in `find skills/poteto-mode/playbooks/feature.md -exec cat {} +`. Paths inside a heredoc body keep their credit, because the body is input to a program and not shell commands.
 
 A search can earn credit when it prints matching lines. Count, filename-only, and quiet options suppress credit, including when a viewer pipes its output into that search. Piping a viewer into `wc` also suppresses credit. The grader interprets options for each search command. For example, `rg -L` follows symlinks and can show matching lines, while `grep -L` prints filenames. In `grep -e -c feature.md` and `grep -- -c feature.md`, `-c` is the pattern. The first command takes it as the value of `-e`, and the second ends option parsing at `--`.
 
