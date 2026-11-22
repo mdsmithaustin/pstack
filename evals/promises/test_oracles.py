@@ -1177,6 +1177,7 @@ class ShellReadCredit(unittest.TestCase):
     def test_a_heredoc_body_is_not_judged_as_shell_commands(self):
         command = "python3 - <<'EOF'\nfile = '{p}'\nprint(open(file).read())\nEOF"
         self.assertEqual(self.verdict(command), PASS)
+        self.assertEqual(self.verdict("cd /w/.claude/skills/poteto-mode && sh <<'EOF'\ncat playbooks/feature.md\nEOF"), PASS)
 
     def test_count_options_after_the_pattern_still_hide_the_lines(self):
         self.assertEqual(self.verdict("rg step --count {p}"), FAIL)
