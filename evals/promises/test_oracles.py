@@ -1173,6 +1173,14 @@ class ShellReadCredit(unittest.TestCase):
         self.assertEqual(self.verdict("grep -- -q {p}"), PASS)
         self.assertEqual(self.verdict("grep -e -c {p}"), PASS)
 
+    def test_capital_L_follows_links_in_ripgrep_and_lists_files_in_other_searches(self):
+        for search, expected in (("rg -L", PASS), ("rg -nL", PASS), ("rg -Lc", FAIL),
+                                 ("rg --files-without-match", FAIL), ("grep -L", FAIL),
+                                 ("egrep -L", FAIL), ("fgrep -L", FAIL), ("ag -L", FAIL)):
+            for command in (search + " step {p}", "cat {p} | " + search + " step"):
+                with self.subTest(command=command):
+                    self.assertEqual(self.verdict(command), expected)
+
     def test_each_segment_is_judged_by_its_own_command(self):
         self.assertEqual(self.verdict("echo feature.md | grep -c step {p}"), FAIL)
         self.assertEqual(self.verdict("grep -c step {p}; cat {p}"), PASS)

@@ -352,8 +352,7 @@ def resolved_shell_paths(command):
 NO_CONTENT_VERBS = {"ls", "tree", "stat", "du", "rm", "mkdir", "rmdir", "touch", "test", "[", "wc", "file", "find", "cmp",
                     "shasum", "sha256sum", "md5", "md5sum", "cksum"}
 VIEWER_VERBS = {"cat", "head", "tail", "sed", "nl", "less", "more", "bat"}
-SEARCH_VERBS = {"grep", "egrep", "fgrep", "rg", "ag"}
-COUNTING_FLAGS = set("clLq")
+COUNTING_FLAGS = {"grep": "clLq", "egrep": "clLq", "fgrep": "clLq", "rg": "clq", "ag": "clLq"}
 COUNTING_LONG = {"--count", "--count-matches", "--files-with-matches", "--files-without-match", "--quiet", "--silent"}
 SEARCH_VALUE_FLAGS = set("efmABCgtTM")
 SEARCH_VALUE_LONG = {"--regexp", "--file", "--max-count", "--after-context", "--before-context", "--context", "--glob", "--type"}
@@ -361,8 +360,9 @@ FIND_RUNNERS = {"-exec", "-execdir", "-ok", "-okdir"}
 
 
 def hides_matching_lines(words):
-    if not words or words[0] not in SEARCH_VERBS:
+    if not words or words[0] not in COUNTING_FLAGS:
         return False
+    counting_flags = COUNTING_FLAGS[words[0]]
     args = iter(words[1:])
     for arg in args:
         if arg == "--" or not arg.startswith("-") or arg == "-":
@@ -373,7 +373,7 @@ def hides_matching_lines(words):
             next(args, None)
         elif not arg.startswith("--"):
             for i, flag in enumerate(arg[1:], 1):
-                if flag in COUNTING_FLAGS:
+                if flag in counting_flags:
                     return True
                 if flag in SEARCH_VALUE_FLAGS:
                     if i == len(arg) - 1:
