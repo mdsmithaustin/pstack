@@ -349,24 +349,66 @@ def resolved_shell_paths(command):
     return [path for _, path, _ in shell_path_verbs(command)]
 
 
-# Commands that name a file without showing any of its text. Naming a file this way is not a read of it.
 NO_CONTENT_VERBS = {"ls", "tree", "stat", "du", "rm", "mkdir", "rmdir", "touch", "test", "[", "wc", "file", "find", "cmp",
                     "shasum", "sha256sum", "md5", "md5sum", "cksum"}
-COUNTING_SEARCH = re.compile(r"^(?:grep|egrep|fgrep|rg|ag)\s+(?:\S+\s+)*?-(?:-count\b|-files-with(?:out)?-match(?:es)?\b|-quiet\b|[a-zA-Z]*[clLq])")
+VIEWER_VERBS = {"cat", "head", "tail", "sed", "nl", "less", "more", "bat"}
+SEARCH_VERBS = {"grep", "egrep", "fgrep", "rg", "ag"}
+COUNTING_FLAGS = set("clLq")
+COUNTING_LONG = {"--count", "--count-matches", "--files-with-matches", "--files-without-match", "--quiet", "--silent"}
+SEARCH_VALUE_FLAGS = set("efmABCgtTM")
+SEARCH_VALUE_LONG = {"--regexp", "--file", "--max-count", "--after-context", "--before-context", "--context", "--glob", "--type"}
+FIND_RUNNERS = {"-exec", "-execdir", "-ok", "-okdir"}
+
+
+def hides_matching_lines(words):
+    if not words or words[0] not in SEARCH_VERBS:
+        return False
+    args = iter(words[1:])
+    for arg in args:
+        if arg == "--" or not arg.startswith("-") or arg == "-":
+            return False
+        if arg in COUNTING_LONG:
+            return True
+        if arg in SEARCH_VALUE_LONG:
+            next(args, None)
+        elif not arg.startswith("--"):
+            for i, flag in enumerate(arg[1:], 1):
+                if flag in COUNTING_FLAGS:
+                    return True
+                if flag in SEARCH_VALUE_FLAGS:
+                    if i == len(arg) - 1:
+                        next(args, None)
+                    break
+    return False
+
+
+def shows_text(words):
+    verb = shell_verb(words)
+    if verb == "find":
+        return any(word in FIND_RUNNERS and next_word not in NO_CONTENT_VERBS for word, next_word in zip(words, words[1:]))
+    return verb not in NO_CONTENT_VERBS and not hides_matching_lines(words)
 
 
 def shell_reads(command):
-    """(path, alone) for each file a shell command shows text from. alone means the command is that one segment, so a
-    failed result is the read's own failure and not a later command's."""
-    segments = [seg for pipeline in SHELL_PIPELINE.split(expand_assignments(command)) for seg in SHELL_SEGMENT.split(pipeline)
-                if seg.strip() and seg.strip().split()[:1] != ["cd"]]
-    out = []
-    for verb, path, pipeline in shell_path_verbs(command):
-        segment = next((seg.strip() for seg in SHELL_SEGMENT.split(pipeline) if path.rsplit("/", 1)[-1] in seg), "")
-        if verb in NO_CONTENT_VERBS or COUNTING_SEARCH.match(segment):
-            continue
-        out.append((path, len(segments) == 1))
-    return out
+    base, runs, found = "", [], []
+    for pipeline in SHELL_PIPELINE.split(expand_assignments(command)):
+        segments = [segment.strip().split() for segment in SHELL_SEGMENT.split(pipeline)]
+        for index, words in enumerate(segments):
+            if not words:
+                continue
+            if words[0] == "cd":
+                if len(words) > 1:
+                    target = words[1].strip("\"'")
+                    base = target if target.startswith("/") or not base else f"{base}/{target}"
+                if runs:
+                    runs.append(words)
+                continue
+            runs.append(words)
+            shown = shows_text(words) and not any(later[:1] == ["wc"] or hides_matching_lines(later) for later in segments[index + 1:])
+            for token in shell_paths(" ".join(words)):
+                found.append((token if token.startswith("/") or not base else f"{base}/{token}", shown))
+    failure_is_the_read = len(runs) == 1 and len(found) == 1 and shell_verb(runs[0]) in VIEWER_VERBS
+    return [(path, shown, failure_is_the_read) for path, shown in found]
 
 
 def shell_paths(command):
@@ -489,11 +531,10 @@ class View:
                         break
             elif name in SHELL_TOOLS:
                 failed = (self.results_for(call) or {}).get("ok") is False
-                for token, alone in shell_reads(str(given.get(SHELL_TOOLS[name]) or "")):
+                for token, shown, failure_is_the_read in shell_reads(str(given.get(SHELL_TOOLS[name]) or "")):
                     rel = skill_rel(token)
                     if rel:
-                        # A failed chain may have read the file before a later command failed, so only a lone read is discredited.
-                        out.append((call.get("seq"), rel, not (failed and alone)))
+                        out.append((call.get("seq"), rel, shown and not (failed and failure_is_the_read)))
         return out
 
     def read_returned(self, call):

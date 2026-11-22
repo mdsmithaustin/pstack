@@ -284,9 +284,11 @@ These traces are the cheapest false-pass probe, not a complete one. A reply that
 
 ### Shell commands that name a file
 
-A shell command counts as a read of a skill file only when it shows the file's text. `ls`, `test`, `stat`, `wc`, `find`, checksum commands, and a search that only counts or lists matches (`grep -c`, `rg -l`, `grep -q`) name the file without showing it, and earn no read credit. A failed call earns none when the read is its only command. This applies wherever an oracle asks what the lead read, including the 16 routing promises, which used to pass on `ls` of the playbook.
+A shell command counts as a read of a skill file only when it shows the file's text. `ls`, `test`, `stat`, `wc`, checksum commands, and a search that only counts or lists matches (`grep -c`, `rg -l`, `grep -q`) name the file without showing it, and earn no read credit. So does `find`, unless it runs a viewer through `-exec`, as in `find <file> -exec cat {} +`. A viewer piped into `wc` or a counting search, such as `cat <file> | wc -l`, also shows no text. Each segment of a command is judged by its own verb and options, and options stop at `--`. This applies wherever an oracle asks what the lead read, including the 16 routing promises, which used to pass on `ls` of the playbook.
 
-A read inside a longer chain keeps its credit when the call fails, because the trace records one result for the whole call and the failure may belong to a later command. That leniency is deliberate and is the reverse of the failed-command-chain edge above. A file the harness adapter lists in `files_read` also keeps its credit without a matching event.
+A failed call discredits a read only when the call's one command, after any leading `cd`, is a viewer (`cat`, `head`, `tail`, `sed`, `nl`, `less`, `more`, or `bat`) that names that one file. Every other failed call keeps its credit, because the trace records one result for the whole call. The failure may belong to a later command, to another file `cat` was given, or to a script that ran and exited nonzero. That leniency is deliberate and is the reverse of the failed-command-chain edge above.
+
+A file the harness adapter lists in `files_read` keeps its credit without a matching event. A shell mention that showed no text blocks that credit, because the Claude Code, Codex, and Hermes adapters list `wc` and `grep` targets in `files_read`.
 
 ## Parent grading authority
 
