@@ -428,9 +428,25 @@ def single_file_viewer(words):
     return len(operands) == (2 if script_needed else 1)
 
 
+def fold_heredocs(command):
+    lines, header, end = [], None, None
+    for line in command.split("\n"):
+        if end is not None:
+            if line.strip() == end:
+                end = None
+            else:
+                lines[header] += " " + " ".join(shlex.quote(path) for path in shell_paths(line))
+            continue
+        lines.append(line)
+        match = HEREDOC.search(line)
+        if match:
+            header, end = len(lines) - 1, match.group(2)
+    return "\n".join(lines)
+
+
 def shell_reads(command):
-    base, runs, found = "", [], [(path, True) for _, body in heredoc_bodies(command) for path in shell_paths(body)]
-    for pipeline in SHELL_PIPELINE.split(expand_assignments(strip_heredocs(command))):
+    base, runs, found = "", [], []
+    for pipeline in SHELL_PIPELINE.split(expand_assignments(fold_heredocs(command))):
         segments = [shell_words(segment) for segment in SHELL_SEGMENT.split(pipeline)]
         for index, words in enumerate(segments):
             if not words:

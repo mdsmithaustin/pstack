@@ -286,7 +286,7 @@ These traces are the cheapest false-pass probe, not a complete one. A reply that
 
 For lead reads, including playbook routing, the grader infers whether a shell command showed the skill file's text. It checks each command segment separately. File listings, metadata checks, counts, and checksums such as `ls`, `stat`, `wc`, and `sha256sum` earn no read credit. A plain `find` also earns none. `find -exec <command>` earns credit when `<command>` would earn it on its own, as in `find skills/poteto-mode/playbooks/feature.md -exec cat {} +`.
 
-The grader scans a heredoc body as program input. A path such as `skills/poteto-mode/playbooks/feature.md` can earn credit directly. The grader misses a relative path such as `playbooks/feature.md` when it needs a preceding `cd skills/poteto-mode` to identify the file.
+The grader reads a heredoc body as input to the command that opens it, not as shell commands. A path in the body is judged with that command and resolved against any earlier `cd`, so `cd skills/poteto-mode && sh <<'EOF'` followed by `cat playbooks/feature.md` earns credit.
 
 A search can earn credit when it prints matching lines. Count, filename-only, and quiet options suppress credit, including when a viewer pipes its output into that search. Piping a viewer into `wc` also suppresses credit. The grader interprets options for each search command. For example, `rg -L` follows symlinks and can show matching lines, while `grep -L` prints filenames. In `grep -e -c feature.md` and `grep -- -c feature.md`, `-c` is the pattern. The first command takes it as the value of `-e`, and the second ends option parsing at `--`.
 
