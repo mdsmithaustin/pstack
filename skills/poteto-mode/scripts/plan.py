@@ -225,12 +225,13 @@ def load_phrase(skill, harness):
     return f'read "${{PSTACK_SKILLS_ROOT:?}}/{skill}/SKILL.md" in full'
 
 
-def pending(args, path, prose, endpoint):
-    """No facts yet: the worklist opens first, and the facts are its first item."""
+def pending(args, manifest, path, prose, endpoint):
+    """No facts yet: the worklist opens first, and the facts are its first item. The gates of the lightest route bind already."""
     return {
         "playbook": args.playbook, "file": display_path(path), "full_read": False, "route": "pending", "regime": None,
         "route_source": "table", "route_reason": "no risk facts recorded yet", "tiered": True, "facts": {}, "warning": None,
-        "opening": prose, "steps": [], "lightweight_worklist": None, "gates": [], "scrutiny": None, "reply": "", "reply_loads": [],
+        "opening": prose, "steps": [], "lightweight_worklist": None, "gates": route_gates(manifest, args.playbook, "lightweight"),
+        "scrutiny": None, "reply": "", "reply_loads": [],
         "default_endpoint": endpoint[0], "default_endpoint_reason": endpoint[1],
     }
 
@@ -250,7 +251,7 @@ def build(args, manifest, endpoint=None):
         if args.user_route and args.raise_to:
             raise SystemExit("plan.py: pass --user-route or --raise-to, not both. The user's route wins, so tell the user why you would raise it.")
         if len(missing) == len(manifest["facts"]) and not args.user_route and not args.raise_to:
-            return pending(args, path, prose, shown)
+            return pending(args, manifest, path, prose, shown)
         if missing:
             raise SystemExit(f"plan.py: record all five facts, even when a route is named. Missing: {', '.join('--' + m for m in missing)}.")
         facts = {name: parse_fact(getattr(args, name)) for name in manifest["facts"]}
@@ -323,6 +324,7 @@ def render(plan, harness):
     if plan["route"] == "pending":
         out.append("Then: Record the five risk facts with evidence, as references/routes.md defines them. Change no file before this item closes.")
         out.append("Then: Rerun this script with the facts, and replace this item with the items it prints.")
+        out += ["", "gates, which bind before the facts are recorded, at the lightest route's times:", *render_gates(plan["gates"], harness)]
         return "\n".join(out)
     if plan["full_read"] and not plan["steps"]:
         out.append(f"Then: Read {plan['file']} in full. It has no numbered steps.")

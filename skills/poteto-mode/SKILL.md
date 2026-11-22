@@ -11,6 +11,8 @@ reminder: New task? Playbook match or rigor needed -> apply /poteto-mode. Casual
 
 Once this whole entry is in your context, do not read its file again, except to recover.
 
+Before finishing a code change, worklist or not, run `python3 "<this skill's base directory>/../pstack-harness/scripts/preserve.py" --since <start commit>`. Fix failures or give the playbook's allowed reason, per [preservation modes](references/delegation.md#preservation-modes).
+
 ## Recover after compaction or truncation
 
 When your context holds a summary of earlier work or a truncation notice, follow [recovery](references/recovery.md) before any action other than reading files. It rebuilds the current step from the worklist with `plan.py --step`.
@@ -30,7 +32,7 @@ The plan is not the worklist. Call the Skill tool with `pstack-harness` to choos
 - Mark a step `completed` only when its outcome holds, with the evidence in the item. If the script cannot run, copy the playbook's opening prose and then its steps as the worklist items, and use the standard route.
 
 The endpoint the user or host states governs. Without one, the plan prints the default.
-- Up to that endpoint, run the commit, push, and PR steps without being asked. Each preserve failure needs a code fix or the playbook's allowed reason before the commit, per [preservation modes](references/delegation.md#preservation-modes). In an existing repository, commit on a branch off trunk. Never commit credential files such as `.env`, or the user's own notes and data they did not ask to version.
+- Up to that endpoint, run the commit, push, and PR steps without being asked. In an existing repository, commit on a branch off trunk. Never commit credential files such as `.env`, or the user's own notes and data they did not ask to version.
 - Skip a step only where its own text allows it, the user says no, it lies past the endpoint, or the project lacks what it needs, such as a git remote, and keep it in the list with a one-line `skipped: <reason>`. The reason says why the outcome does not apply, never what the route costs. A skip waives only the actions its reason rules out.
 - When the budget trips, change the approach.
 - Another review pass needs a named unresolved concern.
