@@ -41,15 +41,28 @@ plugins without those hints.
 
     preserve.py --since <commit> [--project <root>] [--python <exe>] [--reasons <file>] [--report-only]
 
-Exit 0 when the selected tests pass, all failures have allowed reasons, or there are no earlier
-Python tests in automatic mode. With a valid committed baseline, an explicit command still runs when
-file selection is empty. Exit 1 when a failure is uncovered, tests cannot run, or no test executes, including
-an all-skipped suite. Exit 2 when the arguments, overlay, or recovery are unusable. --report-only suppresses
-test-result failures; invalid arguments, refs, incompatible automatic naming, and overlay setup still fail.
+Exit 0 when the selected tests pass or all failures have allowed reasons. If the start commit has
+no Python tests, automatic mode also exits 0. It skips restoration and execution and reports any
+test files it recognizes in other languages. With a valid committed baseline, an explicit command
+still runs when Python test selection is empty.
+
+Invalid arguments or refs, incompatible automatic naming, and overlay or recovery errors exit 2.
+Interpreter setup errors also exit 2 with one line naming the interpreter and suggesting
+--python <interpreter>. This happens when the selected interpreter is unavailable or the run needs
+pytest and the interpreter cannot import it. In automatic mode, a missing module discovered while
+loading an earlier test file is a setup error if the start commit lacks that module. If the start
+commit contains the module, the import error remains a test failure. This setup check excludes
+imports through conftest.py and imports made by a project command.
+
+Exit 1 means a failure or runner error lacks an allowed reason, or no test executed (including an
+all-skipped suite). --report-only suppresses test-result failures. Setup errors still exit 2.
 
 Use --command <argv...> as the last argument when the repository has its own test task. It runs
 without a shell from the repository root, with baseline files restored. The task owns test selection
 and must provide unittest or pytest execution evidence. A command that proves no test execution fails.
+When the command exits nonzero, a positive execution count lets the script report that tests ran
+and show the failure summary. The report also counts recognized test files in other languages that
+the command saw at their working-tree versions because they fell outside the support-file selection.
 This strict mode cannot be combined with --reasons. For example:
 
     preserve.py --since <commit> --command mise run gate-test
@@ -122,9 +135,12 @@ import subprocess
 import sys
 import tempfile
 import time
+from importlib.machinery import all_suffixes
 from pathlib import Path
 
 TEST_DIRS = {"test", "tests"}
+OTHER_LANGUAGE_TESTS = re.compile(r"(\.(test|spec)\.[cm]?[jt]sx?|_test\.go)$|(^|/)src/test/")
+NO_PYTEST = 3
 MAX_LISTED = 120
 PYTEST_CONFIGS = ("pytest.toml", ".pytest.toml", "pytest.ini", ".pytest.ini", "pyproject.toml", "tox.ini", "setup.cfg")
 UNITTEST_RESULTS = '''\
@@ -171,6 +187,7 @@ def baseline_naming(configuration, files):
 TEST_RUNNER = '''\
 import inspect
 import json
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -178,10 +195,16 @@ from pathlib import Path
 
 ''' + UNITTEST_RESULTS + PYTEST_CONFIGURATION + '''
 
+def missing_modules(failure):
+    return [name for line in str(failure).strip().splitlines()[-1:]
+            for name in re.findall("^(?:E +)?ModuleNotFoundError: No module named '([^']+)'$", line)]
+
+
 class Results:
     def __init__(self):
         self.failed = []
         self.errors = []
+        self.missing = []
         self.finished = set()
         self.ran = 0
         self.collected = 0
@@ -198,6 +221,7 @@ class Results:
     def pytest_collectreport(self, report):
         if report.failed:
             self.errors.append(f"collection failed before running the tests: {report.nodeid}")
+            self.missing.extend(missing_modules(report.longrepr))
 
     def pytest_deselected(self, items):
         self.deselected += len(items)
@@ -228,6 +252,7 @@ if runner == "auto":
     imports = Imports()
     names = [path[:-12] if path.endswith("/__init__.py") else path[:-3] for path in files]
     import_errors = imports.loadTestsFromNames([path.replace("/", ".") for path in names])
+    data["missing"] = [name for error in imports.errors for name in missing_modules(error)]
     requires_pytest = False
     for module in modules:
         pending = list(vars(module).items())
@@ -250,7 +275,11 @@ if runner == "auto":
 data["runner"] = runner
 report.write_text(json.dumps(data))
 if runner == "pytest":
-    import pytest
+    try:
+        import pytest
+    except ImportError:
+        report.write_text(json.dumps(dict(data, no_pytest=True)))
+        sys.exit(1)
 
     for module in modules:
         path = Path(module.__file__).resolve()
@@ -266,7 +295,7 @@ if runner == "pytest":
     naming = [argument for name, patterns in baseline.items() for argument in ("-o", name + "=" + " ".join(patterns))]
     status = pytest.main(["-q", "-p", "no:cacheprovider", "-rfE", "-o", "addopts=", "--maxfail=0",
                           *naming, *files], plugins=[results])
-    data.update(failed=results.failed, errors=results.errors, ran=results.ran,
+    data.update(failed=results.failed, errors=results.errors, ran=results.ran, missing=results.missing,
                 incomplete=len(results.finished) != results.collected or results.deselected > 0)
 else:
     suite = unittest.TestSuite([import_errors, *(unittest.defaultTestLoader.loadTestsFromModule(module) for module in modules)])
@@ -308,6 +337,10 @@ def is_test_file(path: str) -> bool:
     return any(p in TEST_DIRS for p in parts[:-1]) or name.startswith("test") or name.endswith(("_test.py", "_tests.py"))
 
 
+def is_other_language_test(path: str) -> bool:
+    return not path.endswith(".py") and bool(OTHER_LANGUAGE_TESTS.search(path))
+
+
 def is_support_file(path: str) -> bool:
     parts = path.split("/")
     name = parts[-1]
@@ -318,6 +351,29 @@ def is_support_file(path: str) -> bool:
 
 def git(project: Path, *args: str, check: bool = True, binary: bool = False) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(project), *args], capture_output=True, text=not binary, check=check)
+
+
+def unusable(python: str, problem: str) -> OSError:
+    return OSError(f"interpreter {python} {problem}; pass --python <interpreter> to name one with the project's test dependencies installed")
+
+
+def require_interpreter(python: str, project: Path):
+    if not shutil.which(str(project / python) if os.sep in python else python):
+        raise unusable(python, "does not exist or is not executable")
+
+
+def absent_modules(overlay: InPlace, modules: list[str]) -> list[str]:
+    if not modules:
+        return []
+    tracked = git(overlay.project, "ls-tree", "-r", "-z", "--name-only", overlay.commit).stdout.split("\0")
+    paths = ["/" + path for path in tracked]
+    absent = []
+    for name in sorted(set(modules)):
+        module = "/" + name.replace(".", "/")
+        files = tuple(module + suffix for suffix in all_suffixes())
+        if not any(module + "/" in path or path.endswith(files) for path in paths):
+            absent.append(name)
+    return absent
 
 
 def baseline_pytest_configs(project: Path, test_files: list[str], commit: str) -> dict[str, bytes]:
@@ -363,6 +419,7 @@ def baseline_test_files(python: str, listed: list[str], overlay: InPlace, *, aut
     configs = baseline_pytest_configs(overlay.project, files, overlay.commit)
     if not pytest_configured(configs):
         return [path for path in files if path in selected]
+    require_interpreter(python, overlay.project)
     configured = {path: source for path, source in configs.items() if pytest_configured({path: source})}
     with tempfile.TemporaryDirectory(prefix="preserve-selection-") as isolated:
         configuration = Path(isolated) / "configuration"
@@ -371,7 +428,12 @@ def baseline_test_files(python: str, listed: list[str], overlay: InPlace, *, aut
             if path not in selected:
                 (configuration / path).write_bytes(git(overlay.project, "show", f"{overlay.commit}:{path}", binary=True).stdout)
         report = Path(isolated) / "files.json"
-        probe = "import ast, fnmatch, json, sys; from pathlib import Path\n" + PYTEST_CONFIGURATION + '''
+        probe = "import ast, fnmatch, json, sys; from pathlib import Path\n" + f'''
+try:
+    import pytest, _pytest
+except ImportError:
+    sys.exit({NO_PYTEST})
+''' + PYTEST_CONFIGURATION + '''
 from _pytest.config.findpaths import load_config_dict_from_file
 from _pytest.python import path_matches_patterns
 
@@ -449,6 +511,8 @@ Path(sys.argv[1]).write_text(json.dumps(selected))
         env.pop("PYTEST_ADDOPTS", None)
         env.pop("PYTEST_PLUGINS", None)
         out = overlay.run([python, "-I", "-B", "-c", probe, str(report), str(configuration), json.dumps(files), json.dumps(list(configured)), str(overlay.project), json.dumps(list(selected)), json.dumps(automatic)], env=env)
+        if out.returncode == NO_PYTEST:
+            raise unusable(python, "cannot import pytest in isolated mode (-I), which reading the baseline pytest configuration requires")
         if out.returncode != 0 or not report.exists():
             raise OSError("could not discover baseline pytest file patterns: " + (out.stdout + out.stderr).strip())
         selected.update(json.loads(report.read_text()))
@@ -511,6 +575,7 @@ def run_tests(python: str, files: list[str], runner: str, overlay: InPlace,
         report = Path(isolated) / "results.json"
         structured_command = direct_unittest(command, python, overlay.project) if runner == "command" else None
         if runner != "command":
+            require_interpreter(python, overlay.project)
             configuration = Path(isolated) / "configuration"
             configs = baseline_pytest_configs(overlay.project, files, overlay.commit)
             write_baseline_configuration(configuration, configs, files)
@@ -535,6 +600,11 @@ def run_tests(python: str, files: list[str], runner: str, overlay: InPlace,
             results = json.loads(report.read_text()) if report.exists() else {"runner": "pytest" if runner == "pytest" else "unittest", "failed": [], "errors": [], "ran": 0}
             if runner != "command":
                 runner = results["runner"]
+                if results.get("no_pytest"):
+                    raise unusable(python, "cannot import pytest")
+                absent = absent_modules(overlay, results.get("missing", []))
+                if absent:
+                    raise unusable(python, f"cannot import {', '.join(absent)}, which the earlier test files need and the start commit does not hold")
             failed, errors, ran = results["failed"], results["errors"], results["ran"]
             if results.get("incomplete"):
                 errors.append("pytest stopped before running the tests to completion: the baseline suite was incomplete")
@@ -553,7 +623,10 @@ def run_tests(python: str, files: list[str], runner: str, overlay: InPlace,
                 ran = sum(map(int, re.findall(r"(\d+) (?:passed|failed)", text)))
     if out.returncode not in (0, 1) or (out.returncode != 0 and not failed and not errors):
         last = text.strip().splitlines()[-1] if text.strip() else ""
-        errors.append(f"{runner} exited {out.returncode} before running the tests: {last}")
+        if runner == "command" and (ran or 0) > 0:
+            errors.append(f"command ran its tests and failed with exit {out.returncode}: {summary_line(text) or last}")
+        else:
+            errors.append(f"{runner} exited {out.returncode} before running the tests: {last}")
     if ran is not None and ran <= 0:
         errors.append(f"{runner} ran no tests from the listed files before running the tests: nothing was checked")
     return runner, failed, errors, summary_line(text)
@@ -922,7 +995,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--project", type=Path, default=None, help="a path inside the repository (default: cwd)")
     parser.add_argument("--python", default=None, help="interpreter with project dependencies (default: project .venv/bin/python, then venv/bin/python, then python on PATH, then the running interpreter)")
     parser.add_argument("--reasons", type=Path, default=None, help="file of allowed failures: test lines, then indented input: and quote: lines per block")
-    parser.add_argument("--report-only", action="store_true", help="print test results and exit 0; invalid arguments, refs, incompatible automatic naming, and overlay setup still fail")
+    parser.add_argument("--report-only", action="store_true", help="print test results and exit 0; invalid arguments, refs, incompatible automatic naming, interpreter setup, and overlay setup still fail")
     parser.add_argument("--command", nargs=argparse.REMAINDER, help="project test command, last argument; requires unittest or pytest execution summaries and forbids --reasons")
     args = parser.parse_args(argv)
     if args.recover is not None and (args.command is not None or args.reasons is not None or args.report_only or args.python is not None):
@@ -970,12 +1043,15 @@ def main(argv: list[str]) -> int:
     entries = [e for e in git(project, "ls-tree", "-r", "-z", commit).stdout.split("\0") if e]
     listed = [e.split("\t", 1)[1] for e in entries if e.startswith(("100644 ", "100755 "))]
     support = [p for p in listed if is_support_file(p)]
+    other = [p for p in listed if is_other_language_test(p)]
     try:
         with InPlace(project, commit, []) as discovery:
             test_files = baseline_test_files(python, listed, discovery, automatic=args.command is None)
         if not test_files and args.command is None:
             print(f"preserve: nothing to preserve, {commit[:10]} holds no Python test files. The gate is satisfied; a project tested in "
-                  "another language runs the start commit's test files with its own runner by hand, under the same policy.")
+                  "another language runs the start commit's test files with its own runner by hand, under the same policy."
+                  + (f" This commit's {len(other)} test file(s) in another language, such as {other[0]}, were not restored or run; "
+                     "--command <argv...> runs the project's own test command." if other else ""))
             return 0
         with InPlace(project, commit, test_files + support) as overlay:
             runner = "command" if args.command is not None else select_runner(project, test_files, commit)
@@ -989,6 +1065,10 @@ def main(argv: list[str]) -> int:
 
     if runner == "command":
         print(f"preserve: {len(test_files)} baseline Python test file(s) restored from {commit[:10]}; the project command owns test selection")
+        unrestored = [p for p in other if not is_support_file(p)]
+        if unrestored:
+            print(f"  {len(unrestored)} earlier test file(s) in another language, such as {unrestored[0]}, were not restored; "
+                  "the command saw their working-tree versions.")
     else:
         print(f"preserve: {len(test_files)} test file(s) from {commit[:10]} run in place with {runner} against the working tree")
     if summary:
