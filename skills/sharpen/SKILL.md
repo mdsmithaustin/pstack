@@ -14,4 +14,4 @@ I want a deeper version of this task, not a bigger one. Before rewriting it, do 
 
 Then rewrite my prompt using only the parts of those answers that deepen the original deliverables. Methods and checks must evaluate those deliverables without adding artifacts or implementation tasks. For a guide-only request, keep the guide as the only deliverable and check it with existing tools rather than requiring a new check script, converter, or companion document.
 
-Leave choices that are mine to make open instead of deciding them.
+Have the rewritten prompt ask the agent to prototype any choice an experiment can settle and recommend an option based on what it observed. Leave product or preference choices that no experiment can settle for me to make.
