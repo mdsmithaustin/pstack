@@ -5,6 +5,7 @@
   "panels": ["architect", "arena", "interrogate", "swarm"],
   "outcome_first": ["feature", "bug-fix", "refactoring", "investigation", "research", "code-review", "prototype", "perf-issue", "hillclimb", "runtime-forensics", "trace-forensics"],
   "lightweight_keeps": ["spec-probes", "principle-prove-it-works", "principle-test-behavior-not-implementation", "poteto-tdd", "benchmark-checklist"],
+  "lightweight_gates": ["preserve", "spec-conformance", "reply-prose", "recap"],
   "gates": [
     {
       "id": "preserve",

@@ -3159,7 +3159,7 @@
   },
   "poteto-runs-documentation-impact-before-completion": {
    "check": "live",
-   "claim": "Before reporting a substantive code or public workflow change complete, with or without a PR, poteto-mode runs documentation-impact in author mode.",
+   "claim": "When the plan lists the documentation gate, poteto-mode runs documentation-impact in author mode before reporting a substantive code or public workflow change complete, including work that ends at local commits.",
    "harness_sensitive": true,
    "live_case": "fixture with a CLI flag change and a README; prompt `/poteto-mode add --json; update whatever docs need it` then `/documentation-impact review this change's documentation coverage without editing files.`; pass when the author pass runs before completion, returns an author result, and review mode edits nothing.",
    "owners": [
@@ -8273,6 +8273,15 @@
    ],
    "text": "[Make it yours](./09-make-it-yours.md). Your own mode, `/correct` for repeated mistakes, and how to test a skill change."
   },
+  "6004c9f50585": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "poteto-runs-documentation-impact-before-completion",
+   "sources": [
+    "port"
+   ],
+   "text": "For work that ends at local commits, standard and intensive plans include this gate and lightweight plans omit it."
+  },
   "6018210912a1": {
    "class": "context",
    "file": "02-poteto-mode.md",
@@ -10510,6 +10519,15 @@
    ],
    "text": "Subcommands that reveal features gradually instead of all at once."
   },
+  "995091bced4e": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "poteto-runs-documentation-impact-before-completion",
+   "sources": [
+    "port"
+   ],
+   "text": "When the plan lists the documentation gate, Poteto runs [`/documentation-impact`](../../skills/documentation-impact/SKILL.md) in author mode before reporting a substantive code or public workflow change complete."
+  },
   "9973296ce50a": {
    "class": "promise",
    "file": "01-setup.md",
@@ -10668,15 +10686,6 @@
     "port"
    ],
    "text": "\"if it repros on main\" lets the run stop early when the bug is already gone."
-  },
-  "9e3e7a19c210": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "poteto-runs-documentation-impact-before-completion",
-   "sources": [
-    "port"
-   ],
-   "text": "This also applies when the work ends without a PR."
   },
   "9e52d3d47e93": {
    "class": "context",
@@ -11411,15 +11420,6 @@
     "port"
    ],
    "text": "Shorten a panel list. Each entry runs one subagent, unless the model resolver marks a design comparison as running only on your chat's own model, which pstack then skips."
-  },
-  "ae9d0c366843": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "poteto-runs-documentation-impact-before-completion",
-   "sources": [
-    "port"
-   ],
-   "text": "Before Poteto reports a substantive code or public workflow change complete, it runs [`/documentation-impact`](../../skills/documentation-impact/SKILL.md) in author mode."
   },
   "aeb429799838": {
    "class": "promise",

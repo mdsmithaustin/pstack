@@ -359,10 +359,21 @@ class BindingRegime(unittest.TestCase):
 class GatesAndEndpoint(unittest.TestCase):
     def test_cleanup_runs_per_published_head_except_on_intensive(self):
         light = {gate["id"]: gate["when"] for gate in plan("feature", *LOW)["gates"]}
+        standard = {gate["id"]: gate["when"] for gate in plan("feature", *facts(reach="material:shared caller"))["gates"]}
         heavy = {gate["id"]: gate["when"] for gate in plan("feature", *facts(consequence="material:x", uncertainty="unknown"))["gates"]}
-        self.assertEqual(light["cleanup"], "before each push or published head")
+        self.assertEqual(standard["cleanup"], "before each push or published head")
         self.assertEqual(heavy["cleanup"], "before every commit or amend")
         self.assertEqual(light["preserve"], "before every commit")
+
+    def test_the_lightweight_route_binds_only_its_listed_gates(self):
+        light = [gate["id"] for gate in plan("feature", *LOW)["gates"]]
+        standard = [gate["id"] for gate in plan("feature", *facts(reach="material:shared caller"))["gates"]]
+        self.assertEqual(light, ["preserve", "spec-conformance", "reply-prose", "recap"])
+        for gate in ("cleanup", "comment-prose", "comments", "commit-and-pr-prose", "documentation"):
+            with self.subTest(gate=gate):
+                self.assertNotIn(gate, light)
+                self.assertIn(gate, standard)
+        self.assertEqual([gate for gate in standard if gate in light], light)
 
     def test_recap_is_opt_in(self):
         recap = next(gate for gate in plan("feature", *LOW)["gates"] if gate["id"] == "recap")

@@ -141,6 +141,8 @@ def route_gates(manifest, playbook, route):
             continue
         if playbook not in gate.get("playbooks", [playbook]):
             continue
+        if route == "lightweight" and gate["id"] not in manifest.get("lightweight_gates", [gate["id"]]):
+            continue
         gates.append({"id": gate["id"], "skill": gate.get("skill"), "run": gate.get("run"), "when": gate_timing(gate, route)})
     return gates
 
