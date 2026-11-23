@@ -30,7 +30,7 @@ Write each fact as the level, a colon, and what you checked:
 
 The plan script maps the facts to a route. It needs no model, and the same facts give the same route on every CLI.
 
-- **Lightweight.** Every fact is low with evidence. Work directly. Spawn no investigation or implementation delegate and no panel. Load only the skills the plan lists, plus the loads **Opening a PR** names when the work goes to a PR. Keep preservation, real-surface proof, and independent scrutiny.
+- **Lightweight.** Every fact is low with evidence. Work directly. Spawn no investigation or implementation delegate and no panel. For local work, load only the plan's skills. Before each push, follow the [`deslop` trigger](task-triggers.md), even without a PR. For a PR, also load the skills **Opening a PR** names. Keep preservation, real-surface proof, and independent scrutiny.
 - **Standard.** At least one fact is not low. Follow every step of the playbook. Compare design options yourself and record them. The panels (`architect`, `arena`, `interrogate`, `swarm`) stay unloaded. This limit covers only the four playbooks this reference routes. Any other playbook keeps the panels its own steps require.
 - **Intensive.** Consequence is not low, and uncertainty or reversibility is not low. Follow every step, with the panels where a step or trigger names them.
 
