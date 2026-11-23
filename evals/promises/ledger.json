@@ -3908,7 +3908,7 @@
   },
   "sharpen-frames-task-before-work": {
    "check": "static",
-   "claim": "/sharpen names what a top professional would add, the rawest material, specific methods and tools, and an outside check, then returns a rewritten prompt and leaves the user's choices open.",
+   "claim": "/sharpen names what a top professional would add, the rawest material, specific methods and tools, and an outside check, then returns a rewritten prompt.",
    "evidence": [
     {
      "file": "skills/sharpen/SKILL.md",
@@ -3929,10 +3929,24 @@
     {
      "file": "skills/sharpen/SKILL.md",
      "quote": "Then rewrite my prompt using only the parts of those answers that deepen the original deliverables."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/sharpen/SKILL.md"
+   ]
+  },
+  "sharpen-prototypes-settleable-choices": {
+   "check": "static",
+   "claim": "/sharpen's rewritten prompt asks the agent to prototype any choice an experiment can settle and recommend an option from what it observed, and leaves product and preference choices to the user.",
+   "evidence": [
+    {
+     "file": "skills/sharpen/SKILL.md",
+     "quote": "Have the rewritten prompt ask the agent to prototype any choice an experiment can settle and recommend an option based on what it observed."
     },
     {
      "file": "skills/sharpen/SKILL.md",
-     "quote": "Leave choices that are mine to make open instead of deciding them."
+     "quote": "Leave product or preference choices that no experiment can settle for me to make."
     }
    ],
    "harness_sensitive": false,
@@ -4870,7 +4884,6 @@
    "file": "04-design.md",
    "promise": "architect-scraps-sketch-on-friction-pattern",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "It scraps the sketch and starts over instead of patching around it."
@@ -4945,7 +4958,6 @@
    "file": "04-design.md",
    "promise": "architect-scraps-sketch-on-friction-pattern",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "If implementation shows the same workaround in unrelated places, or types that only compile with `any` or forced casts, `/architect` treats that as proof the design is wrong."
@@ -5030,6 +5042,15 @@
     "upstream"
    ],
    "text": "[`/show-me-your-work`](../../skills/show-me-your-work/SKILL.md) is what makes the run reviewable."
+  },
+  "08bbf535919d": {
+   "class": "cursor-only",
+   "file": "04-design.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "[`/architect`](../../skills/architect/SKILL.md) traces every system the change touches first."
   },
   "09687126aafa": {
    "class": "promise",
@@ -5144,6 +5165,15 @@
    ],
    "text": "In this page you learn what a good prompt looks like, and how little of one you actually need."
   },
+  "0e6b6e058c84": {
+   "class": "cursor-only",
+   "file": "06-verify-and-ship.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "A conflict or a stale base comes back to you with the branch that needs the rebase."
+  },
   "0e6dabc4bee8": {
    "class": "context",
    "file": "01-setup.md",
@@ -5161,6 +5191,15 @@
     "port"
    ],
    "text": "Setup offers a repair only when a Codex session shows spawning is missing and a config file holds a possible cause, editing only with your yes."
+  },
+  "0f973beaf04d": {
+   "class": "cursor-only",
+   "file": "04-design.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "The playbook doesn't implement it, and execution starts only when you say go."
   },
   "0f9cc893bd89": {
    "class": "context",
@@ -5312,7 +5351,6 @@
    "file": "03-understand.md",
    "promise": "investigation-routes-code-to-how-and-external-to-research",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "It runs `/how`, adds `/why` for questions about motivation, and returns a cited explanation."
@@ -5400,7 +5438,6 @@
    "file": "07-overnight.md",
    "promise": "orchestrate-routes-small-work-back",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "If one agent could finish the work in a session, the playbook itself routes you back to the overnight contract above:"
@@ -5420,7 +5457,6 @@
    "file": "06-verify-and-ship.md",
    "promise": "babysit-batches-fixes-into-one-push",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "Every known fix batches into one push, so the checks restart once instead of after every fix."
@@ -5619,6 +5655,15 @@
    ],
    "text": "From here you can type normal follow-ups."
   },
+  "19097e7a2948": {
+   "class": "cursor-only",
+   "file": "10-recipes-and-pitfalls.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "**Enumerating skills in the prompt.** \"use /architect then /arena then /interrogate\" reorders steps the playbook already sequences. State the goal and constraints. Name a skill only to override a default."
+  },
   "1944cfceb998": {
    "class": "context",
    "file": "05-build-and-clean.md",
@@ -5744,7 +5789,6 @@
    "file": "04-design.md",
    "promise": "multi-phase-plan-prototypes-then-plans-per-pr",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "The playbook doesn't implement it, and it names which execution playbook should run it next."
@@ -5758,6 +5802,15 @@
     "port"
    ],
    "text": "It says inconclusive when it can't name the limiter or a side ran untuned."
+  },
+  "1c1e62330089": {
+   "class": "cursor-only",
+   "file": "07-overnight.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Two playbooks and one skill scale the same trust up."
   },
   "1c8ee5692431": {
    "class": "promise",
@@ -5847,6 +5900,15 @@
    ],
    "text": "It doesn't do the task."
   },
+  "1e01caf0a8de": {
+   "class": "cursor-only",
+   "file": "04-design.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "If the same workaround keeps coming back, `/architect` redesigns instead of patching around it."
+  },
   "1e1d1ccadb61": {
    "class": "context",
    "file": "04-design.md",
@@ -5865,6 +5927,15 @@
     "port"
    ],
    "text": "Did every side run tuned the way production runs?"
+  },
+  "1ec450f4890f": {
+   "class": "cursor-only",
+   "file": "04-design.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "For a large or contested design, it runs `/arena` instead of sketching alone."
   },
   "1f7211d1d1b4": {
    "class": "promise",
@@ -5999,6 +6070,15 @@
     "port"
    ],
    "text": "Give `/loop` a predicate that can pass or fail."
+  },
+  "22bfa4ea5ec1": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "The defaults are the same as the `large` budget."
   },
   "22e61eb012d5": {
    "class": "promise",
@@ -6141,6 +6221,15 @@
     "port"
    ],
    "text": "```text\n/poteto-mode plan the migration of our ui library to the new styling system. small verifiable PRs, each with visual regression checks. the result must match the original exactly, bugs included.\n```"
+  },
+  "2517a3c15108": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "That run replaces the old defaults it recognizes, tells you which, and keeps your other choices."
   },
   "252545d9278d": {
    "class": "promise",
@@ -6297,18 +6386,6 @@
    ],
    "text": "```text\n/benchmark-checklist vet this 40% speedup before it goes in the pr description\n```"
   },
-  "2ae33e5230ff": {
-   "class": "substituted",
-   "file": "04-design.md",
-   "ported_as": [
-    "921f7d7de9fb"
-   ],
-   "promise": "arena-readonly-cross-judge",
-   "sources": [
-    "upstream"
-   ],
-   "text": "A read-only judge from a different model family scores every candidate against a rubric."
-  },
   "2b2895947649": {
    "class": "promise",
    "file": "README.md",
@@ -6367,18 +6444,6 @@
    ],
    "text": "For a migration, state the bar in the prompt:"
   },
-  "2c7eb061fed3": {
-   "class": "substituted",
-   "file": "01-setup.md",
-   "ported_as": [
-    "a83ccde08cc1"
-   ],
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "upstream"
-   ],
-   "text": "`unlimited` lifts each model to its highest tier, up to `max`."
-  },
   "2d0c8c50d7dc": {
    "class": "cursor-only",
    "file": "05-build-and-clean.md",
@@ -6398,18 +6463,6 @@
     "upstream"
    ],
    "text": "```text\n/poteto-mode write a tutorial for how i would use the new config package first. then /teach me why it beats the current one.\n```"
-  },
-  "2d2fba316ad8": {
-   "class": "substituted",
-   "file": "01-setup.md",
-   "ported_as": [
-    "c357d0814dff"
-   ],
-   "promise": "skipped-step-stays-in-worklist",
-   "sources": [
-    "upstream"
-   ],
-   "text": "If `/poteto-mode` skips a step, the step stays in the list with `skip: <reason>`, so you can see what it chose not to do."
   },
   "2d39b86e10b6": {
    "class": "context",
@@ -6437,17 +6490,6 @@
    ],
    "text": "For a project that spans many days, you can commit the plan to the repo for a while so other agents see the work in progress."
   },
-  "2dee704a0086": {
-   "class": "substituted",
-   "file": "04-design.md",
-   "ported_as": [
-    "83a892e198bc"
-   ],
-   "sources": [
-    "upstream"
-   ],
-   "text": "A change that crosses function boundaries or moves ownership earns `/architect`, which brings `/arena` with it."
-  },
   "2e48bc672a6a": {
    "class": "substituted",
    "file": "03-understand.md",
@@ -6469,6 +6511,15 @@
     "port"
    ],
    "text": "```text\n/poteto-mode read this thread. restate the underlying issue in your own words, in plain english. don't change any code yet.\n```"
+  },
+  "2e9050fbc6c7": {
+   "class": "cursor-only",
+   "file": "03-understand.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "It traces the code, adds `/why` for questions about motivation, and returns a cited explanation."
   },
   "2ec1f4de7e47": {
    "class": "context",
@@ -6526,6 +6577,15 @@
    ],
    "text": "The qualifiers do real work."
   },
+  "3063bffa8b3e": {
+   "class": "cursor-only",
+   "file": "04-design.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "When no model from another vendor can run, the coordinator skips the judge and picks the base itself."
+  },
   "30ef830976b1": {
    "class": "promise",
    "file": "08-principles.md",
@@ -6535,6 +6595,15 @@
     "port"
    ],
    "text": "pstack ships 24 principles as individual skills."
+  },
+  "3103dd7786d6": {
+   "class": "cursor-only",
+   "file": "07-overnight.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Each agent it starts reads [`worker.md`](../../skills/poteto-mode/worker.md) first, so workers hold to the kickoff's bar, decide reversible calls instead of asking you, and open PRs ready for review."
   },
   "317dfe8ba6bf": {
    "class": "promise",
@@ -6927,6 +6996,15 @@
    ],
    "text": "You're auditing decisions, not re-reading the whole night."
   },
+  "3a72de7bf566": {
+   "class": "cursor-only",
+   "file": "03-understand.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "[`/why`](../../skills/why/SKILL.md) answers from the record, not the code."
+  },
   "3a95635bdfca": {
    "class": "promise",
    "file": "09-make-it-yours.md",
@@ -7009,7 +7087,6 @@
    "file": "03-understand.md",
    "promise": "why-reports-null-results",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "A null result gets reported too, because \"nobody wrote down why\" is itself an answer."
@@ -7031,6 +7108,15 @@
     "port"
    ],
    "text": "Then [build the lever](../../skills/principle-build-the-lever/SKILL.md)."
+  },
+  "3bbd750ced23": {
+   "class": "cursor-only",
+   "file": "03-understand.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "It starts one read-only subagent that explores the code and writes the explanation."
   },
   "3c254e22a554": {
    "class": "promise",
@@ -7366,6 +7452,15 @@
    ],
    "text": "On a base branch with a merge queue, owners stop at merge-ready, and the final reply lists those PRs as open operator gates."
   },
+  "4502d69a9048": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "`medium` lowers each role one level and `small` lowers it two, and both spend fewer tokens."
+  },
   "450d5fe5f2af": {
    "class": "promise",
    "file": "01-setup.md",
@@ -7475,7 +7570,6 @@
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "**Enumerating skills in the prompt.** \"use /how then /architect then /arena\" reorders steps the playbook already sequences. State the goal and constraints. Name a skill only to override a default."
@@ -7491,18 +7585,6 @@
     "upstream"
    ],
    "text": "It writes `~/.cursor/rules/pstack-models.mdc`, a small rule every pstack skill reads."
-  },
-  "48408402a693": {
-   "class": "substituted",
-   "file": "02-poteto-mode.md",
-   "ported_as": [
-    "4c6ed58008f7"
-   ],
-   "promise": "playbook-directory-complete",
-   "sources": [
-    "upstream"
-   ],
-   "text": "There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, visual parity, authoring and evaluating skills, autonomous runs, opening a PR, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue or a stack on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup."
   },
   "48c3cc0d3e26": {
    "class": "context",
@@ -7631,6 +7713,15 @@
    ],
    "text": "**Pitfall:** don't skip this page's skills because \"the agent will read the code anyway.\" An agent that starts editing without a traced model tends to fix the symptom at the first plausible spot."
   },
+  "4c38863ca74b": {
+   "class": "cursor-only",
+   "file": "03-understand.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "It reads the commits and PR discussions that introduced the code and each later change, and looks at other sources when that trail is thin."
+  },
   "4c5cb33af9ed": {
    "class": "context",
    "file": "01-setup.md",
@@ -7657,6 +7748,15 @@
    ],
    "text": "A Perf issue run records a green test run before its first change, reruns the tests after each fix, and reverts a faster result that changes output."
   },
+  "4d06590d5a5c": {
+   "class": "cursor-only",
+   "file": "04-design.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "If you want to see the design before any code, say so in the prompt."
+  },
   "4d1f50b5fd58": {
    "class": "context",
    "file": "07-overnight.md",
@@ -7665,6 +7765,15 @@
     "port"
    ],
    "text": "An agent you can trust to verify its own work is an agent you can leave alone with a hard task."
+  },
+  "4d49f6f6d5ad": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "No role runs above `xhigh`."
   },
   "4df436366520": {
    "class": "context",
@@ -7808,18 +7917,6 @@
    ],
    "text": "Cursor confirms the plugin is installed."
   },
-  "532d47076a7c": {
-   "class": "substituted",
-   "file": "01-setup.md",
-   "ported_as": [
-    "f87f981bda52"
-   ],
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "upstream"
-   ],
-   "text": "Grok tops out at `xhigh`, so it stays there."
-  },
   "533e4c6014e3": {
    "class": "promise",
    "file": "04-design.md",
@@ -7899,6 +7996,16 @@
     "port"
    ],
    "text": "Rich `--help` text."
+  },
+  "5617b8feefea": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "sharpen-prototypes-settleable-choices",
+   "sources": [
+    "port",
+    "upstream"
+   ],
+   "text": "The rewrite asks the agent to prototype any choice an experiment can settle and to recommend an option from what it observed, and it leaves product and preference choices to you."
   },
   "5660b76238e6": {
    "class": "context",
@@ -8014,6 +8121,15 @@
     "port"
    ],
    "text": "It also works for behavior and algorithms, not just UI."
+  },
+  "58b88a19ec55": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Code, prose, and judgment run on Opus 5.5 at `xhigh` reasoning, and the review panels and swarm workers run at `high`."
   },
   "58d83edceffd": {
    "class": "context",
@@ -8248,7 +8364,6 @@
    "file": "04-design.md",
    "promise": "architect-checkpoint-opt-in",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "```text\n/architect with checkpoint. stop and show me before implementing.\n```"
@@ -8703,21 +8818,6 @@
    ],
    "text": "It records five risk facts with evidence, and a script maps them to a lightweight, standard, or intensive route."
   },
-  "68d84dbb65ba": {
-   "class": "substituted",
-   "file": "01-setup.md",
-   "ported_as": [
-    "eead1319fd44",
-    "f13df52c09ea",
-    "73b6d094eabc",
-    "7368fe56929d"
-   ],
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "upstream"
-   ],
-   "text": "The defaults run at `xhigh` reasoning, the same as the `large` budget."
-  },
   "6918480c3779": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -8923,7 +9023,6 @@
    "class": "context",
    "file": "07-overnight.md",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "Three playbooks scale the same trust up."
@@ -8937,6 +9036,15 @@
    ],
    "text": "Some skills don't load from their description."
   },
+  "6e1beec15b98": {
+   "class": "cursor-only",
+   "file": "04-design.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "A change that crosses function boundaries or moves ownership earns `/architect`, which brings `/arena` with it when the design is large or contested."
+  },
   "6e33c2fadcc4": {
    "class": "context",
    "file": "README.md",
@@ -8945,6 +9053,15 @@
     "port"
    ],
    "text": "This guide teaches that habit with realistic prompts."
+  },
+  "6e3b68e855c3": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Outside a review panel, Fable 5.2 runs only when you name it for a task or after two Opus 5.5 runs of the same brief fail their check."
   },
   "6e534aabc57a": {
    "class": "promise",
@@ -8997,7 +9114,6 @@
    "file": "09-make-it-yours.md",
    "promise": "reflect-three-reviewers-then-synthesizer",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "[`/reflect`](../../skills/reflect/SKILL.md) sends the transcript to three parallel reviewers, then a synthesizer sorts the proposals into `Accepted`, `Rejected`, and `Backlog` and waits for your approval before any skill changes."
@@ -9244,6 +9360,15 @@
     "port"
    ],
    "text": "You can set the route yourself in either direction by saying so."
+  },
+  "755398ed79d1": {
+   "class": "cursor-only",
+   "file": "02-poteto-mode.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "You give it a goal, it matches one of twenty-two playbooks, copies that playbook's steps into the todo list, and calls the other skills as the steps need them."
   },
   "757df0d53347": {
    "class": "promise",
@@ -9723,6 +9848,15 @@
    ],
    "text": "It ends in exactly one of three outcomes."
   },
+  "82c9b2b4f8fb": {
+   "class": "cursor-only",
+   "file": "06-verify-and-ship.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "It never rebases or force-pushes."
+  },
   "83099911a95a": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -9845,22 +9979,6 @@
    ],
    "text": "When you correct agents for the same mistake again and again, the fix belongs in the repo, not in your next prompt."
   },
-  "85dcd4d37510": {
-   "also": [
-    "opening-a-pr-unslops-prose"
-   ],
-   "class": "substituted",
-   "file": "05-build-and-clean.md",
-   "ported_as": [
-    "4b41a62e3fb1",
-    "4070ee73075a"
-   ],
-   "promise": "opening-a-pr-deslops-diff",
-   "sources": [
-    "upstream"
-   ],
-   "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) runs `/deslop` on the diff before each commit and applies [`/unslop`](../../skills/unslop/SKILL.md) to the PR description and commit bodies."
-  },
   "85ed866dd49b": {
    "class": "promise",
    "file": "01-setup.md",
@@ -9869,6 +9987,15 @@
     "port"
    ],
    "text": "A flat line beats the shipped section."
+  },
+  "86162984e26d": {
+   "class": "cursor-only",
+   "file": "07-overnight.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "```text\n/poteto-mode migrate every package to the new store. own it until each one is converted and merged. i'll check in twice a day.\n```"
   },
   "8626c5a5c0eb": {
    "class": "promise",
@@ -10182,7 +10309,6 @@
    "file": "04-design.md",
    "promise": "architect-grounds-with-how-and-why",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "[`/architect`](../../skills/architect/SKILL.md) grounds itself first, running `/how` over the code the design touches and `/why` when it moves ownership or layers."
@@ -10278,7 +10404,6 @@
    "class": "context",
    "file": "04-design.md",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "If you want to see the design first, say so:"
@@ -10306,7 +10431,6 @@
    "class": "context",
    "file": "06-verify-and-ship.md",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "Five narrow PRs beat one fat one, and stacked follow-ups beat a growing branch."
@@ -10401,10 +10525,18 @@
    "file": "03-understand.md",
    "promise": "why-queries-evidence-categories-in-parallel",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "[`/why`](../../skills/why/SKILL.md) starts from source control, then queries whatever evidence categories your MCPs expose, such as the issue tracker, long-form docs, team chat, observability, error tracking, and analytics, all in parallel."
+  },
+  "95224d2be518": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "When a default changes, a rule written before the change still pins the old default until you run `/setup-pstack` again."
   },
   "95b16a88e71c": {
    "class": "context",
@@ -10537,18 +10669,6 @@
    ],
    "text": "Codex project agents also require project trust."
   },
-  "99d1206c68bf": {
-   "class": "substituted",
-   "file": "02-poteto-mode.md",
-   "ported_as": [
-    "43d91940ae66"
-   ],
-   "promise": "skipped-step-stays-in-worklist",
-   "sources": [
-    "upstream"
-   ],
-   "text": "A skipped step stays visible with `skip: <reason>`."
-  },
   "99f16bcaf170": {
    "also": [
     "figure-it-out-keeps-decision-log"
@@ -10571,6 +10691,15 @@
     "port"
    ],
    "text": "\"don't change any code yet\" pins this one to Investigation."
+  },
+  "9a9bbe0b2f2e": {
+   "class": "cursor-only",
+   "file": "07-overnight.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "`/poteto-mode` routes large or cross-cutting work to [`/figure-it-out`](../../skills/figure-it-out/SKILL.md), which designs one rigorous run for it:"
   },
   "9ab8ecdf6eea": {
    "class": "promise",
@@ -10657,18 +10786,6 @@
    ],
    "text": "```text\n/poteto-mode add a --json flag to this command. text output stays byte-identical. verify both.\n```"
   },
-  "9de0185254fd": {
-   "class": "substituted",
-   "file": "07-overnight.md",
-   "ported_as": [
-    "7e5a74fa4959"
-   ],
-   "promise": "orchestrate-coordinator-never-writes-code",
-   "sources": [
-    "upstream"
-   ],
-   "text": "The coordinator decides which agent does each piece of work, checks what each one produces, and never writes code itself."
-  },
   "9ded9f8061cc": {
    "class": "context",
    "file": "05-build-and-clean.md",
@@ -10704,16 +10821,6 @@
     "port"
    ],
    "text": "[Feature step 4](../../skills/poteto-mode/playbooks/feature.md) defines acceptance checks and specification edges, including when existing coverage suffices."
-  },
-  "9ead3f17f124": {
-   "class": "promise",
-   "file": "02-poteto-mode.md",
-   "promise": "sharpen-frames-task-before-work",
-   "sources": [
-    "port",
-    "upstream"
-   ],
-   "text": "Then it rewrites your prompt to ask for exactly that, deeper but not bigger, and leaves your choices open."
   },
   "9ecb08f71efa": {
    "class": "context",
@@ -10897,7 +11004,6 @@
    "file": "04-design.md",
    "promise": "architect-proceeds-to-implementation-by-default",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "By default it proceeds straight from the synthesized design into implementation."
@@ -11586,24 +11692,11 @@
    ],
    "text": "Name a skill only when you want to override a specific choice."
   },
-  "b1559fb3dc93": {
-   "class": "substituted",
-   "file": "04-design.md",
-   "ported_as": [
-    "9b878a349774"
-   ],
-   "promise": "arena-skips-judge-without-other-model",
-   "sources": [
-    "upstream"
-   ],
-   "text": "When no model from another family can run, the coordinator skips the judge and picks the base itself."
-  },
   "b1de7266e82e": {
    "class": "promise",
    "file": "04-design.md",
    "promise": "architect-runs-arena-for-sketches",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "Then it runs `/arena` to produce competing design sketches, with the caller's usage written first in each, followed by types, signatures, and a module map."
@@ -11768,17 +11861,15 @@
    ],
    "text": "When it refuses, it lists every gate that failed."
   },
-  "b61923c61339": {
-   "class": "substituted",
-   "file": "01-setup.md",
-   "ported_as": [
-    "45f5cc237f9a"
-   ],
-   "promise": "setup-rerun-keeps-changed-roles",
+  "b6210260791a": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "sharpen-frames-task-before-work",
    "sources": [
+    "port",
     "upstream"
    ],
-   "text": "When a default changes, a rule written before the change still pins the old default, so delete those role lines, or delete the file, then run `/setup-pstack` again."
+   "text": "Then it rewrites your prompt to ask for exactly that, deeper but not bigger."
   },
   "b65ab2ff9ff8": {
    "class": "context",
@@ -12161,6 +12252,15 @@
    ],
    "text": "**The real constraints.** \"repro first\", \"don't change any code yet\", \"zero behavior change\", and \"let me review before proceeding\" each change what the agent does."
   },
+  "c071679d41c9": {
+   "class": "cursor-only",
+   "file": "06-verify-and-ship.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) works from a worktree, rebases the work into small landable commits, cleans the diff, writes a one-minute briefing as the body, and opens the PR ready."
+  },
   "c09cc0a93c69": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -12180,6 +12280,15 @@
    ],
    "text": "[Prove It Works](../../skills/principle-prove-it-works/SKILL.md) verifies the real artifact, not a proxy."
   },
+  "c1cb21f0dd14": {
+   "class": "cursor-only",
+   "file": "07-overnight.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "A whole program, such as a migration across many packages, has no playbook of its own."
+  },
   "c1d7e8311638": {
    "class": "cursor-only",
    "file": "01-setup.md",
@@ -12193,7 +12302,6 @@
    "class": "context",
    "file": "07-overnight.md",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "That's the shape the Orchestrate playbook expects."
@@ -12206,6 +12314,15 @@
     "port"
    ],
    "text": "Agents spend fewer tokens, and every run becomes repeatable."
+  },
+  "c22390ced8c4": {
+   "class": "cursor-only",
+   "file": "02-poteto-mode.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, visual parity, authoring and evaluating skills, autonomous runs, opening a PR, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue or a stack on autopilot, session pickup, pausing safely, multi-phase plans, and worktree cleanup."
   },
   "c22ff5c89edb": {
    "class": "promise",
@@ -12323,6 +12440,15 @@
     "port"
    ],
    "text": "```text\n/swarm check every package under packages/ against its check.sh. one worker per package. one report.\n```"
+  },
+  "c4696576a609": {
+   "class": "cursor-only",
+   "file": "05-build-and-clean.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) runs `/deslop` on the diff before each commit, and poteto-mode applies [`/unslop`](../../skills/unslop/SKILL.md) to the PR description and commit bodies."
   },
   "c4a37d93eaa7": {
    "class": "promise",
@@ -12500,6 +12626,15 @@
    ],
    "text": "It matches the Bug fix playbook, tracks progress under the mode's [worklist and completion rules](../../skills/poteto-mode/SKILL.md#playbooks), and calls the right skills as each step fires."
   },
+  "c7cc71770bb8": {
+   "class": "cursor-only",
+   "file": "01-setup.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "To drop a pin it does not recognize, delete that role's line or the file first."
+  },
   "c8066657f094": {
    "class": "context",
    "file": "07-overnight.md",
@@ -12523,7 +12658,6 @@
    "file": "03-understand.md",
    "promise": "how-fans-out-explorers-for-big-subsystem",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "For a big subsystem it fans out two to four read-only explorers first."
@@ -12624,7 +12758,6 @@
    "file": "03-understand.md",
    "promise": "how-narrow-question-no-explorers",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "For a narrow question it just reads and explains."
@@ -12760,7 +12893,6 @@
    "file": "07-overnight.md",
    "promise": "orchestrate-prompt-routes-to-orchestrate",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "```text\n/poteto-mode orchestrate the store migration. own it until every package is converted and merged. i'll check in twice a day.\n```"
@@ -12840,19 +12972,6 @@
     "port"
    ],
    "text": "Ask for a few, and pick from evidence you can see:"
-  },
-  "d1920996f970": {
-   "class": "substituted",
-   "file": "01-setup.md",
-   "ported_as": [
-    "a83ccde08cc1",
-    "b7618cfbba23"
-   ],
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "upstream"
-   ],
-   "text": "`medium` and `small` lower the reasoning and spend fewer tokens."
   },
   "d1b46ae55235": {
    "class": "promise",
@@ -12951,6 +13070,33 @@
     "port"
    ],
    "text": "The plan is the deliverable."
+  },
+  "d432eb47c068": {
+   "class": "cursor-only",
+   "file": "04-design.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "A read-only judge from a different model vendor scores every candidate against a rubric."
+  },
+  "d44a86cd0c73": {
+   "class": "cursor-only",
+   "file": "06-verify-and-ship.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Stacked follow-ups beat a growing branch."
+  },
+  "d46e16b2e439": {
+   "class": "cursor-only",
+   "file": "09-make-it-yours.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "It waits for your approval before any skill changes."
   },
   "d482034ab4ad": {
    "class": "promise",
@@ -13114,7 +13260,6 @@
    "file": "06-verify-and-ship.md",
    "promise": "opening-a-pr-worktree-small-commits-link",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) works from a worktree, rebases the work into small ordered commits, cleans the diff, unslops the prose, and returns the PR link."
@@ -13127,18 +13272,6 @@
     "upstream"
    ],
    "text": "Custom Modes are available in the Agents Window and the CLI."
-  },
-  "db586ea7217e": {
-   "class": "substituted",
-   "file": "02-poteto-mode.md",
-   "ported_as": [
-    "20d57d9d3455"
-   ],
-   "promise": "twenty-five-playbooks",
-   "sources": [
-    "upstream"
-   ],
-   "text": "You give it a goal, it matches one of twenty-three playbooks, copies that playbook's steps into the todo list, and calls the other skills as the steps need them."
   },
   "db66367d62ab": {
    "class": "promise",
@@ -13407,6 +13540,15 @@
    ],
    "text": "[Test Behavior, Not Implementation](../../skills/principle-test-behavior-not-implementation/SKILL.md) asserts what the code's users can observe, so a test fails when that behavior breaks and survives a change to the internals."
   },
+  "e0aa78b9e2cc": {
+   "class": "cursor-only",
+   "file": "03-understand.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "The answer cites what the authors wrote, marks the agent's own inferences as inferences, and says what the record does not answer, because \"nobody wrote down why\" is itself an answer."
+  },
   "e0acb193f9ba": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -13509,7 +13651,6 @@
    "file": "03-understand.md",
    "promise": "why-reports-cited-history",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "The report cites everything, separates direct evidence from inference, and says \"appears to\" when the record is thin."
@@ -13700,6 +13841,15 @@
    ],
    "text": "```text\n/poteto-mode write a skill for verifying database migrations in this repo\n```"
   },
+  "e703d583817b": {
+   "class": "cursor-only",
+   "file": "04-design.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "Then it sketches two different shapes, each with types, signatures, and module boundaries, and picks the one where each piece of state has one owner, each task has one way to do it, and callers need to know least."
+  },
   "e71dbf7f9f1c": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -13879,6 +14029,15 @@
    ],
    "text": "An agent that can check its own work keeps going until the check passes."
   },
+  "ea58255dcfc5": {
+   "class": "cursor-only",
+   "file": "02-poteto-mode.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "**Pitfall:** don't enumerate skills in your prompt (\"use /architect, then /arena, then /interrogate...\")."
+  },
   "ea6975bcbf53": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -13987,7 +14146,6 @@
    "class": "context",
    "file": "02-poteto-mode.md",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "**Pitfall:** don't enumerate skills in your prompt (\"use /how, then /architect, then /arena...\")."
@@ -14211,7 +14369,6 @@
    "class": "context",
    "file": "07-overnight.md",
    "sources": [
-    "upstream",
     "port"
    ],
    "text": "[Orchestrate](../../skills/poteto-mode/playbooks/orchestrate.md) is for a program that outlives any single agent: multi-day, many stacked PRs, fleets of subagents under one standing coordinator chat."
@@ -14442,18 +14599,6 @@
    ],
    "text": "Say \"no PR\" or \"don't commit\" in the prompt to stop it earlier."
   },
-  "f9b43d345e9f": {
-   "class": "substituted",
-   "file": "01-setup.md",
-   "ported_as": [
-    "a83ccde08cc1"
-   ],
-   "promise": "budget-labels-set-effort",
-   "sources": [
-    "upstream"
-   ],
-   "text": "Opus goes to `max`."
-  },
   "fae075f9ac87": {
    "class": "context",
    "file": "10-recipes-and-pitfalls.md",
@@ -14549,6 +14694,15 @@
     "port"
    ],
    "text": "A misreading shows up in the restatement, where it costs one message to correct."
+  },
+  "fcf09d76a8dc": {
+   "class": "cursor-only",
+   "file": "09-make-it-yours.md",
+   "reason": "Upstream 0b46ec39 range (bf0c7cd8, 2f87c854, e58dd043, dd24b670) rewrote the behavior this sentence describes. The port holds that change (PORTING.md, Single-model upstream cuts and Syncing from upstream), so the port guide keeps its earlier text.",
+   "sources": [
+    "upstream"
+   ],
+   "text": "[`/reflect`](../../skills/reflect/SKILL.md) reads the transcript, keeps only lessons that would change a future agent's work, and sorts the proposals into `Accepted`, `Rejected`, and `Backlog`."
   },
   "fd1240f7af47": {
    "class": "promise",
