@@ -25,7 +25,7 @@ Build each spawn in this order.
 
 1. **Name the role and the persona** as the harness skill's **Spawn a role** step 1 says. Neither one picks the model or the effort.
 2. **Resolve the role** as the harness skill's **Spawn a role** step 2 says, adding `--work-model '<model>@<effort>'` or `--lead-model '<model>'` where the rules below call for them. Relay each note to the user in the reply. The rules, and the grammar for editing the files, live in setup-pstack's [models config reference](../../setup-pstack/references/models-config.md).
-   - When you resolve `trail reviewer`, pass `--work-model '<model>@<effort>'` with the model and effort that did the work, and use the printed arm. Follow the shared [shell guidance](shell-and-processes.md#write-shell-commands) for quoted model arguments.
+   - When you resolve `trail reviewer`, pass `--work-model '<model>@<effort>'` with the model and effort that did the work, and use the printed arm.
      - When the work's role resolved to `inherit-parent`, pass the session model.
      - When this session did the work and your system prompt or this CLI's config names no exact model ID for it, omit the flag. The resolver reads the session model where the runtime records it, and says so in a note. The current runtime adapter says whether it does. Pass the flag for a delegate's work, with the model and effort that delegate resolved to.
      - When an arm's note says to pass the session model, you passed `auto` or `inherit-parent`, which name no model. Rerun with the session model, the model ID your system prompt or this CLI's config names, and use that run's arm. If you cannot tell the session model, keep the printed arm and disclose the execution identity per step 5.

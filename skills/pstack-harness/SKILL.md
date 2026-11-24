@@ -9,8 +9,6 @@ description: Maps pstack's delegation and portable resource primitives to the cu
 
 Your tool inventory and CLI help are authoritative. Never invent a tool. Report the mechanism when it affects execution or evidence.
 
-Before executing shell commands or answering what is running, read [shell commands and running processes](references/shell-and-processes.md).
-
 ## Select the action
 
 Read each selected reference in full before its action. Select only the actions the next step needs. Read a link inside a reference only when its described operation applies.
