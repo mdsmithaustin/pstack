@@ -1,23 +1,6 @@
 # Resolve roles and preserve handoffs
 
-Carry delegation roles into plans, checkpoints, and handoffs. Separate the role to resume, prior model history, and explicit human overrides. Record the following for each delegate, including builders and independent verifiers:
-
-| Field | Record |
-|---|---|
-| Role and panel arm | Exact configured role and one-based arm to resume. |
-| Previous resolution | Prior harness, model, and effort returned by the resolver. Label these as historical. |
-| Previous execution | Actual prior harness, model, and effort, with the observation or receipt that establishes them. Record unknown values explicitly. |
-| Human override | Original explicit human model request and its source, or that no such request is established. |
-
-Record the coordinator's previous execution separately when available. Keep resolver output separate from actual execution, including substitutions and inherited or unknown identities. A resolved model alone does not prove which model ran.
-
-Preserve a specific-model override with its original explicit human request. Model names in defaults, examples, past runs, or agent-written summaries do not establish such a request. If the source is unavailable, report the uncertainty instead of attributing the model choice to the human. A direct human model request still takes precedence.
-
-On pickup, resolve the saved role for the receiving harness and its current configuration, even when the previous harness differs. Keep previous resolutions and execution identities as history, not dispatch requirements. A recovered statement such as "builders require Sonnet" establishes no override without the original human request. When a legacy handoff omits the role, recover it from the original brief or matching playbook, not the prior model name. If the role remains unknown, report that gap. Record the replacement's resolution and observed execution without overwriting the prior history.
-
-For durable recovery, preserve the exact role and one-based panel arm, brief, standing orders, checkout, resolved identity, and any observed native task id or CLI receipt. A missing observation leaves the child's liveness unknown. It does not prove that the child stopped. To recover, spawn the saved role per **Spawn a role** like any other spawn, and use the printed arm whose `arm` matches the saved arm. Do not choose `default`, another panel arm, or a guessed model. Record the harness, model, and effort that the replacement runs on. Recovery keeps the workflow's existing retry allowance.
-
-Retain the exact raw `--work-model` argument from the final successful resolver invocation and its complete printed arm. Keep this pair separate from observed execution identity. In an orch attempt, save it as `resolutionContext: {workModel, resolvedArm}` per the [orch reference](../../poteto-mode/scripts/orch/README.md#optional-durable-attempts). A successful invocation without the flag records `workModel: null`. An unsuccessful resolver invocation supplies no successful context. Keep legacy absence unknown. Later model substitution or effort inheritance does not rewrite the saved arm. To recover a `trail reviewer`, pass a saved string `workModel` as `--work-model`. For a saved null, omit the flag. Without saved context, pass the model the work ran on, as for a new review.
+Retain the exact raw `--work-model` argument from the final successful resolver invocation and its complete printed arm. Keep this pair separate from observed execution identity. A successful invocation without the flag records `workModel: null`. An unsuccessful resolver invocation supplies no successful context. Keep legacy absence unknown. Later model substitution or effort inheritance does not rewrite the saved arm. To recover a `trail reviewer`, pass a saved string `workModel` as `--work-model`. For a saved null, omit the flag. Without saved context, pass the model the work ran on, as for a new review.
 
 ## Spawn a role
 
