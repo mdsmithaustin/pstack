@@ -3208,7 +3208,7 @@
   },
   "pr-steps-run-unasked": {
    "check": "static",
-   "claim": "A playbook that ends in Opening a PR commits, pushes, and opens the PR without a separate request from the user, up to the endpoint the user or host states.",
+   "claim": "A playbook that ends in Opening a PR runs the commit, push, and PR steps its endpoint calls for without a separate request from the user.",
    "evidence": [
     {
      "file": "skills/poteto-mode/SKILL.md",
