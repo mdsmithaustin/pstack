@@ -267,7 +267,7 @@ def default_endpoint(project):
         return "reviewable PR", "a remote on a host gh serves", True
     if "github.com" in hosts:
         return "reviewable PR through a built-in PR tool, else a pushed branch named in the reply", "GitHub remote, no forge CLI on PATH", True
-    why = "no PR tool on PATH serves the remote's host" if hosts else "every remote is a local path, which takes no PR"
+    why = "no PR tool on PATH serves the remote's host" if hosts else "no remote names a network host, so none takes a PR"
     return "a pushed branch, named in the reply", why, False
 
 
