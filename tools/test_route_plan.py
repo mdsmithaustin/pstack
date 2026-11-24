@@ -299,7 +299,7 @@ class Worklist(unittest.TestCase):
         self.assertNotIn(str(ROOT), run("feature", *LOW).stdout)
 
     def test_fixed_procedure_playbook_needs_no_facts(self):
-        result = plan("babysit")
+        result = plan("shipping")
         self.assertEqual((result["route"], result["route_source"]), ("standard", "fixed"))
         self.assertIsNone(result["scrutiny"])
 
@@ -513,19 +513,35 @@ class GatesAndEndpoint(unittest.TestCase):
 
     def test_every_code_step_that_runs_opening_a_pr_keeps_its_commits(self):
         line = "   still commit when the push or PR is skipped"
-        for name, entry in MANIFEST["playbooks"].items():
-            args = facts(reach="material:shared caller") if entry.get("tiered") else []
-            steps = [step for step in plan(name, *args)["steps"] if step["runs_pr"]]
-            with self.subTest(playbook=name):
-                self.assertTrue(steps, "a code playbook needs a step that runs Opening a PR")
-                text = run(name, *args).stdout.split("\n")
-                for step in steps:
-                    at = next(index for index, row in enumerate(text) if row.startswith(f"{step['number']}. "))
+        found = set()
+        for path in sorted((MODE / "playbooks").glob("*.md")):
+            numbers, number = [], None
+            for row in path.read_text(encoding="utf-8").split("\n"):
+                start = re.match(r"(\d+)\. ", row)
+                if start:
+                    number = start.group(1)
+                elif row.startswith(("#", "**Reply:**")):
+                    number = None
+                if number and re.search(r"\bRun \*\*Opening a PR\*\*", row):
+                    numbers.append(number)
+            if not numbers:
+                continue
+            found.add(path.stem)
+            entry = MANIFEST["playbooks"].get(path.stem, {})
+            with self.subTest(playbook=path.stem):
+                self.assertTrue(entry.get("changes_code"), "a playbook that runs Opening a PR changes code")
+                args = facts(reach="material:shared caller") if entry.get("tiered") else []
+                text = run(path.stem, *args).stdout.split("\n")
+                for number in dict.fromkeys(numbers):
+                    at = next(index for index, row in enumerate(text) if row.startswith(f"{number}. "))
                     self.assertEqual(text[at + 1], line)
+        publish_without_the_step = {"babysit", "autonomous-run", "opening-a-pr"}
+        code = {name for name, entry in MANIFEST["playbooks"].items() if entry.get("changes_code")}
+        self.assertEqual(found, code - publish_without_the_step)
         self.assertIn(line, run("feature", *LOW).stdout, "the lightweight grouped worklist keeps the line")
 
     def test_a_playbook_that_changes_no_code_gets_no_commit_line(self):
-        for name in ("babysit", "shipping", "investigation", "autopilot-full"):
+        for name in ("code-review", "shipping", "investigation", "autopilot-full"):
             with self.subTest(playbook=name):
                 self.assertFalse(any(step["runs_pr"] for step in plan(name)["steps"]))
                 self.assertNotIn("still commit", run(name).stdout)
@@ -565,8 +581,8 @@ class Manifest(unittest.TestCase):
             self.assertNotIn("file", entry)
 
     def test_a_playbook_without_a_manifest_entry_still_plans(self):
-        self.assertNotIn("babysit", MANIFEST["playbooks"])
-        self.assertEqual(plan("babysit")["route"], "standard")
+        self.assertNotIn("investigation", MANIFEST["playbooks"])
+        self.assertEqual(plan("investigation")["route"], "standard")
 
     def test_the_manifest_holds_no_outcome_text(self):
         outcomes = [step["outcome"] for name in ("feature", "bug-fix") for step in plan(name, *facts(reach="material:x"))["steps"]]
