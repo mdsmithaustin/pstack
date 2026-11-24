@@ -7,8 +7,8 @@ references/routes.md. The same facts give the same route on every harness.
 Steps and their outcome sentences come from the playbook file, which owns them. Gates, panels,
 and the flags of code-changing playbooks come from routes.json beside the mode entry.
 
-A plan uses the current directory by default. To plan for another directory, pass
---project DIR once. DIR must already exist and can be outside a Git repository.
+A plan inspects the current directory for its default endpoint. Pass --project DIR
+to inspect another directory. DIR must exist and need not be in a Git repository.
 
 Use --step N to print the step's full text and the route's gates without inspecting
 a repository. For a routed playbook, include --route with the route the plan
@@ -23,7 +23,7 @@ includes the reminder to commit even when the push or PR is skipped.
 Use --reason only with --raise-to. On a routed playbook, --raise-to requires
 a nonblank reason.
 Supply each risk fact, --user-route, --raise-to, --reason, --step, --route,
-and --harness at most once. Arguments must be valid UTF-8.
+--harness, and --project at most once. Arguments must be valid UTF-8.
 On a usage error, the script writes one line to stderr and exits with status 2.
 """
 import argparse
@@ -273,7 +273,7 @@ def default_endpoint(project):
 
 
 def remote_host(url):
-    """Return the normalized network host, or None for a local or unparseable push URL."""
+    """Return the push URL's network host, with ssh aliases resolved and *.github.com folded to github.com, or None for a local or unparseable URL."""
     if os.path.splitdrive(url)[0]:
         return None
     if "://" in url:
@@ -529,7 +529,7 @@ def main(argv=None):
     parser.add_argument("--step", type=int, metavar="N", action=Once, help="Print the full text of step N and the route's gates")
     parser.add_argument("--route", choices=ROUTES, action=Once, help="With --step on a routed playbook, the route the plan printed")
     parser.add_argument("--harness", choices=("claude-code", "codex", "grok", "hermes", "other"), default="other", action=Once)
-    parser.add_argument("--project", type=directory, action=Once, help="Repository to inspect for a remote (default: the current directory)")
+    parser.add_argument("--project", type=directory, action=Once, help="Directory to inspect for a repository and its remotes (default: the current directory)")
     parser.add_argument("--json", action="store_true")
     argv = sys.argv[1:] if argv is None else argv
     undecodable = next((arg for arg in argv if SURROGATE.search(arg)), None)
