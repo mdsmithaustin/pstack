@@ -1,6 +1,8 @@
+import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -346,6 +348,40 @@ class Worklist(unittest.TestCase):
 
     def test_unknown_playbook_is_a_usage_error(self):
         self.assertEqual(run("nope").returncode, 2)
+
+
+class ConditionalLoads(unittest.TestCase):
+    maxDiff = None
+    LOAD = re.compile(r"Skill tool with `([a-z0-9-]+)`")
+    SENTENCE = re.compile(r"(?<=[.!?])\s+")
+    CONDITION = re.compile(r"^\W*(?:In|For)\b|\b(?:if|when|whenever|unless|once|where|otherwise)\b|\bonly (?:when|if|for|on|in)\b"
+                           r"|\bon the (?:lightweight|standard|intensive) route\b|\bor call the Skill tool\b", re.I)
+
+    def test_no_playbook_prints_a_load_whose_sentence_names_a_condition_as_binding(self):
+        spec = importlib.util.spec_from_file_location("route_plan", SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        intensive = facts(consequence="material:x", uncertainty="material:y")
+        wrong = []
+        for path in sorted((MODE / "playbooks").glob("*.md")):
+            tiered = MANIFEST["playbooks"].get(path.stem, {}).get("tiered", False)
+            printed = {step["number"]: step["loads"] for step in plan(path.stem, *(intensive if tiered else []))["steps"]}
+            for number, text in module.read_playbook(path)[1]:
+                sentences = self.SENTENCE.split(text)
+                plain = {skill for s in sentences if not self.CONDITION.search(s) for skill in self.LOAD.findall(s)}
+                wrong += [f"{path.stem} step {number}: {skill}: {s}" for s in sentences if self.CONDITION.search(s)
+                          for skill in self.LOAD.findall(s) if skill in printed[number] and skill not in plain]
+        self.assertEqual(wrong, [], "Open a conditional load's sentence with its condition, such as "
+                                    "\"When <condition>, call the Skill tool with `<name>`.\", so the plan prints it as conditional.")
+
+    def test_the_plan_does_not_depend_on_which_sibling_skills_are_installed(self):
+        args = ["bug-fix", *facts(reach="material:x"), "--project", "/"]
+        with tempfile.TemporaryDirectory() as tmp:
+            shutil.copytree(MODE, Path(tmp) / "skills/poteto-mode")
+            alone = subprocess.run([sys.executable, str(Path(tmp) / "skills/poteto-mode/scripts/plan.py"), *args],
+                                   capture_output=True, text=True)
+        self.assertEqual(alone.returncode, 0, alone.stderr)
+        self.assertEqual(alone.stdout, run(*args).stdout)
 
 
 class RenderedRules(unittest.TestCase):
