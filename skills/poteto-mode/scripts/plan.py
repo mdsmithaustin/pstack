@@ -45,6 +45,7 @@ SCRUTINY_LOCAL = ("No remote, so no PR review exists to credit. Brief one `trail
 RUN_PR = re.compile(r"\bRun \*\*Opening a PR\*\*")
 KEEP_COMMITS = "   still commit when the push or PR is skipped"
 SURROGATE = re.compile("[\udc80-\udcff]")
+WHEN_HOLDS = "   load only when the step's own condition holds: "
 NO_CHANGE_ENDPOINT = ("what this playbook's Reply line names", "this playbook does not produce a code change")
 
 
@@ -145,7 +146,9 @@ def render_step(args, manifest):
         out += ["Lightweight route: do this step's work yourself. Skip its sentences that delegate the work or spawn a design panel, or load a skill the plan did not list. Keep its outcome, its checks, its commands, and the independent scrutiny the plan lists."]
         if LOAD.search(joined):
             loads, conditional, _ = route_loads(joined, "lightweight", tiered, manifest)
-            out.append("Loads this route keeps from this step: " + (", ".join(f"`{s}`" for s in loads + conditional) or "none") + ".")
+            out.append("Loads this route keeps from this step: " + (", ".join(f"`{s}`" for s in loads) or "none") + ".")
+            if conditional:
+                out.append(WHEN_HOLDS + ", ".join(conditional))
         out.append("")
     elif tiered and args.route == "standard":
         panels = ", ".join(f"`{name}`" for name in manifest["panels"])
@@ -386,7 +389,7 @@ def render(plan, harness):
                 out.append("   load: " + "; ".join(load_phrase(skill, harness) for skill in loads))
             maybe = [skill for step in covered for skill in step["conditional"]]
             if maybe:
-                out.append("   load only when the step's own condition holds: " + ", ".join(maybe))
+                out.append(WHEN_HOLDS + ", ".join(maybe))
             if any(step["runs_pr"] for step in covered):
                 out.append(KEEP_COMMITS)
         for step in plan["steps"]:
@@ -403,7 +406,7 @@ def render(plan, harness):
             if step["loads"]:
                 out.append("   load: " + "; ".join(load_phrase(skill, harness) for skill in step["loads"]))
             if step["conditional"]:
-                out.append("   load only when the step's own condition holds: " + ", ".join(step["conditional"]))
+                out.append(WHEN_HOLDS + ", ".join(step["conditional"]))
             if step["uses"]:
                 out.append("   also uses, as the step's text says: " + ", ".join(step["uses"]))
             if step["held_for_intensive"]:
