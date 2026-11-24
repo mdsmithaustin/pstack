@@ -775,6 +775,14 @@ class RepositoryEndpoint(unittest.TestCase):
         self.assertEqual(self.endpoint(other)[0], "reviewable PR")
         self.assertEqual(self.endpoint(self.repo("https://[broken/o/r.git"))[0], self.PUSHED)
 
+    def test_configured_host_with_a_trailing_comment_gets_pr_review(self):
+        self.tool("gh")
+        (self.gh_config / "hosts.yml").write_text(
+            "forge.example.invalid: # internal forge\n    git_protocol: ssh\n", encoding="utf-8")
+        endpoint, scrutiny = self.endpoint(self.repo("https://forge.example.invalid/o/r.git"))
+        self.assertEqual(endpoint, "reviewable PR")
+        self.assertIn("human PR review", scrutiny)
+
     def test_one_remote_that_takes_a_pull_request_is_enough(self):
         self.tool("gh")
         self.assertEqual(self.endpoint(self.repo(str(self.root / "gate.git"), "https://github.com/o/r.git"))[0], "reviewable PR")

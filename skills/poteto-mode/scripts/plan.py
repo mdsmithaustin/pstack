@@ -310,8 +310,8 @@ def gh_hosts():
         text = (folder / "hosts.yml").read_text(encoding="utf-8", errors="replace")
     except OSError:
         text = ""
-    named = {line.rstrip()[:-1].strip("'\"").lower() for line in text.splitlines()
-             if line[:1] not in ("", " ", "\t", "#", "-") and line.rstrip().endswith(":")}
+    keys = re.findall(r"^([^\s#-]\S*?)[ \t]*:(?=[ \t]|$)", text, re.M)
+    named = {key.strip("'\"").lower() for key in keys}
     return {"github.com", os.environ.get("GH_HOST", "github.com").lower(), *named}
 
 
