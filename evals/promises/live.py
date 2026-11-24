@@ -51,6 +51,8 @@ SCRATCH_ROOTS = {
 BOOTSTRAP_MODULES = Path("poteto-mode/scripts/node_modules")
 # Grade refusals about the grader or its controller rather than the run: every later case would refuse the same way.
 BATCH_REFUSALS = ("boundary_unavailable", "unknown_authorization")
+# The shipped role defaults. The resolver ranks the project's `.agents/` copy above the user's own file.
+MODELS_EXAMPLE = Path("setup-pstack/examples/pstack-models.md")
 MEANINGS = ("eval", "evals", "evaluation", "judge", "experiment", "rubric", "score", "compare",
             "benchmark", "candidate", "arena", "promise", "promises", "oracle", "verdict")
 
@@ -214,6 +216,15 @@ def apply_overlays(case, skills):
         path.write_text(text, encoding="utf-8")
 
 
+def seed_models_config(project, skills):
+    """Copy the installed tree's shipped models file into the project's workspace config, so a run on the host HOME
+    resolves the arm's defaults instead of the user's file. Returns the copy's project-relative path."""
+    dest = project / ".agents" / MODELS_EXAMPLE.name
+    dest.parent.mkdir(exist_ok=True)
+    shutil.copyfile(skills / MODELS_EXAMPLE, dest)
+    return dest.relative_to(project)
+
+
 def git_run(dest, *args, **kwargs):
     return subprocess.run(["git", "-C", str(dest), *GIT_IDENTITY, *args], check=True,
                           env={**os.environ, **GIT_ISOLATION}, **kwargs)
@@ -293,7 +304,7 @@ def drive(module, run, authorization):
     return None
 
 
-def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, model=None, effort=None):
+def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, model=None, effort=None, workspace_models=False):
     if hermes_retain_out is not None and harness != "hermes":
         raise ValueError("--hermes-retain-out requires --harness hermes")
     if (model or effort) and harness not in RUN_OVERRIDES:
@@ -316,8 +327,9 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     install_tree(run.skills_at, run.project / module.SKILLS_DIR)
     apply_overlays(case, run.project / module.SKILLS_DIR)
     run.implicit_off = skill_listing.managed_skills(run.project / module.SKILLS_DIR)
+    private = [*module.PRIVATE_DIRS, *([seed_models_config(run.project, run.project / module.SKILLS_DIR)] if workspace_models else [])]
     exclude = run.project / ".git" / "info" / "exclude"
-    exclude.write_text(exclude.read_text() + "".join(f"{d}\n" for d in module.PRIVATE_DIRS))
+    exclude.write_text(exclude.read_text() + "".join(f"{d}\n" for d in private))
     scratch = [run.root / rel for rel in SCRATCH_ROOTS[harness]]
     for path in scratch:
         _Root.open(path, create=True).close()
@@ -388,6 +400,8 @@ def main(argv=None):
     r.add_argument("--hermes-retain-out", help="durable parent for private Hermes evidence and paired exports")
     r.add_argument("--model", help="model for every turn of every case in this invocation (claude-code, codex)")
     r.add_argument("--effort", help="reasoning effort for every turn of every case in this invocation (claude-code, codex)")
+    r.add_argument("--workspace-models", action="store_true",
+                   help="copy the installed setup-pstack/examples/pstack-models.md to the project's .agents/, which outranks the user's file")
     g = sub.add_parser("grade")
     g.add_argument("run_ids", nargs="+", help="controller-issued run IDs")
     g.add_argument("--out", default=str(Path(tempfile.gettempdir()) / "pstack-live"))
@@ -404,7 +418,8 @@ def main(argv=None):
             preflight(args.harness)
             for case_id in args.case:
                 for n in range(args.runs):
-                    screen = run_case(args.harness, case_id, args.skills_at, out, n, args.hermes_retain_out, args.model, args.effort)
+                    screen = run_case(args.harness, case_id, args.skills_at, out, n, args.hermes_retain_out, args.model, args.effort,
+                                      workspace_models=args.workspace_models)
                     if "refusal" in screen:
                         refused = True
                         if screen["refusal"]["reason"] in BATCH_REFUSALS:

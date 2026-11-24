@@ -600,6 +600,33 @@ class RunOverrides(unittest.TestCase):
         self.assertEqual(argv[-5:], ("--effort", "high", "--model", "claude-sonnet-5-5", "go"))
 
 
+class WorkspaceModels(unittest.TestCase):
+    def resolve(self, project, user_file, harness):
+        script = project / ".claude/skills/setup-pstack/scripts/check-models-config.py"
+        done = subprocess.run([sys.executable, str(script), "--resolve", "--harness", harness, "--project", str(project),
+                               "--user-file", str(user_file), "swarm workers"], capture_output=True, text=True, check=True)
+        return json.loads(done.stdout.splitlines()[0])
+
+    def test_the_installed_defaults_outrank_a_user_file_for_every_run_harness(self):
+        with tempfile.TemporaryDirectory(prefix="pstack-models-") as tmp:
+            project, user_file = Path(tmp) / "p", Path(tmp) / "user.md"
+            live.install_tree("HEAD", project / ".claude/skills")
+            user_file.write_text("swarm workers: haiku@low\n\n## claude-code\nswarm workers: haiku@low\n\n## codex\nswarm workers: gpt-6-luna@low\n")
+            self.assertEqual(self.resolve(project, user_file, "claude-code")["model"], "haiku")
+            rel = live.seed_models_config(project, project / ".claude/skills")
+            self.assertEqual((project / rel).read_bytes(), (project / ".claude/skills" / live.MODELS_EXAMPLE).read_bytes())
+            for harness in ("claude-code", "codex"):
+                with self.subTest(harness=harness):
+                    self.assertEqual(self.resolve(project, user_file, harness)["source"], f"workspace ## {harness}")
+
+    def test_the_cli_seeds_only_when_asked(self):
+        for argv, seeded in (([], False), (["--workspace-models"], True)):
+            with tempfile.TemporaryDirectory(prefix="pstack-models-") as tmp, mock.patch.object(live, "run_case") as run_case, \
+                    mock.patch.object(live, "preflight"):
+                live.main(["run", "--harness", "codex", "--case", "a", "--out", tmp, *argv])
+            self.assertEqual(run_case.call_args.kwargs, {"workspace_models": seeded})
+
+
 def fake_cli(directory, name, script):
     path = Path(directory) / name
     path.write_text("#!/bin/sh\n" + script)
