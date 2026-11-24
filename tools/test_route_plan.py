@@ -103,6 +103,35 @@ class Evidence(unittest.TestCase):
         self.assertEqual(run("feature", *LOW, "--raise", "standard", "--reason", "new module").returncode, 2)
 
 
+class EvidenceUsageErrors(unittest.TestCase):
+    def test_every_value_flag_is_refused_when_repeated(self):
+        cases = {
+            "--raise-to": ("feature", *LOW, "--raise-to", "intensive", "--reason", "a", "--raise-to", "lightweight"),
+            "--reason": ("feature", *LOW, "--raise-to", "intensive", "--reason", "a", "--reason", "b"),
+            "--user-route": ("feature", *LOW, "--user-route", "intensive", "--user-route", "lightweight"),
+            "--harness": ("feature", *LOW, "--harness", "codex", "--harness", "claude-code"),
+            "--step": ("feature", "--step", "2", "--step", "3", "--route", "standard"),
+            "--route": ("feature", "--step", "3", "--route", "intensive", "--route", "lightweight"),
+        }
+        for flag, args in cases.items():
+            with self.subTest(flag=flag):
+                done = run(*args)
+                self.assertEqual(done.returncode, 2, done.stdout[:80])
+                self.assertIn(f"{flag} was given more than once", done.stderr)
+
+    def test_an_argument_that_is_not_utf8_is_a_usage_error(self):
+        cases = {
+            "fact": ("bug-fix", *facts(consequence=b"low:caf\xe9 caller found by grep")),
+            "reason": ("feature", *LOW, "--raise-to", "standard", "--reason", b"caf\xe9 is new"),
+        }
+        for name, args in cases.items():
+            with self.subTest(argument=name):
+                done = run(*args)
+                self.assertEqual(done.returncode, 2, done.stderr[-200:])
+                self.assertIn("not valid UTF-8", done.stderr)
+                self.assertNotIn("Traceback", done.stderr)
+
+
 class Overrides(unittest.TestCase):
     def test_lead_can_raise_with_a_reason(self):
         result = plan("feature", *LOW, "--raise-to", "standard", "--reason", "new to this module")
@@ -142,6 +171,35 @@ class Overrides(unittest.TestCase):
         lowered = plan("feature", *facts(consequence="material:data", uncertainty="unknown"), "--user-route", "lightweight")
         self.assertEqual((lowered["route"], lowered["route_source"]), ("lightweight", "user"))
         self.assertEqual(plan("feature", *LOW, "--user-route", "intensive")["route"], "intensive")
+
+
+class OverrideUsageErrors(unittest.TestCase):
+    def test_a_reason_without_a_raise_is_refused(self):
+        cases = {
+            "with facts": ("feature", *facts(consequence="material:billing", uncertainty="unknown"), "--reason", "x"),
+            "before facts": ("feature", "--reason", "x"),
+            "with a user route": ("feature", *LOW, "--user-route", "intensive", "--reason", "x"),
+            "one procedure": ("babysit", "--reason", "x"),
+        }
+        for name, args in cases.items():
+            with self.subTest(case=name):
+                done = run(*args)
+                self.assertEqual(done.returncode, 2, done.stdout[:80])
+                self.assertIn("--reason goes with --raise-to", done.stderr)
+
+    def test_a_blank_reason_counts_as_missing(self):
+        for reason in ("", "  "):
+            with self.subTest(reason=reason):
+                done = run("feature", *LOW, "--raise-to", "standard", "--reason", reason)
+                self.assertEqual(done.returncode, 2, done.stdout[:80])
+                self.assertIn("--raise-to needs --reason", done.stderr)
+
+    def test_risk_facts_on_a_playbook_with_one_procedure_are_refused(self):
+        for args in (("--reach", "tiny:x"), tuple(LOW)):
+            with self.subTest(args=args[:2]):
+                done = run("babysit", *args)
+                self.assertEqual(done.returncode, 2, done.stdout[:80])
+                self.assertIn("takes no risk facts", done.stderr)
 
 
 class Worklist(unittest.TestCase):
@@ -272,7 +330,7 @@ class OneStep(unittest.TestCase):
         self.assertNotIn("**Repaired.**", done.stdout)
 
     def test_step_keeps_indented_sub_items(self):
-        text = run("feature", "--step", "5").stdout
+        text = run("feature", "--step", "5", "--route", "standard").stdout
         for label in ("Blocking first steps", "Independent workstreams", "Shared mutable state", "Smallest safe decomposition"):
             self.assertIn(label, text)
         self.assertNotIn("**Built.**", text)
@@ -280,7 +338,7 @@ class OneStep(unittest.TestCase):
     def test_step_text_is_the_playbook_text(self):
         source = (MODE / "playbooks/perf-issue.md").read_text(encoding="utf-8")
         line = next(line for line in source.split("\n") if line.startswith("4. "))
-        self.assertIn(line, run("perf-issue", "--step", "4").stdout)
+        self.assertIn(line, run("perf-issue", "--step", "4", "--route", "standard").stdout)
 
     def test_lightweight_step_says_what_to_skip(self):
         self.assertIn("Lightweight route: do this step's work yourself.", run("bug-fix", "--step", "3", "--route", "lightweight").stdout)
@@ -307,8 +365,6 @@ class OneStep(unittest.TestCase):
             self.assertIn(gate, standard)
         self.assertIn("- cleanup: Call the Skill tool with `deslop`, before each push or published head.", standard)
         self.assertIn("- cleanup: Call the Skill tool with `deslop`, before every commit or amend.", intensive)
-        unrouted = run("feature", "--step", "6", "--harness", "claude-code").stdout
-        self.assertIn("standard: before each push or published head; intensive: before every commit or amend", unrouted)
         investigation = run("investigation", "--step", "1").stdout
         self.assertIn("- preserve: run", investigation)
         self.assertNotIn("deslop", investigation)
@@ -325,13 +381,41 @@ class OneStep(unittest.TestCase):
         self.assertNotIn(hint, run("feature", *facts(reach="material:x")).stdout)
 
     def test_missing_step_and_unknown_playbook_are_usage_errors(self):
-        self.assertEqual(run("bug-fix", "--step", "9").returncode, 2)
+        self.assertEqual(run("bug-fix", "--step", "9", "--route", "standard").returncode, 2)
         self.assertEqual(run("nope", "--step", "1").returncode, 2)
 
     def test_the_plan_names_the_step_command_with_its_route(self):
         self.assertIn("`bug-fix --step <number> --route standard`", run("bug-fix", *facts(reach="material:x")).stdout)
         self.assertIn("(steps 1, 2, 4)", run("feature", *LOW).stdout)
         self.assertNotIn("--step", run("opening-a-pr").stdout)
+
+
+class OneStepUsageErrors(unittest.TestCase):
+    def test_a_step_on_a_routed_playbook_needs_its_route(self):
+        for name, entry in MANIFEST["playbooks"].items():
+            if entry.get("tiered"):
+                with self.subTest(playbook=name):
+                    done = run(name, "--step", "1")
+                    self.assertEqual(done.returncode, 2, done.stdout[:80])
+                    self.assertEqual(done.stdout, "")
+                    self.assertIn("--step needs --route", done.stderr)
+        self.assertEqual(run("investigation", "--step", "1").returncode, 0)
+
+    def test_a_route_without_a_step_is_refused(self):
+        for args in (("feature", *LOW, "--route", "intensive"), ("babysit", "--route", "standard")):
+            with self.subTest(playbook=args[0]):
+                done = run(*args)
+                self.assertEqual(done.returncode, 2, done.stdout[:80])
+                self.assertIn("--route goes with --step", done.stderr)
+
+    def test_flags_of_the_full_plan_are_refused_with_a_step(self):
+        for extra in (("--reach", "tiny:x"), ("--reach", "low:one caller by grep"), ("--user-route", "intensive"),
+                      ("--raise-to", "intensive", "--reason", "x"), ("--reason", "x"), ("--json",)):
+            with self.subTest(extra=extra[0]):
+                done = run("feature", "--step", "3", "--route", "standard", *extra)
+                self.assertEqual(done.returncode, 2, done.stdout[:80])
+                self.assertEqual(done.stdout, "")
+                self.assertIn(f"Drop {extra[0]}", done.stderr)
 
 
 class BindingRegime(unittest.TestCase):
