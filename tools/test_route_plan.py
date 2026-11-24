@@ -790,6 +790,12 @@ class RepositoryEndpoint(unittest.TestCase):
             with self.subTest(url=url):
                 self.assertEqual(self.endpoint(self.repo(url))[0], "reviewable PR")
 
+    def test_a_dash_leading_host_never_reaches_ssh(self):
+        self.tool("gh")
+        self.tool("ssh", ': > "$HOME/ssh-called"')
+        self.assertEqual(self.endpoint(self.repo("ssh://-oProxyCommand=x/o/r.git"))[0], self.PUSHED)
+        self.assertFalse((self.root / "ssh-called").exists())
+
     def test_the_project_decides_under_git_environment_variables(self):
         self.tool("gh")
         other = self.repo("https://github.com/o/r.git")

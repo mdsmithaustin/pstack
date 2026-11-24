@@ -286,6 +286,8 @@ def remote_host(url):
 
 def ssh_hostname(alias):
     """Resolve an ssh alias as gh does, with `ssh -G`, which prints the evaluated config and connects to nothing."""
+    if alias.startswith("-"):
+        return alias
     try:
         done = subprocess.run(["ssh", "-G", alias], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=5)
     except (OSError, subprocess.TimeoutExpired):
