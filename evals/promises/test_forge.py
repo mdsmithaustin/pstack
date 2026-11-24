@@ -1,7 +1,9 @@
 import json
 import os
 import re
+import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -201,6 +203,24 @@ class ForgeTest(unittest.TestCase):
         self.gh("run", "rerun", run_id, "--failed")
         self.assertEqual(self.gh("run", "view", run_id, "--json", "conclusion,attempt", "--jq", "[.conclusion, .attempt] | @csv"),
                          '"failure",2\n')
+
+    def test_ci_runs_without_tar_or_rm_on_path(self):
+        """The Claude Code sandbox blocks tar, and Codex hosts can resolve python3 to 3.9, whose tarfile has no filter."""
+        self.build()
+        self.gh("pr", "create", "--head", "broken", "--title", "Subtract", "--body", "")
+        path = self.env["PATH"]
+        for python in dict.fromkeys(p for p in (sys.executable, "/usr/bin/python3") if os.path.exists(p)):
+            with self.subTest(python=python):
+                tools = Path(tempfile.mkdtemp(dir=self.tmp))
+                (tools / "python3").symlink_to(python)
+                (tools / "git").symlink_to(shutil.which("git"))
+                self.env["PATH"] = f"{self.forge / 'bin'}{os.pathsep}{tools}"
+                self.assertIn("test\tfail\t", self.gh("pr", "checks", "1", code=1))
+                run_id = self.gh("run", "list", "--branch", "broken", "--json", "databaseId", "--jq", ".[0].databaseId").strip()
+                self.gh("run", "rerun", run_id, "--failed")
+                self.assertIn("AssertionError: -1 != 3", self.gh("run", "view", run_id, "--log-failed"))
+                self.assertEqual(list(self.tmp.glob("runner-*")), [])
+                self.env["PATH"] = path
 
     def test_pending_check_exits_8(self):
         canned = json.loads(json.dumps(CANNED))

@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 import fcntl
+import io
 import itertools
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
+import tarfile
 import tempfile
 import traceback
 import zlib
@@ -303,7 +306,8 @@ def execute_run(run):
     run["startedAt"] = now()
     work = Path(tempfile.mkdtemp(prefix="runner-"))
     archive = rgit("archive", "--format=tar", run["sha"], text=False).stdout
-    subprocess.run(["tar", "-x", "-C", str(work)], input=archive, check=True)
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+        tar.extractall(work, **({"filter": "tar"} if hasattr(tarfile, "tar_filter") else {}))
     proc = subprocess.Popen(ci["command"], shell=True, cwd=work, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, start_new_session=True, env=git_env())
     timeout = ci.get("timeout_s", 600)
@@ -322,7 +326,7 @@ def execute_run(run):
         text += f"\n##[error]The job has exceeded the maximum execution time of {timeout}s."
     elif code:
         text += f"\n##[error]Process completed with exit code {code}."
-    subprocess.run(["rm", "-rf", str(work)])
+    shutil.rmtree(work, ignore_errors=True)
     lines = text.splitlines()
     (FORGE / "ci" / f"{run['id']}.log").write_text(text, encoding="utf-8")
     run.update(conclusion="SUCCESS" if code == 0 else "FAILURE", completedAt=now(), output="\n".join(lines[-200:]))
