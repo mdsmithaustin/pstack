@@ -50,8 +50,8 @@ With no stated endpoint, use the plan's default:
 
 | The repository has | Default endpoint |
 |---|---|
-| A github.com remote, or a network remote and Origin | A reviewable PR, through a built-in PR tool without `gh` or Origin. |
-| Another remote, such as GitHub Enterprise | A pushed branch, named in the reply. Open a PR only when the user asks. |
+| A github.com remote, or a network remote and Origin | A reviewable PR. Without `gh` or Origin, use a built-in PR tool or push a branch. |
+| Another remote, such as GitHub Enterprise | A pushed branch, named in the reply. Open a PR only on request. |
 | No remote | Commits on a local branch. Give the branch and its diff command in the reply. |
 | No Git repository | Run `git init`, then use the row above. |
 

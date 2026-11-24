@@ -1331,7 +1331,7 @@
     },
     {
      "file": "skills/poteto-mode/references/routes.md",
-     "quote": "| Another remote, such as GitHub Enterprise | A pushed branch, named in the reply. Open a PR only when the user asks. |"
+     "quote": "| Another remote, such as GitHub Enterprise | A pushed branch, named in the reply. Open a PR only on request. |"
     },
     {
      "file": "skills/poteto-mode/references/routes.md",

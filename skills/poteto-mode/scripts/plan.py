@@ -55,8 +55,9 @@ unchecked verified unverified evidence applicable trust me to it is and file fil
 insertions deletion deletions touched one two three four five six seven eight nine ten""".split())
 SCRUTINY_REMOTE = ("Credit an existing independent review of the current revision. Or name human PR review as the scrutiny, "
                    "record the revision it must cover, and report delivery as pending review. Otherwise brief one `trail reviewer`.")
-SCRUTINY_LOCAL = ("No pull request will open, so no PR review exists to credit. Brief one `trail reviewer`, or report the user's "
-                  "review of the branch as pending.")
+SCRUTINY_LOCAL = ("No pull request opens by default, so no PR review exists to credit. Brief one `trail reviewer`, or report the "
+                  "user's review of the branch as pending. If the user asks for a PR, name human PR review as the scrutiny instead, "
+                  "and report delivery as pending review.")
 SCP_REMOTE = re.compile(r"^(?:[^/:]+@)?([^@/:]+):")
 RUN_PR = re.compile(r"\bRun \*\*Opening a PR\*\*")
 KEEP_COMMITS = "   still commit when the push or PR is skipped"
