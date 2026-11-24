@@ -41,7 +41,7 @@ SENTENCE_END = re.compile(r"(?<=[.!?])\s")
 FULL_READ = "Read this playbook in full."
 REPLY = "**Reply:**"
 CONDITIONAL = re.compile(r"^\W*(If|When|Where|For|On the|Once|Unless|Otherwise|Only)\b")
-WORD = re.compile(r"[\w/]+(?:'\w+)?")
+WORD = re.compile(r"\bn/a\b|[^\W_]\w*(?:'\w+)?")
 NO_CHECK = re.compile(r"\b(?:not|never|\w+n't)\s+(?:yet\s+|been\s+|really\s+)?(?:check|look|verif(?:y|ied)|test|inspect|review)(?:ed|s)?\b"
                       r"|\bskipped\s+(?:the\s+)?(?:check|look|verification|test|inspection|review)s?\b")
 THIN_WORDS = frozenset("""ok okay fine none n/a na unknown low tbd yes no same trivial nothing not did didn't never check checked

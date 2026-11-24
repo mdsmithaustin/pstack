@@ -120,9 +120,11 @@ class EvidenceWords(unittest.TestCase):
 
     def test_change_counts_alone_count_as_unknown(self):
         for thin in ("1 file changed, 3 insertions(+), 1 deletion(-)", "3 lines changed", "two files touched", "one change",
-                     "two changes", "one insertion", "two deletions", "120 loc changed"):
+                     "two changes", "one insertion", "two deletions", "120 loc changed", "1 file / 3 lines"):
             with self.subTest(evidence=thin):
-                self.assertEqual(plan("bug-fix", *facts(consequence=f"low:{thin}"))["route"], "standard")
+                result = plan("bug-fix", *facts(consequence=f"low:{thin}"))
+                self.assertEqual(result["facts"]["consequence"]["level"], "unknown")
+                self.assertEqual(result["route"], "standard")
 
     def test_each_filler_word_alone_with_other_filler_counts_as_unknown(self):
         for thin in ("okay, na", "yes, low", "same files", "it is trivial", "no, didn't", "no, never", "unchecked, unknown",
