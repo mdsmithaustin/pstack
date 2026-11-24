@@ -41,7 +41,10 @@ SENTENCE_END = re.compile(r"(?<=[.!?])\s")
 FULL_READ = "Read this playbook in full."
 REPLY = "**Reply:**"
 CONDITIONAL = re.compile(r"^\W*(If|When|Where|For|On the|Once|Unless|Otherwise|Only)\b")
-THIN_EVIDENCE = {"ok", "okay", "fine", "none", "n/a", "na", "unknown", "low", "tbd", "yes", "no", "same", "trivial", "nothing"}
+WORD = re.compile(r"[\w/]+(?:'\w+)?")
+THIN_WORDS = frozenset("""ok okay fine none n/a na unknown low tbd yes no same trivial nothing not did didn't never check checked
+unchecked verified unverified evidence applicable trust me to it is file files line lines one two three four five six seven eight
+nine ten""".split())
 SCRUTINY_REMOTE = ("Credit an existing independent review of the current revision. Or name human PR review as the scrutiny, "
                    "record the revision it must cover, and report delivery as pending review. Otherwise brief one `trail reviewer`.")
 SCRUTINY_LOCAL = ("No remote, so no PR review exists to credit. Brief one `trail reviewer`, or report the user's review of "
@@ -213,7 +216,8 @@ def parse_fact(value):
     if level == "low":
         if not evidence:
             return "unknown", "recorded low with no evidence, so treated as unknown"
-        if len(evidence.split()) < 2 or len(evidence) < 8 or evidence.lower().strip(".") in THIN_EVIDENCE:
+        words = WORD.findall(evidence.lower())
+        if len(evidence.split()) < 2 or len(evidence) < 8 or all(word.isdigit() or word in THIN_WORDS for word in words):
             return "unknown", f"recorded low, but {evidence!r} does not say what was checked, so treated as unknown"
     return level, evidence
 
