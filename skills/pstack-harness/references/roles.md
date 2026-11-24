@@ -25,31 +25,18 @@ Build each spawn in this order.
 
 1. **Name the role and the persona** as the harness skill's **Spawn a role** step 1 says. Neither one picks the model or the effort.
 2. **Resolve the role** as the harness skill's **Spawn a role** step 2 says, adding `--work-model '<model>@<effort>'` or `--lead-model '<model>'` where the rules below call for them. Relay each note to the user in the reply. The rules, and the grammar for editing the files, live in setup-pstack's [models config reference](../../setup-pstack/references/models-config.md).
-   - When you resolve `trail reviewer`, pass `--work-model '<model>@<effort>'` with the model and effort that did the work, and use the printed arm. Follow the shared [shell guidance](shell-and-processes.md#write-shell-commands) for quoted model arguments.
-     - When the work's role resolved to `inherit-parent`, pass the session model.
-     - When this session did the work and your system prompt or this CLI's config names no exact model ID for it, omit the flag. The resolver reads the session model where the runtime records it, and says so in a note. The current runtime adapter says whether it does. Pass the flag for a delegate's work, with the model and effort that delegate resolved to.
-     - When an arm's note says to pass the session model, you passed `auto` or `inherit-parent`, which name no model. Rerun with the session model, the model ID your system prompt or this CLI's config names, and use that run's arm. If you cannot tell the session model, keep the printed arm and disclose the execution identity per step 5.
-     - Pass the model the work ran on, as the role's resolved value or the CLI's own model ID. A full Claude ID such as `claude-opus-5-5` maps to its alias on a CLI that takes aliases, and stays a literal slug on Hermes.
+   - For `trail reviewer`:
      - When the exit 2 names `--work-model`, follow its message, drop any `[1m]` suffix, and rerun. If the work ran on another vendor's model, rerun without the flag: every Claude Code arm is a Claude model, so the printed arm is cross-model. Otherwise rerun without the flag and disclose the execution identity per step 5.
      - A `"step": "same-model"` field marks a same-model review, and its note says why. Report that resolution and disclose the execution identity per step 5.
-   - Every model you pass comes from this output or an explicit request in the task. Never improvise one, and say which role each model came from.
-   - If the resolver exits nonzero or cannot run, spawn as the harness skill's step 2 says. For `trail reviewer`, disclose the execution identity per step 5. For a panel role, keep the arm count that the panel's skill names as its default, and brief each arm the way that skill says.
-
-   **Same-model design comparison.** A design comparison is a panel whose candidates you choose between: architect's sketches, or an `arena` run that produces candidate designs or implementations for your own pick. It buys an independent opinion, and arms on your own model give none. The first `arena runners` or `architect runners` arm prints `"comparison": "skip"` when every runner arm and every `arena cross-judge pool` arm resolves to your model. For this check, effort is not a model: two arms, or an arm and you, that differ only in effort are one model. An `inherit-parent` arm is your model. When the arm has no `"comparison"` field and a note says that either role resolves to one distinct model, rerun with `--lead-model '<model>'`, passing your session model the way `--work-model` takes it. If you cannot tell your session model, run the panel and say that the model check did not run.
-
-   On `skip` in a design comparison, spawn no runner and no cross-judge. Produce the one artifact yourself, and state in the reply `same-model, comparison skipped` with the model. The skip covers the comparison only. Keep spawning for the other reasons to delegate: an explorer for bulk reading or an implementer briefed with the design keeps that work out of your context on any model, and every review or verdict the task requires still runs under its own role and rules. Without the field, run every arm. No other role prints it, so `interrogate reviewers` and every other panel keep their arms on one model.
-
-   A review always runs. When a skill loads `arena` to review, judge, or get a second opinion on finished work, as `blast-radius` step 6 does, and the arm prints `skip`, ignore the field: run every runner arm, let arena's Phase C choose or skip the judge, and label the result `same-model` in the verdict and the reply. Count agreement between those arms as one opinion. Without the field, a review follows arena as written.
+   - If the resolver exits nonzero or cannot run, spawn as the harness skill's step 2 says. For `trail reviewer`, disclose the execution identity per step 5.
 
    Run a design comparison despite `skip` only when the user asked for the comparison itself in this task: they invoked `arena` by name, asked for candidates, a panel, or a count, or named models. A playbook step, a trigger, or a skill that loads `arena` or `architect` for a design comparison is not that request. Say in the reply that the panel ran at the user's request, and name the model each arm ran on.
 3. **Build the spawn call** as the harness skill's step 3 says.
 4. **Brief the persona** per the [persona contract](named-roles.md).
 5. **Report execution without dropping an arm.** Apply this step to every spawn, including a `trail reviewer` that normally resolves to `inherit-parent` without a fallback or `step` marker.
    - If the spawn rejects a model, or a spawned arm fails on model availability such as exhausted usage credits, omit the model, let the arm inherit the session model, and report the substitution.
-   - When either identity is unknown, say the review may be same-model. For explicitly requested models, call the Skill tool with `arena`, then follow its [required-arm rule](../../arena/SKILL.md#required-arms).
+   - When either identity is unknown, say the review may be same-model.
    - If no field or agent can carry the effort, the effort alone becomes `inherit-parent`. Keep the model and the arm. Say in the reply which role's effort was inherited and why, such as "`how explainer` ran at the session effort because the spawn tool takes no effort and `pstack-effort-xhigh` is not loaded. Run `/setup-pstack` to register it."
-   - When a persona ran as a briefing in an effort agent's prompt instead of under its native name, say that too.
-   - Delegates return resolver notes and actual or inherited model and effort observations to the parent, including substitutions, limitations, and unknown values. The parent relays them in its reply.
 
 ## Fork restrictions
 

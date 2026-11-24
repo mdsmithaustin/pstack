@@ -13,7 +13,7 @@ Every candidate gets the same prompt, so the prompt is the contract.
 
 1. State the artifact each candidate is producing.
 2. Derive the rubric, 3-6 concrete gradeable criteria for what success looks like on *this* task. For subjective criteria, use [Eval's criterion and calibration guidance](../poteto-mode/playbooks/eval.md). It is the picker's tool in Phase D. Candidates only see the task.
-3. Pick the runners. Use the `arena runners` role, one arm per entry. Its default is one each on `fable`, `opus`, `sonnet`. A rejected entry also follows the required-arm rule below. Spawn more runners when the arena covers multiple design directions. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section. On `"comparison": "skip"`, follow its same-model rule: a design comparison skips Phases B through E, and a review still runs them.
+3. Pick the runners. Use the `arena runners` role, one arm per entry. Its default is one each on `fable`, `opus`, `sonnet`. Spawn more runners when the arena covers multiple design directions. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section. On `"comparison": "skip"`, follow its same-model rule: a design comparison skips Phases B through E, and a review still runs them.
 4. Give each candidate its own output location (a git worktree where possible, otherwise `candidate-<n>/` inside a fresh `mktemp -d "${TMPDIR:-/tmp}/arena-<slug>.XXXXXX"` made for this run). Call the Skill tool with `principle-separate-before-serializing-shared-state`. Never reuse an earlier run's directory.
    - A native isolation option counts only when it makes a git worktree, where `git -C <its path> rev-parse --path-format=absolute --git-common-dir` prints the project's. Grok Build's `isolation: worktree` can make a standalone clone, so spawn there with `isolation: none`. If you omit the field, a Grok role or persona default can still turn isolation on.
    - Make every other candidate worktree yourself, one at a time, with `git worktree add --detach <run dir>/candidate-<n>`, where `<run dir>` is that fresh `mktemp -d`, and name the path in the candidate's brief. If an add fails, remove the worktrees already made and give every candidate a plain directory there instead, so all candidates start alike.
@@ -25,9 +25,7 @@ Every candidate gets the same prompt, so the prompt is the contract.
 
 Spawn all N subagents in one message, in the background, each with the task, the path to the shared grounding, its own output path, and instructions to produce the artifact and a short rationale naming the alternatives it considered and what it rejected. Send a running runner or judge only a correction to the source or scope or a stop order, never your tests, reading, or pick. If the question changes, reframe and re-run.
 
-### Required arms
-
-An arm or exact model requested for this task remains an obligation. If it cannot return a result, retain useful outputs but report the requested comparison as incomplete. Disclose substitutions and the models that actually ran. A replacement does not fulfill an exact model request. Configured defaults and role aliases resolve through the harness as usual. A default or discretionary candidate may drop out with a recorded limitation.
+If a candidate produces no output, proceed with N-1 and note the dropout.
 
 ## Phase C: Cross-judge
 
@@ -40,11 +38,11 @@ After all Phase B candidates complete, choose one arm of the `arena cross-judge 
 
 ## Phase D: Pick a base
 
-Read every candidate's rationale end to end before picking. Read a candidate's full artifact only when it is the base, or where you and the cross-judge disagree on a criterion. The cross-judge reads every artifact in full. When Phase C skipped the judge, read every candidate's full artifact.
+Read every candidate end to end before picking.
 
-Score each candidate against the rubric criterion by criterion, not on holistic feel, from its rationale and the cross-judge's evidence for that criterion. Where those cannot settle a criterion, read that part of the artifact.
-- Compare against the cross-judge when Phase C ran one. Wait for its verdict before you pick. If it recommends a base other than the one it scored highest, treat the verdict as unresolved: send it back once to explain the gap, and read that explanation before you pick. Your own explanation does not replace the judge's. Agreement on the base confirms the pick.
-- Name the models you, the runners, and the cross-judge ran on before you call any agreement or convergence confirmation, because arms on one model are one opinion. Disagreement means one of you is biased or the rubric was ambiguous. Read both rationales before deciding. If you still pick a different base, record the criterion that decided it.
+Score each candidate against the rubric criterion by criterion, not on holistic feel.
+- Compare against the cross-judge when Phase C ran one. Agreement on the base confirms the pick.
+- Disagreement means one of you is biased or the rubric was ambiguous. Read both rationales before deciding. If you still pick a different base, record the criterion that decided it.
 
 Pick the base a future maintainer can extend most easily without breaking invariants. When two feel tied, prefer the cleaner boundary or smaller API, per the Laziness Protocol. A larger diff for behavior-preserving restructuring of the extended unit is not a penalty. Judge the resulting structure and its demonstrated maintenance cost.
 
@@ -52,9 +50,9 @@ Start no graft, and spawn no implementation of the result, before you pick the b
 
 ## Phase E: Graft
 
-Walk each losing candidate's rationale and the cross-judge's scores once more for what is worth porting into the base, usually one or two things per candidate, not most of it. Read only the parts of a losing artifact you will graft. Fold each graft in by hand, so the result stays coherent under one mental model. Call the Skill tool with `principle-redesign-from-first-principles`. Don't paste mechanically.
+Walk each losing candidate once more for what is worth porting into the base, usually one or two things per candidate, not most of it. Fold each graft in by hand, so the result stays coherent under one mental model. Call the Skill tool with `principle-redesign-from-first-principles`. Don't paste mechanically.
 
-If the candidates converge on one shape, note the convergence subject to Phase D's actual-model disclosure and one-model limitation. Ship the consensus shape. No graft is needed. If they wildly diverge, Phase A was under-specified. Reframe and re-run rather than averaging the divergence.
+If the candidates converge on one shape, note the convergence and ship the consensus shape. No graft is needed. If they wildly diverge, Phase A was under-specified. Reframe and re-run rather than averaging the divergence.
 
 ## Phase F: Verify
 
