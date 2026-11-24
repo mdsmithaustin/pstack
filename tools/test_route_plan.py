@@ -720,9 +720,8 @@ class RepositoryEndpoint(unittest.TestCase):
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
-        self.bin, self.gh_config = self.root / "bin", self.root / "gh-config"
+        self.bin = self.root / "bin"
         self.bin.mkdir()
-        self.gh_config.mkdir()
         (self.bin / "git").symlink_to(shutil.which("git"))
 
     def tool(self, name, script="exit 0"):
@@ -738,7 +737,7 @@ class RepositoryEndpoint(unittest.TestCase):
         return path
 
     def run_plan(self, project, *args, **env):
-        env = {"PATH": str(self.bin), "HOME": str(self.root), "GH_CONFIG_DIR": str(self.gh_config), **env}
+        env = {"PATH": str(self.bin), "HOME": str(self.root), **env}
         done = subprocess.run([sys.executable, str(SCRIPT), "feature", *LOW, "--project", str(project), *args],
                               capture_output=True, text=True, env=env)
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -748,12 +747,17 @@ class RepositoryEndpoint(unittest.TestCase):
         result = json.loads(self.run_plan(project, "--json", **env).stdout)
         return result["default_endpoint"], result["scrutiny"]
 
+    def assert_no_pr_scrutiny(self, scrutiny):
+        self.assertTrue(scrutiny.startswith("No pull request will open"), scrutiny)
+        self.assertIn("Brief one `trail reviewer`", scrutiny)
+        self.assertNotIn("human PR review", scrutiny)
+
     def test_no_repository_and_no_remote_take_local_commits(self):
         self.tool("gh")
         self.assertIn("git init", self.endpoint(Path(tempfile.mkdtemp(dir=self.root)))[0])
         endpoint, scrutiny = self.endpoint(self.repo())
         self.assertIn("local branch", endpoint)
-        self.assertNotIn("human PR review", scrutiny)
+        self.assert_no_pr_scrutiny(scrutiny)
 
     def test_a_local_path_remote_takes_no_pull_request(self):
         self.tool("origin")
@@ -763,7 +767,7 @@ class RepositoryEndpoint(unittest.TestCase):
             with self.subTest(url=url):
                 endpoint, scrutiny = self.endpoint(self.repo(url))
                 self.assertEqual(endpoint, self.PUSHED)
-                self.assertNotIn("human PR review", scrutiny)
+                self.assert_no_pr_scrutiny(scrutiny)
 
     def test_windows_drive_paths_have_no_remote_host(self):
         remote_host = runpy.run_path(str(SCRIPT))["remote_host"]
@@ -781,56 +785,31 @@ class RepositoryEndpoint(unittest.TestCase):
                 self.assertIn("human PR review", scrutiny)
         self.assertEqual(self.endpoint(self.repo("https://[broken/o/r.git"))[0], self.PUSHED)
 
-    @unittest.skipUnless(shutil.which("gh"), "requires GitHub CLI")
-    def test_gh_serves_enterprise_hosts(self):
-        (self.bin / "gh").symlink_to(shutil.which("gh"))
-        forge = self.repo("https://forge.example.invalid/o/r.git")
-        nested = self.repo("https://nested.example.invalid/o/r.git")
-        endpoint, scrutiny = self.endpoint(forge)
-        self.assertEqual(endpoint, self.PUSHED)
-        self.assertNotIn("human PR review", scrutiny)
-        self.assertEqual(self.endpoint(forge, GH_HOST="forge.example.invalid")[0], self.PUSHED)
-        self.assertEqual(self.endpoint(forge, GH_HOST="forge.example.invalid", GH_ENTERPRISE_TOKEN="fixture")[0], "reviewable PR")
-        (self.gh_config / "hosts.yml").write_text("forge.example.invalid:\n    user: someone\n", encoding="utf-8")
-        self.assertEqual(self.endpoint(forge)[0], self.PUSHED)
-        configs = ["forge.example.invalid:\n    oauth_token: fixture\n"]
-        configs.extend(
-            f"# hosts\n{indent}forge.example.invalid: # internal forge\n"
-            f"{indent}    oauth_token: fixture\n{indent}    users:\n"
-            f"{indent}        nested.example.invalid: {{}}\n" for indent in ("", "  ")
-        )
-        configs.append('{"forge.example.invalid": {oauth_token: fixture, users: {nested.example.invalid: {}}}}')
-        for config in configs:
-            with self.subTest(config=config):
-                (self.gh_config / "hosts.yml").write_text(config, encoding="utf-8")
-                endpoint, scrutiny = self.endpoint(forge)
+    def test_other_hosts_take_a_pushed_branch_even_with_gh(self):
+        self.tool("gh")
+        for url in ("https://github.example.com/o/r.git", "forge.example.invalid:o/r.git",
+                    "ssh://git@forge.example.invalid/o/r.git"):
+            with self.subTest(url=url):
+                endpoint, scrutiny = self.endpoint(self.repo(url))
+                self.assertEqual(endpoint, self.PUSHED)
+                self.assert_no_pr_scrutiny(scrutiny)
+
+    def test_the_planner_never_runs_gh(self):
+        self.tool("gh", ': > "$HOME/gh-called"')
+        for urls in (("https://github.com/o/r.git",), ("https://forge.example.invalid/o/r.git",),
+                     ("https://forge.example.invalid/o/a.git", "https://github.com/o/b.git")):
+            with self.subTest(urls=urls):
+                (self.root / "gh-called").unlink(missing_ok=True)
+                self.endpoint(self.repo(*urls))
+                self.assertFalse((self.root / "gh-called").exists())
+
+    def test_origin_counts_any_network_remote(self):
+        self.tool("origin")
+        for url in ("https://github.com/o/r.git", "https://forge.example.invalid/o/r.git"):
+            with self.subTest(url=url):
+                endpoint, scrutiny = self.endpoint(self.repo(url))
                 self.assertEqual(endpoint, "reviewable PR")
                 self.assertIn("human PR review", scrutiny)
-                self.assertEqual(self.endpoint(nested)[0], self.PUSHED)
-
-    def test_gh_token_output_is_discarded(self):
-        self.tool("gh", 'echo sentinel-token\n'
-                        'for fd in 0 1 2; do [ "/dev/fd/$fd" -ef /dev/null ] || exit 1; done')
-        repo = self.repo("https://forge.example.invalid/o/r.git")
-        for args in ((), ("--json",)):
-            with self.subTest(args=args):
-                done = self.run_plan(repo, *args)
-                self.assertNotIn("sentinel-token", done.stdout)
-                self.assertNotIn("sentinel-token", done.stderr)
-                if args:
-                    self.assertEqual(json.loads(done.stdout)["default_endpoint"], "reviewable PR")
-                else:
-                    self.assertIn("reviewable PR", done.stdout)
-
-    def test_gh_probes_each_enterprise_host_at_most_once(self):
-        self.tool("gh", 'echo called >> "$HOME/gh-calls"\nexit 1')
-        calls = self.root / "gh-calls"
-        github = self.repo("https://github.com/o/a.git", "https://ssh.github.com/o/b.git")
-        self.assertEqual(self.endpoint(github)[0], "reviewable PR")
-        self.assertFalse(calls.exists())
-        enterprise = self.repo("https://forge.example.invalid/o/a.git", "forge.example.invalid:o/b.git")
-        self.assertEqual(self.endpoint(enterprise)[0], self.PUSHED)
-        self.assertEqual(calls.read_text().splitlines(), ["called"])
 
     def test_one_remote_that_takes_a_pull_request_is_enough(self):
         self.tool("gh")
