@@ -261,15 +261,15 @@ def default_endpoint(project):
     if not urls:
         return "commits on a local branch, with the branch and its diff command in the reply", "no remote", False
     hosts = {remote_host(url) for url in urls} - {None}
-    if hosts and shutil.which("origin"):
+    if not hosts:
+        return "a pushed branch, named in the reply", "no remote names a network host, so none takes a PR", False
+    if shutil.which("origin"):
         return "reviewable PR", "a network remote and Origin found", True
-    has_github = any(host == "github.com" for host in hosts)
-    if hosts and shutil.which("gh") and (has_github or any(gh_has_token(host) for host in hosts)):
-        return "reviewable PR", "a remote on a host gh serves", True
-    if has_github:
-        return "reviewable PR through a built-in PR tool, else a pushed branch named in the reply", "GitHub remote, no forge CLI on PATH", True
-    why = "no PR tool on PATH serves the remote's host" if hosts else "no remote names a network host, so none takes a PR"
-    return "a pushed branch, named in the reply", why, False
+    if "github.com" not in hosts:
+        return "a pushed branch, named in the reply", "no remote is on github.com, and Origin is not on PATH", False
+    if shutil.which("gh"):
+        return "reviewable PR", "GitHub remote and gh found", True
+    return "reviewable PR through a built-in PR tool, else a pushed branch named in the reply", "GitHub remote, no forge CLI on PATH", True
 
 
 def remote_host(url):
@@ -301,18 +301,6 @@ def ssh_hostname(alias):
         return alias
     found = re.search(r"^hostname (\S+)$", done.stdout, re.M)
     return found.group(1).lower() if found else alias
-
-
-def gh_has_token(host):
-    try:
-        result = subprocess.run(
-            ["gh", "auth", "token", "--hostname", host, "--no-refresh"],
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5,
-            env={**os.environ, "GH_NO_UPDATE_NOTIFIER": "1", "GH_TELEMETRY": "0"},
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return result.returncode == 0
 
 
 def display_path(path):

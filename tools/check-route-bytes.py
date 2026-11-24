@@ -43,7 +43,7 @@ ALWAYS = [
 LOW = "low:fixed evidence text"
 # The plan's endpoint line depends on the checkout's remotes and the tools on PATH. A fixed
 # value keeps the measurement the same on every machine.
-FIXED_ENDPOINT = ("reviewable PR", "remote and a forge CLI found", True)
+FIXED_ENDPOINT = ("reviewable PR", "GitHub remote and gh found", True)
 FACTS = {
     "lightweight": {},
     "standard": {"reach": "material:fixed evidence text"},
