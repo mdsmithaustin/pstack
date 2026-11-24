@@ -1,0 +1,16 @@
+{
+  "fixture": "tally",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "add tests for the text output\n\nPins the current output so the next change can show it leaves text mode alone.",
+      "delete": []
+    },
+    {
+      "dir": "step-2",
+      "branch": "json-output",
+      "message": "add --json output\n\nScripts that read the counts want a machine-readable form. --json prints the top words as a JSON list of {word, count} objects. Text output is unchanged.",
+      "delete": []
+    }
+  ]
+}

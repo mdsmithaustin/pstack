@@ -1,0 +1,15 @@
+RETRY_LIMIT = 5
+
+
+class Transient(Exception):
+    pass
+
+
+def retry(fn, *, limit=RETRY_LIMIT):
+    last = None
+    for _ in range(limit):
+        try:
+            return fn()
+        except Transient as exc:
+            last = exc
+    raise last

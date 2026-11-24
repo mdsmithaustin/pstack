@@ -1,0 +1,17 @@
+{
+ "screen": "X2",
+ "promises": [
+  "x2-unchecked-plan-said-in-handback"
+ ],
+ "fixture": "tally",
+ "history": "x2-tally-roadmap",
+ "entry": "poteto-mode",
+ "turns": [
+  "plan the three ROADMAP items as a stack of PRs. don't implement anything yet."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "note": "Settles O39 (multi-phase-plan step 6: if node is not on PATH, say in the hand-back that check-plan.mjs did not run and the plan is unchecked). The history adds tests and a three-item ROADMAP.md to tally. Run it on Codex only, launched with every PATH directory that holds node, bun, or deno removed, since the Codex agent inherits live.py's PATH. From the worktree root: PATH=\"$(python3 -c 'import os; print(\":\".join(d for d in os.environ[\"PATH\"].split(\":\") if not any(os.path.exists(os.path.join(d, t)) for t in (\"node\", \"bun\", \"deno\"))))')\" python3 evals/promises/live.py run --harness codex --case x2-plan-check-no-node --out <dir>. The Codex binary then resolves to the ChatGPT app's copy. The grader is INCONCLUSIVE when any JS runtime ran, so a launch that kept node shows up there."
+}
