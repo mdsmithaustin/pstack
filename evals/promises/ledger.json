@@ -4085,7 +4085,7 @@
   },
   "skipped-pr-keeps-commits": {
    "check": "static",
-   "claim": "In every playbook that changes code, a skipped push or PR never skips the commits of the step that runs Opening a PR, and the plan prints that on the step.",
+   "claim": "When a step calls Opening a PR, the plan reminds the lead to keep that step's commits if the push or PR is skipped.",
    "evidence": [
     {
      "file": "skills/poteto-mode/references/routes.md",
@@ -5207,15 +5207,6 @@
     "port"
    ],
    "text": "Each PR gets one owner agent that carries it from build through merge, and no owner merges on its own verdict."
-  },
-  "113a460f0430": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "skipped-pr-keeps-commits",
-   "sources": [
-    "port"
-   ],
-   "text": "Every playbook that changes code keeps its commits when the push or the PR is skipped, and the printed plan says so on the step that opens the PR."
   },
   "1157d5dd9345": {
    "class": "context",
@@ -7604,6 +7595,15 @@
     "port"
    ],
    "text": "The [Opening a PR playbook](../../skills/poteto-mode/playbooks/opening-a-pr.md) requires deslop's [Before each commit check](../../skills/deslop/SKILL.md#before-each-commit) before each push, and before every commit or amend on the intensive route."
+  },
+  "4b55110b98b6": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "skipped-pr-keeps-commits",
+   "sources": [
+    "port"
+   ],
+   "text": "On steps that call Opening a PR, the plan prints the [commit rule for a skipped push or PR](../../skills/poteto-mode/references/routes.md#endpoint)."
   },
   "4b9ab4831e43": {
    "class": "promise",
