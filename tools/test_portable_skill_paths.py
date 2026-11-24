@@ -235,7 +235,6 @@ class PortableSkillPaths(unittest.TestCase):
 
     def test_documented_validator_command_runs_in_source_linked_and_copied_layouts(self) -> None:
         commands = [
-            inline_command(PORTABLE_PATHS, "check-plan.mjs"),
             inline_command(PLAN_PLAYBOOK, "check-plan.mjs"),
         ]
         plan = self.consumer / "valid plan.md"
@@ -347,7 +346,7 @@ class PortableSkillPaths(unittest.TestCase):
         self.assertNotIn("installed-fallback", failed.stdout)
 
     def test_documented_validator_command_rejects_a_live_lane_without_a_model(self) -> None:
-        command = inline_command(PORTABLE_PATHS, "check-plan.mjs")
+        command = inline_command(PLAN_PLAYBOOK, "check-plan.mjs")
         for model in ("<swarm workers model>", "", "   ", "\t"):
             with self.subTest(model=model):
                 plan = self.consumer / "unfilled plan.md"
@@ -414,7 +413,7 @@ class PortableSkillPaths(unittest.TestCase):
                     read_procedures(self.source / "skills")
 
     def test_documented_validator_command_rejects_a_structurally_invalid_plan(self) -> None:
-        command = inline_command(PORTABLE_PATHS, "check-plan.mjs")
+        command = inline_command(PLAN_PLAYBOOK, "check-plan.mjs")
         plan = self.consumer / "invalid plan.md"
         plan.write_text(valid_plan().replace("### Spawn owners", "### Missing owners"), encoding="utf-8")
         result = self._run_contract(

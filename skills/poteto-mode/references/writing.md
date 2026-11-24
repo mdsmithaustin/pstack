@@ -1,7 +1,5 @@
 # Write a reply or artifact
 
-Read this reference before writing a reply, documentation, or a PR description.
-
 Write the reply clean as you draft it. A cleanup pass after drafting does not remove these patterns.
 
 - **Short declarative sentences.** One thought per sentence, ended with a period.

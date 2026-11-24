@@ -92,7 +92,7 @@ class RouteBytes(unittest.TestCase):
         self.assertEqual(review["bytes"], review["markdown"] + review["plan_output"])
         self.assertIn("skills/interrogate/references/code-quality-review.md", review["files"])
         self.assertIn("skills/poteto-mode/references/review-lens.md", review["files"])
-        self.assertIn("skills/poteto-mode/playbooks/opening-a-pr.md", report["shipping"]["files"])
+        self.assertIn("skills/documentation-impact/SKILL.md", report["shipping"]["files"])
         for value in report.values():
             self.assertTrue(all(name.endswith(".md") for name in value["files"]), value["files"])
 

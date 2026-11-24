@@ -75,3 +75,12 @@ evidence is omitted.
 Each GitHub subprocess has a 15-second deadline. Collection has a 90-second
 deadline. JSON replies are at most 1 MiB and subprocess stderr is at most
 8 KiB. Missing Python and query failures become evidence gaps.
+
+## Review-body findings
+
+`watch-pr` and `merge-gate` apply these rules through `review-bodies.ts`.
+
+- The watcher reads bold counted summaries from any bot, `<summary><strong>Name (N)</strong></summary>` or `<summary><strong>N name</strong></summary>`, with N above 0 and a name whose first word is not "resolved", in any case.
+- It masks only code that GitHub's renderer must show as code: a fenced block whose fence starts its line, and a code span that closes on its own line. A line that starts with three backticks or tildes, after any indentation, list marker, or footnote label, ends all masking for the rest of the body unless it opens a masked fence. An HTML comment, `<pre>`, or similar HTML block that its first line leaves open does the same, except inside a blockquote, where it ends masking only until the next blank line.
+- Any unescaped `<`, `](`, or `][` outside a masked code span, an unpaired backtick, a run of more than 80 backticks, or a code span written directly after a word with a colon or `www.` ends masking for the rest of that line and until the next blank line. It never masks a code span on a line that contains `|`. A code example can therefore still yield a finding. Masking is meant never to hide a counted summary that GitHub shows, and the oracle tests check that against cmark-gfm, the renderer GitHub uses.
+- A section whose name's first word is "open", in any case, is an Open section, such as `Open (3)` or `3 open issues`. Its items that link a review thread with `#discussion_r<id>` belong to the thread gate. Treat a thread link inside a code span or inline HTML, or one after masking has ended for the rest of the body, as no thread link, so its item stays a body finding. Its other items and every item in other counted sections are body findings. Missing items produce "(unparsed)" findings, with count-based padding capped at 20. A review blocks only when these rules yield at least one body finding. A counted summary is not one: an `Open (1)` section whose only item links a thread yields none. Wording, headings, and markers outside these rules block nothing.

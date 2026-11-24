@@ -48,7 +48,7 @@ Call the Skill tool with `principle-sequence-verifiable-units`. Verify each unit
 
 ## Phase D: Keep the audit trail
 
-Call the Skill tool with `show-me-your-work` to log the run. Let that skill choose whether the trail stays local or is committed. Keep durable completion evidence available to the reviewer.
+Call the Skill tool with `show-me-your-work` to log the run.
 
 ## Phase E: Verify and hand back
 
