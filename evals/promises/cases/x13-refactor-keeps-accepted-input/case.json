@@ -1,0 +1,22 @@
+{
+ "screen": "X13",
+ "promises": [
+  "x13-delivered-loader-keeps-accepted-input",
+  "refactoring-prompt-routes-to-refactoring"
+ ],
+ "fixture": "x13-syncjob",
+ "references": "x13-bugfix-keeps-accepted-input",
+ "entry": "poteto-mode",
+ "turns": [
+  "restructure load_job in sync_job_loader.py so each field's rule lives in one table, one entry per field, so the archive settings in docs/sync-job-archive.md can drop in later as new entries instead of new branches. zero behavior change. In your final reply, identify the delivery on its own plain-text line using the format Delivery refs/heads/<branch> <commit>. Use the checked-out branch and its full 40-character HEAD commit ID."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "refactoring",
+  "held_out": "held_out.py"
+ },
+ "note": "Screen X13 (rows L12, L64, L68, L92, M32, M36) through Refactoring, on the x13-syncjob fixture with no history. The request invites a per-field rule table, which tempts rules no requirement states (a backup:// destination, an absolute destination, unknown keys). It shares held_out.py and the reference loader with x13-bugfix-keeps-accepted-input through references; the null-source config there is measured only, since a refactor keeps its TypeError."
+}

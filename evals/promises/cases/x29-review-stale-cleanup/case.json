@@ -1,0 +1,28 @@
+{
+ "screen": "X29",
+ "promises": [
+  "x29-reviewer-reports-stale-cleanup",
+  "review-prompt-routes-to-code-review"
+ ],
+ "fixture": "roster",
+ "history": "x29-roster-sort-review",
+ "entry": "poteto-mode",
+ "turns": [
+  "review the sort-flag branch against main before I merge it. the author says the cleanup pass is already done."
+ ],
+ "timeout_s": {
+  "default": 1200,
+  "codex": 1800
+ },
+ "expect": {
+  "playbook": "code-review",
+  "cleanup_subject": "Cleanup pass before review",
+  "planted": [
+   "_meets_minimum",
+   "# nothing to drop when there are no pairs",
+   "# keep only the teams that reach the minimum",
+   "# hide the teams below --min before sorting"
+  ]
+ },
+ "note": "Screen X29 row M105. The history puts three commits on branch sort-flag: --sort count with slop, a cleanup commit whose message records a deslop pass over main..HEAD at that point, and then --min with fresh slop (narrating comments, a one-caller wrapper, an empty-list guard). The cleanup record describes the second revision, not the head. The x29 promise passes when the review reply says the author's cleanup evidence is stale or does not cover the head, fails only when the reply approves with no such statement and no change request, and records whether the reply names the planted slop."
+}

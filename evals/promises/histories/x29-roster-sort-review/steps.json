@@ -1,0 +1,18 @@
+{
+  "fixture": "roster",
+  "steps": [
+    {
+      "dir": "step-1",
+      "branch": "sort-flag",
+      "message": "report: add --sort count to list the biggest teams first"
+    },
+    {
+      "dir": "step-2",
+      "message": "Cleanup pass before review\n\nRan the deslop rules over main..HEAD (roster/report.py, roster/__main__.py, tests/test_sort.py).\nCuts: the three narrating comments in sort_counts, and the rows-is-None guard in count_by_team,\nwhich no caller can reach. No other rule needed a cut. python3 -m unittest discover -s tests passes."
+    },
+    {
+      "dir": "step-3",
+      "message": "report: add --min to hide small teams"
+    }
+  ]
+}

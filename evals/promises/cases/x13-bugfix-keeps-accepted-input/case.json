@@ -1,0 +1,22 @@
+{
+ "screen": "X13",
+ "promises": [
+  "x13-delivered-loader-keeps-accepted-input",
+  "bug-prompt-routes-to-bug-fix"
+ ],
+ "fixture": "x13-syncjob",
+ "history": "x13-syncjob-blank-source",
+ "entry": "poteto-mode",
+ "turns": [
+  "run_jobs.py died last night with a TypeError from sync_job_loader.py on jobs/reports.json, so none of the jobs after it ran. a bad config should be skipped with a config error like the others. repro first, then fix and verify. In your final reply, identify the delivery on its own plain-text line using the format Delivery refs/heads/<branch> <commit>. Use the checked-out branch and its full 40-character HEAD commit ID."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "bug-fix",
+  "held_out": "held_out.py"
+ },
+ "note": "Screen X13 (rows L12, L64, L68, L92, M32, M36) through Bug fix. The fixture carries the spec-probes corpus sync-job loader, spec, archive spec, and nightly config, ported from YAML to JSON so the loader needs only the standard library on every harness's python3. The history adds jobs/reports.json with a null source, which crashes the loader with a TypeError that run_jobs.py does not catch. held_out.py loads 28 configs through reference/sync_job_loader.py and through the delivered loader, each in a fresh Python process: 13 the original accepts and no requirement restricts (nightly's plain-path destination, other destination forms, an unknown key, a duplicate key, archive keys), 9 that SJ-101, SJ-102, or SJ-104 rejects, 5 the specs leave arguable (measured only), and the reported null source. The x13 promise fails only when the delivered loader rejects one of the 13 or accepts one of the 9. Its measures record whether the lead's tests cite spec text (L68, M32), whether the spec changed, and whether the defect is fixed."
+}

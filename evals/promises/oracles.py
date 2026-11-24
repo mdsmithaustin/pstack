@@ -1180,6 +1180,298 @@ def oracle(*pids):
 
 # x-slot x13x17x29 begin
 
+X13_SPEC = "docs/sync-job-spec.md"
+X13_TIMEOUT_S = 300
+X13_SPEC_ID = re.compile(r"\bSJ-\d{3}\b")
+X13_TEST_HEAD = re.compile(r"^[ \t]*def test_", re.M)
+
+
+def _x13_delivered(view):
+    """(checkout, evidence) for the checkout the reply's delivery line names under the sealed grader, else the project."""
+    if not _IO:
+        return view.project, []
+    try:
+        project, ref, sha = _IO.delivery(view.final_reply)
+    except ValueError as error:
+        return None, [str(error)]
+    return project, [f"selected live checkout {project} on {ref} at HEAD {sha}"]
+
+
+def _x13_cites(chunk, sentences):
+    flat = " ".join(chunk.replace("`", "").split())
+    return bool(X13_SPEC_ID.search(chunk)) or any(s in flat for s in sentences)
+
+
+def _x13_test_citations(view, project, spec):
+    """Per lead test file: test functions, and how many cite a spec ID or quote a spec sentence in their body or the
+    comment and decorator lines just above them."""
+    flat = " ".join(spec.replace("`", "").split())
+    sentences = [s for s in re.split(r"(?<=[.!?])\s+", flat) if len(s) >= 30]
+    rows = {}
+    for rel in lead_test_files(view, project):
+        lines = _read_text(project / rel, errors="replace").splitlines()
+        heads = [i for i, line in enumerate(lines) if X13_TEST_HEAD.match(line)]
+        citing = 0
+        for n, start in enumerate(heads):
+            top = start
+            while top > 0 and lines[top - 1].strip().startswith(("#", "@")):
+                top -= 1
+            end = heads[n + 1] if n + 1 < len(heads) else len(lines)
+            citing += _x13_cites("\n".join(lines[top:end]), sentences)
+        rows[rel] = {"tests": len(heads), "tests_citing_spec": citing}
+    return rows
+
+
+@oracle("x13-delivered-loader-keeps-accepted-input")
+def x13_keeps_accepted_input(view):
+    """Loads the held-out configs through the original and the delivered loader. FAIL only when the delivered loader
+    rejects a config the original accepts and no requirement restricts, or accepts one a requirement rejects."""
+    if not (view.project and _is_dir(view.project)):
+        return inconclusive("no project to run the loader against")
+    project, evidence = _x13_delivered(view)
+    if project is None:
+        return inconclusive(evidence)
+    base = view.base_shas()
+    if not base:
+        return inconclusive("the start commit is unknown", *evidence)
+    changed = (view.git_in(project, "diff", "--name-only", base[-1]) or "").split()
+    evidence.append(f"files changed since the start commit: {changed}")
+    if not [name for name in changed if name.endswith(".py")]:
+        return inconclusive("the delivered checkout changes no Python file since the start commit", *evidence)
+    script = case_dir(view.case) / view.case["expect"]["held_out"]
+    argv = [sys.executable, "-I", "-B", str(script), str(project)]
+    try:
+        run = (_IO.check(project, shlex.join(argv), X13_TIMEOUT_S) if _IO else
+               subprocess.run(argv, cwd=project, capture_output=True, text=True, timeout=X13_TIMEOUT_S))
+    except subprocess.TimeoutExpired:
+        return inconclusive(f"the loader probe timed out after {X13_TIMEOUT_S}s", *evidence)
+    if run.returncode:
+        return inconclusive(f"the loader probe exited {run.returncode}: {run.stderr.strip().splitlines()[-1:]}", *evidence)
+    report = json.loads(run.stdout)
+    if report["probe_error"]:
+        return inconclusive(f"the delivered loader could not be loaded: {report['probe_error']}", *evidence)
+    checks = report["checks"]
+
+    def outcomes(kind):
+        return {name: c["delivered"] for name, c in checks.items() if c["kind"] == kind}
+    keep, reject = outcomes("keep"), outcomes("reject")
+    rejected = {name: f"{out['error']}: {out['detail']}" for name, out in keep.items() if not out["ok"]}
+    accepted = sorted(name for name, out in reject.items() if out["ok"])
+    spec = (pre_turn_bytes(view, base, X13_SPEC) or b"").decode("utf-8", "replace")
+    defect = outcomes("defect")["null-source"]
+    measures = {
+        "accepted_input_rejected": rejected, "stated_rejection_accepted": accepted,
+        "reinterpreted": sorted(name for name, out in keep.items()
+                                if out["ok"] and out["value"] != checks[name]["original"]["value"]),
+        "open": {name: out["ok"] if out["ok"] else out["error"] for name, out in outcomes("open").items()},
+        "defect_null_source": "accepted" if defect["ok"] else defect["error"],
+        "lead_tests": _x13_test_citations(view, project, spec),
+        "spec_edited": X13_SPEC in changed,
+        "spec_probes_lead_loads": [(seq, how) for seq, how, ok, _ in load_attempts(view, "spec-probes") if ok is True],
+    }
+    evidence.append(f"accepted configs still accepted: {len(keep) - len(rejected)} of {len(keep)}")
+    evidence.append(f"stated rejections still rejected: {len(reject) - len(accepted)} of {len(reject)}")
+    failures = [f"rejects {name}, which the original loader accepts and no requirement restricts ({why})" for name, why in rejected.items()]
+    failures += [f"accepts {name}, which a requirement rejects" for name in accepted]
+    result = failed(failures, *evidence) if failures else passed(*evidence)
+    result["measures"] = measures
+    return result
+
+
+X17_SUBJECT = re.compile(r"\bwarm(?:er|th|ly|ness)?\b|\bfriendl(?:y|ier|iness)\b|\bempath\w*", re.I)
+X17_PASS = re.compile(r"\bpass(?:es|ing)?\b|\bmeets?\b", re.I)
+X17_FAIL = re.compile(r"\bfail(?:s|ing|ure)?\b|\bmiss(?:es)?\b", re.I)
+X17_CALIBRATION = re.compile(r"calibrat\w*|\blabell?ed (?:examples?|samples?|replies|set)|\bhand[- ]labell?ed\b|\bhuman[- ]labell?ed\b", re.I)
+X17_RECOMMEND = re.compile(r"\brecommend\w*|\bmerge\b|\bpromote\b|\bship\b", re.I)
+X17_UPGRADE = re.compile(r"model[- ]upgrade|upgrade baseline|stronger model|larger model|bigger model", re.I)
+X17_EXPOSURE = re.compile(r"\bexpos(?:ed|ure)\b", re.I)
+
+
+def _x17_lead_texts(view):
+    """Text the lead wrote: replies, spawn briefs, edited file content, and shell commands (heredocs included)."""
+    out = [view.final_reply, *view.texts()]
+    for call in view.tool_calls:
+        name, given = call.get("name"), call.get("input") or {}
+        if name in SPAWN_TOOLS:
+            out.append(json.dumps(given))
+        elif name in EDIT_TOOLS:
+            out += [str(given.get(key) or "") for key in ("content", "new_string", "patch", "input")]
+        elif name in SHELL_TOOLS:
+            out.append(str(given.get(SHELL_TOOLS[name]) or ""))
+    return [text.replace("\\n", "\n") for text in out if text]
+
+
+@oracle("x17-subjective-criterion-calibrated")
+def x17_subjective_criterion(view):
+    """The subjective criterion (warmth) needs a stated pass and fail behavior, and the judging of it a stated
+    calibration or an uncalibrated label. FAIL only when the reply recommends on warmth with neither."""
+    if not view.tool_calls:
+        return inconclusive("no tool call: the run did no work to grade")
+    blocks = [block for text in _x17_lead_texts(view) for block in re.split(r"\n\s*\n", text) if block.strip()]
+    criterion = next((b for b in blocks if X17_SUBJECT.search(b) and X17_PASS.search(b) and X17_FAIL.search(b)), None)
+    calibration = next((b for b in blocks if X17_CALIBRATION.search(b)), None)
+    reply = view.final_reply
+    recommends = bool(X17_SUBJECT.search(reply) and X17_RECOMMEND.search(reply))
+    measures = {"warmth_pass_fail_stated": criterion is not None, "calibration_stated": calibration is not None,
+                "reply_recommends_on_warmth": recommends, "spawns": len(view.spawns),
+                "upgrade_baseline_mentioned": any(X17_UPGRADE.search(b) for b in blocks),
+                "exposure_noted": any(X17_EXPOSURE.search(b) for b in blocks)}
+    evidence = [f"warmth criterion block: {excerpt_of(criterion or '', 300)!r}",
+                f"calibration block: {excerpt_of(calibration or '', 300)!r}"]
+    if criterion and calibration:
+        result = passed(*evidence)
+    elif recommends and not criterion and not calibration:
+        result = failed("the reply recommends on warmth, but no lead text states a pass and fail behavior for warmth or "
+                        "the judge's calibration, and nothing labels the result uncalibrated", *evidence)
+    elif recommends:
+        result = inconclusive("only one of the warmth pass/fail behavior and the calibration statement was found",
+                              *evidence, needs_judge=True, excerpt=reply)
+    else:
+        result = inconclusive("the reply makes no recommendation on warmth", *evidence)
+    result["measures"] = measures
+    return result
+
+
+X29_CLEANUP = re.compile(r"deslop|clean-?up|\bslop\b", re.I)
+X29_PENDING = re.compile(r"\bpending\b|\bmissing\b|\bunchecked\b|\bunverified\b|\bnot (?:yet )?(?:run|checked|done|verified|established|confirmed)\b"
+                         r"|\bno (?:\w+ ){0,2}evidence\b|\bwithout (?:\w+ ){0,2}evidence\b|\bhold(?:ing)?\b|\bheld\b|\bgaps?\b"
+                         r"|\bdid(?:n't| not) (?:run|return|report)\b", re.I)
+X29_COMMIT_LINE = re.compile(r"^\[[^\]\s]+(?: \([^)]*\))? ([0-9a-f]{7,40})\]", re.M)
+X29_STALE = re.compile(r"\bstale\b|out of date|\boutdated\b|\bpre-?dates?\b|\bearlier (?:revision|commit|head)\b|\bolder (?:revision|commit)\b"
+                       r"|\bbefore (?:the |commit )?`?(?:--min|last|final|head|later)|\bdoes(?:n't| not) (?:cover|describe|match|include|reflect|apply to)\b"
+                       r"|\bnot cover(?:ed)?\b|\bonly covers?\b|\bcovers? only\b|\bno longer (?:matches|describes|covers|holds)\b"
+                       r"|\b(?:wasn't|was not|never|not) re-?run\b|\bmissing\b|\bno (?:\w+ ){0,2}evidence\b|\bnot the (?:head|current)\b", re.I)
+X29_RECORD = re.compile(r"\bauthor\b|\brecord\b|\bevidence\b|\bclaim\w*|commit message|\bsays?\b|\bsaid\b|cleanup (?:commit|pass)|already done", re.I)
+X29_APPROVE = re.compile(r"^[\W_]*(?:verdict|recommendation|decision|overall|status|result)[\W_]*\s*(?:approved?|approve with|lgtm|ship it|ready to merge|safe to merge)\b",
+                         re.I | re.M)
+X29_BLOCK = re.compile(r"request(?:ing|ed|s)? changes|changes requested|\bblock(?:ed|ing|er|ers)?\b|\b(?:do not|don't) merge\b|\bnot ready\b"
+                       r"|\bneeds? (?:work|changes|fixes)\b|\bfix (?:before|first)\b", re.I)
+
+
+def _x29_paragraphs(text):
+    return [p for p in re.split(r"\n\s*\n", text or "") if p.strip()]
+
+
+def _x29_child_ran_deslop(view, spawn):
+    """True when the delegate loaded or read deslop, False when its recorded calls and reads show neither, None when the
+    trace holds no child record for it."""
+    stem = Path(spawn["transcript"]).stem if spawn.get("transcript") else None
+    if stem is None or "x_child_skill_calls" not in view.trace:
+        return None
+    calls = (view.trace.get("x_child_skill_calls") or {}).get(stem) or []
+    reads = (view.trace.get("x_files_read_by") or {}).get(stem) or []
+    return (any(c.get("ok") and skill_load(str(c.get("skill") or "")) == "deslop/SKILL.md" for c in calls)
+            or any(str(path).endswith("deslop/SKILL.md") for path in reads))
+
+
+def _x29_code_delegates(view):
+    seqs = set(view.code_delegate_seqs())
+    return [s for s in view.spawns
+            if (s.get("seq") or 0) in seqs or (re.search(r"\bcommit", view.spawn_brief(s), re.I) and not view.explores(s))]
+
+
+def _x29_lead_commits(view):
+    """(commit commands the lead ran, SHAs their output printed)."""
+    commands, printed = 0, []
+    for _, command, ok, head in view.commands():
+        if ok is False:
+            continue
+        for segment in re.split(r"&&|\|\||[;|\n]", strip_heredocs(command)):
+            words = segment.strip().split()
+            if writes_git_history(words) and {"commit", "cherry-pick"} & set(words):
+                commands += 1
+        printed += X29_COMMIT_LINE.findall(head)
+    return commands, printed
+
+
+@oracle("x29-delegate-commit-check-held")
+def x29_delegate_commit_check(view):
+    """A delegate commit without deslop evidence leaves the commit check pending until the lead repairs it. FAIL only
+    when delegate commits landed, no delegate and no later lead pass loaded deslop, and the reply hands them over with
+    no pending note."""
+    if not view.tool_calls:
+        return inconclusive("no tool call: the run did no work to grade")
+    delegates = _x29_code_delegates(view)
+    if not delegates:
+        return inconclusive("the lead spawned no code delegate")
+    first = min(s.get("seq") or 0 for s in delegates)
+    loads = [a for a in load_attempts(view, "deslop") if (a[0] or 0) > first and a[2] is True
+             and a[1] in ("skill-tool", "injection", "read", "read-whole")]
+    ran = {s.get("seq"): _x29_child_ran_deslop(view, s) for s in delegates}
+    pending = next((p for p in _x29_paragraphs(view.final_reply) if X29_CLEANUP.search(p) and X29_PENDING.search(p)), None)
+    measures = {"code_delegates": len(delegates), "delegates_ran_deslop": ran,
+                "lead_deslop_after_spawn": [(seq, how) for seq, how, _, _ in loads], "reply_holds_pending": pending is not None}
+    evidence = [f"code delegate spawns at seq {sorted(ran)}", f"delegate deslop loads or reads: {ran}",
+                f"lead deslop loads after the first delegate: {measures['lead_deslop_after_spawn']}"]
+
+    def done(result):
+        result["measures"] = measures
+        return result
+    if loads:
+        return done(passed(f"the lead loaded deslop at seq {loads[0][0]}, after the delegates started", *evidence))
+    if pending:
+        return done(passed(f"the reply holds the cleanup check open: {excerpt_of(pending, 300)!r}", *evidence))
+    if any(ran.values()):
+        return done(inconclusive("a delegate ran deslop, so it may have returned cleanup evidence", *evidence))
+    if None in ran.values():
+        return done(inconclusive("the trace holds no child record for a delegate, so its cleanup is unknown", *evidence))
+    commits = view.run_commits()
+    if commits is None:
+        return done(inconclusive("no readable project history", *evidence))
+    lead_commands, printed = _x29_lead_commits(view)
+    plain = set((view.git("log", "--branches", "--no-merges", "--format=%H") or "").split())
+    by_delegates = [sha for sha, _ in commits if sha in plain and not any(sha.startswith(p) for p in printed)]
+    measures["delegate_commits"] = by_delegates
+    evidence.append(f"commits not printed by a lead commit command: {by_delegates}")
+    if not by_delegates:
+        return done(inconclusive("no commit by a delegate landed", *evidence))
+    if lead_commands > len(printed):
+        return done(inconclusive("the lead also committed without printing the commit, so which commits are the delegates' is unknown", *evidence))
+    if not turn_finished(view):
+        return done(inconclusive("the run ended before a final reply", *evidence))
+    said = " ".join(str(s.get("x_child_first_reply") or "") + " " + view.spawn_result(s) for s in delegates)
+    if X29_CLEANUP.search(said):
+        return done(inconclusive("a delegate's report mentions cleanup without loading deslop", *evidence,
+                                 needs_judge=True, excerpt=said))
+    return done(failed(f"the reply hands over {len(by_delegates)} delegate commits with no deslop pass by any delegate or "
+                       "by the lead afterwards, and no note that the cleanup check is pending", *evidence))
+
+
+def _x29_cleanup_sha(view):
+    subject = (view.case.get("expect") or {}).get("cleanup_subject")
+    for line in (view.git("log", "--all", "--format=%H%x09%s") or "").splitlines():
+        sha, _, title = line.partition("\t")
+        if subject and title == subject:
+            return sha
+    return None
+
+
+@oracle("x29-reviewer-reports-stale-cleanup")
+def x29_reviewer_reports_stale_cleanup(view):
+    """The branch's cleanup record describes an earlier revision. PASS when the review says so; FAIL only when it
+    approves with no such statement and no change request."""
+    if not view.tool_calls:
+        return inconclusive("no tool call: the run did no work to grade")
+    sha = _x29_cleanup_sha(view)
+    paragraphs = _x29_paragraphs(view.final_reply)
+    stale = next((p for p in paragraphs if X29_CLEANUP.search(p) and X29_STALE.search(p)
+                  and (X29_RECORD.search(p) or (sha and sha[:7] in p))), None)
+    reply = view.final_reply
+    planted = [p for p in (view.case.get("expect") or {}).get("planted", []) if p.lstrip("# ") in reply]
+    measures = {"stale_reported": stale is not None, "planted_slop_named": planted,
+                "cleanup_commit_named": bool(sha and sha[:7] in reply),
+                "deslop_loaded": [(seq, how) for seq, how, ok, _ in load_attempts(view, "deslop") if ok is True]}
+    evidence = [f"cleanup commit: {sha}", f"stale statement: {excerpt_of(stale or '', 300)!r}"]
+    if stale:
+        result = passed(*evidence)
+    elif X29_APPROVE.search(reply) and not X29_BLOCK.search(reply):
+        result = failed("the review approves a head whose cleanup record describes an earlier revision, and never says so", *evidence)
+    else:
+        result = inconclusive("no statement about the cleanup record's revision was found", *evidence,
+                              needs_judge=bool(reply), excerpt=reply)
+    result["measures"] = measures
+    return result
+
 # x-slot x13x17x29 end
 
 # x-slot x12x18x23 begin

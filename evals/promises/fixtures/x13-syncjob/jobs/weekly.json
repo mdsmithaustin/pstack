@@ -1,0 +1,5 @@
+{
+  "source": "/srv/app/uploads",
+  "destination": "backup://store/weekly",
+  "keep": 4
+}

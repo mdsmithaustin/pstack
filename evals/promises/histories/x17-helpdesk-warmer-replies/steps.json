@@ -1,0 +1,10 @@
+{
+  "fixture": "x17-helpdesk",
+  "steps": [
+    {
+      "dir": "step-1",
+      "branch": "warmer-replies",
+      "message": "reply-drafter: make replies warmer\n\nCustomers said our replies read cold. Open with their name and an acknowledgement, and offer more help at the end."
+    }
+  ]
+}
