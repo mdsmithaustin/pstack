@@ -117,6 +117,8 @@ class EvidenceUsageErrors(unittest.TestCase):
             with self.subTest(flag=flag):
                 done = run(*args)
                 self.assertEqual(done.returncode, 2, done.stdout[:80])
+                self.assertEqual(done.stdout, "")
+                self.assertEqual(len(done.stderr.splitlines()), 1, done.stderr)
                 self.assertIn(f"{flag} was given more than once", done.stderr)
 
     def test_an_argument_that_is_not_utf8_is_a_usage_error(self):
@@ -406,6 +408,8 @@ class OneStepUsageErrors(unittest.TestCase):
             with self.subTest(playbook=args[0]):
                 done = run(*args)
                 self.assertEqual(done.returncode, 2, done.stdout[:80])
+                self.assertEqual(done.stdout, "")
+                self.assertEqual(len(done.stderr.splitlines()), 1, done.stderr)
                 self.assertIn("--route goes with --step", done.stderr)
 
     def test_flags_of_the_full_plan_are_refused_with_a_step(self):
@@ -415,6 +419,7 @@ class OneStepUsageErrors(unittest.TestCase):
                 done = run("feature", "--step", "3", "--route", "standard", *extra)
                 self.assertEqual(done.returncode, 2, done.stdout[:80])
                 self.assertEqual(done.stdout, "")
+                self.assertEqual(len(done.stderr.splitlines()), 1, done.stderr)
                 self.assertIn(f"Drop {extra[0]}", done.stderr)
 
 

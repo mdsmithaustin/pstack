@@ -40,6 +40,11 @@ SURROGATE = re.compile("[\udc80-\udcff]")
 NO_CHANGE_ENDPOINT = ("what this playbook's Reply line names", "this playbook does not produce a code change")
 
 
+class PlanParser(argparse.ArgumentParser):
+    def error(self, message):
+        self.exit(2, f"{self.prog}: error: {' '.join(message.splitlines())}\n")
+
+
 class Once(argparse.Action):
     """Refuse a repeated flag, so a later value cannot silently replace an earlier one."""
 
@@ -405,7 +410,7 @@ def render(plan, harness):
 
 def main(argv=None):
     manifest = json.loads((MODE / "routes.json").read_text(encoding="utf-8"))
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
+    parser = PlanParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
     parser.add_argument("playbook", help="Playbook id, such as feature or bug-fix")
     for name in manifest["facts"]:
         parser.add_argument(f"--{name}", metavar="LEVEL[:EVIDENCE]", action=Once,
