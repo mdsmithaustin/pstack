@@ -19,7 +19,7 @@ When your context holds a summary of earlier work or a truncation notice, follow
 
 ## Playbooks
 
-Match the task to a playbook below. Before task-specific work, print its plan:
+Match the task to a playbook below. Before task-specific work, print its plan, with the playbook's title in kebab case as `<file-stem>`:
 
 ```sh
 python3 "<this skill's base directory>/scripts/plan.py" <file-stem> --harness <claude-code|codex|grok|hermes|other>
@@ -37,18 +37,18 @@ The endpoint the user or host states governs. Without one, the plan prints the d
 
 For a large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, call the Skill tool with `figure-it-out` even when a narrower playbook like Feature fits. Call the Skill tool with `figure-it-out` whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead.
 
-- **Investigation.** Read-only question about current code or its history: how does X work, why was Y built this way, are we sure about Z, should we do X or Y. A pull request review starts in Code review. `playbooks/investigation.md`.
-- **Code review.** Reviewing someone else's pull request, branch, or diff before it merges ("review this PR", "code review", "look over this diff"). `playbooks/code-review.md`.
-- **Bug fix.** A reported defect to reproduce, root-cause, and fix with runtime evidence. `playbooks/bug-fix.md`.
-- **Perf issue.** A measured slowness to trace and improve against a baseline. `playbooks/perf-issue.md`.
-- **Feature.** New or changed behavior, built from a named data shape. `playbooks/feature.md`.
-- **Refactoring.** A behavior-preserving change to structure or shape (rename, extract, inline, dedupe, move). `playbooks/refactoring.md`.
-- **Prototype.** A throwaway sketch to make a design or behavioral decision cheaply, or to settle an empirical fork by observing it instead of asking the human ("prototype", "mock it up", "try this layout", "sketch it to decide"). `playbooks/prototype.md`.
-- **Babysit.** Driving a PR or stack to merge-ready: conflicts, review threads, CI. `playbooks/babysit.md`.
-- **Shipping.** The half after Babysit. Independently verifying a green stack, then landing the contiguous verified run bottom-up through `gh` by default or Origin when its CLI is available. `playbooks/shipping.md`.
-- **Opening a PR.** Use when the matched playbook produces a PR. `playbooks/opening-a-pr.md`.
+- **Investigation.** Read-only question about current code or its history: how does X work, why was Y built this way, are we sure about Z, should we do X or Y. A pull request review starts in Code review.
+- **Code review.** Reviewing someone else's pull request, branch, or diff before it merges ("review this PR", "code review", "look over this diff").
+- **Bug fix.** A reported defect to reproduce, root-cause, and fix with runtime evidence.
+- **Perf issue.** A measured slowness to trace and improve against a baseline.
+- **Feature.** New or changed behavior, built from a named data shape.
+- **Refactoring.** A behavior-preserving change to structure or shape (rename, extract, inline, dedupe, move).
+- **Prototype.** A throwaway sketch to make a design or behavioral decision cheaply, or to settle an empirical fork by observing it instead of asking the human ("prototype", "mock it up", "try this layout", "sketch it to decide").
+- **Babysit.** Driving a PR or stack to merge-ready: conflicts, review threads, CI.
+- **Shipping.** The half after Babysit. Independently verifying a green stack, then landing the contiguous verified run bottom-up through `gh` by default or Origin when its CLI is available.
+- **Opening a PR.** Use when the matched playbook produces a PR.
 
-For any of these, or when none above fits, read [more playbooks](references/playbooks.md) and match there: Research, Hillclimb, Runtime forensics, Trace forensics, Visual parity, Authoring or modifying a skill, Eval, Autonomous run, Orchestrate, Autopilot-full, Autopilot-stack, Session pickup, Pause safely, Multi-phase or multi-PR plan, Worktree and simulator cleanup.
+When none above fits, read [more playbooks](references/playbooks.md) and match there.
 
 ## Apply the mode
 
