@@ -310,6 +310,37 @@ class Worklist(unittest.TestCase):
         self.assertEqual(run("nope").returncode, 2)
 
 
+class RenderedRules(unittest.TestCase):
+    def test_every_route_prints_the_opening_prose(self):
+        for name, entry in MANIFEST["playbooks"].items():
+            if not entry.get("tiered"):
+                continue
+            for args in (LOW, facts(reach="material:shared caller")):
+                with self.subTest(playbook=name, route=plan(name, *args)["route"]):
+                    self.assertIn("   opening prose, kept with the first item: ", run(name, *args).stdout)
+        self.assertIn("touches failure or recovery", run("feature", *LOW).stdout)
+
+    def test_a_user_set_route_sends_a_raise_to_the_user(self):
+        user = run("feature", *LOW, "--user-route", "lightweight").stdout
+        self.assertNotIn("Otherwise raise the route.", user)
+        self.assertIn("Otherwise ask the user to raise the route.", user)
+        self.assertIn("Otherwise raise the route.", run("feature", *LOW).stdout)
+        standard = run("feature", *facts(reach="material:shared caller"), "--user-route", "standard").stdout
+        self.assertNotIn("Raise the route when you cannot choose.", standard)
+        self.assertIn("Ask the user to raise the route when you cannot choose.", standard)
+        self.assertIn("Raise the route when you cannot choose.", run("feature", *facts(reach="material:shared caller")).stdout)
+
+    def test_the_plan_maps_the_skill_tool_phrase_off_claude_code(self):
+        mapped = 'On this harness, "Call the Skill tool with `<name>`" means: read "${PSTACK_SKILLS_ROOT:?}/<name>/SKILL.md" in full.'
+        self.assertIn(mapped, run("refactoring", *LOW, "--harness", "codex").stdout)
+        for name in sorted(path.stem for path in (MODE / "playbooks").glob("*.md")):
+            args = LOW if MANIFEST["playbooks"].get(name, {}).get("tiered") else []
+            with self.subTest(playbook=name):
+                codex = run(name, *args, "--harness", "codex").stdout
+                self.assertEqual("call the skill tool" in codex.replace(mapped, "").lower(), mapped in codex)
+                self.assertNotIn("On this harness", run(name, *args, "--harness", "claude-code").stdout)
+
+
 class EntryPlanCommand(unittest.TestCase):
     BASE = "<this skill's base directory>"
 
@@ -406,6 +437,43 @@ class OneStep(unittest.TestCase):
         self.assertIn("`bug-fix --step <number> --route standard`", run("bug-fix", *facts(reach="material:x")).stdout)
         self.assertIn("(steps 1, 2, 4)", run("feature", *LOW).stdout)
         self.assertNotIn("--step", run("opening-a-pr").stdout)
+
+
+class StepRecovery(unittest.TestCase):
+    KEPT = "Loads this route keeps from this step:"
+
+    def test_a_step_that_runs_opening_a_pr_keeps_its_commits(self):
+        line = "   still commit when the push or PR is skipped"
+        for name, entry in MANIFEST["playbooks"].items():
+            routes = ("lightweight", "standard") if entry.get("tiered") else ("standard",)
+            args = facts(reach="material:shared caller") if entry.get("tiered") else []
+            for step in plan(name, *args)["steps"]:
+                for route in routes:
+                    with self.subTest(playbook=name, step=step["number"], route=route):
+                        printed = run(name, "--step", str(step["number"]), "--route", route).stdout
+                        self.assertEqual(line in printed.split("\n"), step["runs_pr"])
+        self.assertNotIn("still commit", run("babysit", "--step", "5").stdout)
+
+    def test_a_lightweight_step_names_the_loads_the_route_keeps(self):
+        for name, entry in MANIFEST["playbooks"].items():
+            if not entry.get("tiered"):
+                continue
+            for step in plan(name, *LOW)["steps"]:
+                with self.subTest(playbook=name, step=step["number"]):
+                    printed = run(name, "--step", str(step["number"]), "--route", "lightweight", "--harness", "claude-code").stdout
+                    body = printed.split("gates, which still bind:")[0].split("\n")
+                    kept = [row for row in body if row.startswith(self.KEPT)]
+                    if not re.search(r"call the skill tool with `[a-z0-9-]+`", "\n".join(row for row in body if row not in kept), re.I):
+                        self.assertEqual(kept, [])
+                        continue
+                    self.assertEqual(len(kept), 1, printed)
+                    named = re.findall(r"`([a-z0-9-]+)`", kept[0])
+                    self.assertEqual(named, step["loads"] + step["conditional"])
+                    if not named:
+                        self.assertIn("none", kept[0])
+        self.assertIn(f"{self.KEPT} none.", run("feature", "--step", "1", "--route", "lightweight").stdout)
+        self.assertIn(f"{self.KEPT} `spec-probes`.", run("feature", "--step", "4", "--route", "lightweight").stdout)
+        self.assertNotIn(self.KEPT, run("feature", "--step", "4", "--route", "standard").stdout)
 
 
 class OneStepUsageErrors(unittest.TestCase):
