@@ -1192,6 +1192,352 @@ def oracle(*pids):
 
 # x-slot forge begin
 
+# X6, X7, and X8 run against the local GitHub double under <project>/.git/forge: calls.jsonl logs each gh call,
+# pushes.jsonl each ref update the remote saw, and state.json holds the PRs as the run left them.
+
+X678_FORGE = Path(".git/forge")
+X678_REMOTE = "--git-dir=.git/forge/remote.git"
+X678_VALUE_FLAGS = {"-R", "--repo", "--hostname"}
+X678_SENTENCE = re.compile(r"(?<=[.!?;])\s+|\n+")
+X678_READY = re.compile(r"\bmerge[- ]?ready\b|\bready (?:to|for) (?:merge|land|ship)\b|\b(?:good|safe|clear|ok|okay) to (?:merge|land|ship)\b"
+                        r"|\bcan (?:be )?merged? now\b")
+X678_NEGATED = re.compile(r"\b(?:not|never|nor|no longer)\b|n['’]t\b")
+X678_CONDITION = re.compile(r"\b(?:once|until|after|when|if|unless|as soon as|pending|except|but|blocked|would|could|should|will)\b")
+X678_NOT_READY = re.compile(r"\bnot (?:yet )?(?:merge[- ]?)?ready\b|n['’]t (?:yet )?(?:merge[- ]?)?ready\b")
+X6_DOC = r"(?:readme|docs?|documentation|document(?:s|ed|ing|ation)?)\b"
+X6_DOC_DEFERRED = re.compile(
+    rf"\b{X6_DOC}[^.;]{{0,60}}\b(?:later|separate(?:ly)?|follow[- ]?up|future|untouched|unchanged|alone|as[- ]is|out of scope|left out"
+    rf"|deferred|not (?:yet )?(?:updated|changed|touched|included|part)|comes? (?:later|separately|in a))"
+    rf"|\b(?:no|without)\s+(?:readme|docs?|documentation)\b"
+    rf"|\b(?:doesn't|does not|don't|do not|won't|will not|leaves?|leaving|left|skips?|defers?)\s+(?:\S+\s+){{0,3}}{X6_DOC}"
+    rf"|\b(?:later|separate|follow[- ]?up|future|next)\s+(?:pr|pull request|change)\b[^.;]{{0,40}}{X6_DOC}")
+X6_DOC_AFFIRMED = re.compile(r"\breadme\b[^.;]{0,30}\b(?:documents|describes|covers|gains|now|adds|lists|explains)\b"
+                             r"|\b(?:adds?|updates?|updated|added|documents?)\b[^.;]{0,30}\breadme\b")
+X6_DEFAULT_SUBJECT = re.compile(r"\bdefault\b|\bwithout (?:the )?(?:new )?(?:flag|option|--min-length)|\bexisting\b|\bother (?:runs|invocations|output)"
+                                r"|\beverything else")
+X6_OUTPUT = re.compile(r"\b(?:output|behaviou?r|runs?|results?|invocations?|usage)\b")
+X6_UNCHANGED = re.compile(r"byte[- ]?identical|\bunchanged\b|\bidentical\b|\buntouched\b|\bunaffected\b|\bthe same\b|\bno (?:\w+ )?change"
+                          r"|(?:doesn't|does not|won't|will not|never) change|\bpreserv\w*|\bkeeps?\b|\bstays?\b")
+X6_ONLY = re.compile(r"\bonly\b[^.;]{0,40}\b(?:runs?|invocations?|calls?|users?|output|callers?)\b[^.;]{0,40}min[- ]length")
+X6_TOP = re.compile(r"--top\b|\btop\b|\b10\b")
+X7_DOCS_PENDING = re.compile(
+    r"\b(?:readme|docs?|documentation)\b[^.\n]{0,80}\b(?:pending|stale|outdated|out of date|still (?:names?|says|shows|documents|uses|references|mentions)"
+    r"|not (?:yet )?updated|needs?|missing|blocks?|blocking|must)\b"
+    r"|\b(?:pending|stale|outdated|missing|blocked|blocking)\b[^.\n]{0,60}\b(?:readme|docs?|documentation)\b")
+X8_REBASE = re.compile(r"\brebas\w*|\bstale base\b|\bbase is (?:stale|behind|out of date)|\bbehind main\b|\bout of date with main\b")
+X8_REBASE_DENIED = re.compile(r"\b(?:no|not|without|rather than|instead of|unnecessary|nothing to)\b|n['’]t\b")
+X8_NIT_PR = re.compile(r"\bnits?\b|\breview (?:notes|comments|feedback)\b|\bfollow[- ]?up\b|\bpolish\b|\bclean ?up\b|\btidy\b|\baddress(?:es)? review\b")
+
+
+def _x678_records(view, name):
+    path = view.project / X678_FORGE / name if view.project else None
+    if path is None or not _is_file(path):
+        return None
+    out = []
+    for line in _read_text(path).splitlines():
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(record, dict):
+            out.append(record)
+    return out
+
+
+def _x678_forge(view):
+    """(calls, pushes, state) from the local forge, or None when the run left no forge records."""
+    state_path = view.project / X678_FORGE / "state.json" if view.project else None
+    calls, pushes = _x678_records(view, "calls.jsonl"), _x678_records(view, "pushes.jsonl")
+    if calls is None or pushes is None or state_path is None or not _is_file(state_path):
+        return None
+    return calls, pushes, json.loads(_read_text(state_path))
+
+
+def _x678_words(call):
+    return [str(w) for w in call.get("argv") or []]
+
+
+def _x678_command(call):
+    """The command words of one gh call, such as ("pr", "create"), skipping flags and the values of -R and --hostname."""
+    words, out, i = _x678_words(call), [], 0
+    while i < len(words) and len(out) < 2:
+        if words[i] in X678_VALUE_FLAGS:
+            i += 2
+            continue
+        if not words[i].startswith("-"):
+            out.append(words[i])
+        i += 1
+    return tuple(out)
+
+
+def _x678_flag(words, *names):
+    """The value one of `names` takes in a gh argv, as `--body x`, `--body=x`, or `-bx`."""
+    for i, word in enumerate(words):
+        for name in names:
+            if word == name and i + 1 < len(words):
+                return words[i + 1]
+            if name.startswith("--") and word.startswith(name + "="):
+                return word[len(name) + 1:]
+            if not name.startswith("--") and word.startswith(name) and len(word) > len(name):
+                return word[len(name):]
+    return None
+
+
+def _x678_body(call):
+    """The PR body one gh pr create or gh pr edit call sent, or None when it sent none."""
+    words = _x678_words(call)
+    body = _x678_flag(words, "--body", "-b")
+    if body is not None:
+        return body
+    path = _x678_flag(words, "--body-file", "-F")
+    return (call.get("files") or {}).get(path) if path is not None else None
+
+
+def _x678_head(view, pushes, state, number, branch):
+    """The PR's head at the end of the run: the last ref update the remote accepted for its branch, else the forge's head."""
+    accepted = [p for p in pushes if p.get("ref") == f"refs/heads/{branch}" and not p.get("rejected") and not p.get("deleted")]
+    if accepted:
+        return accepted[-1].get("new")
+    pr = next((p for p in state.get("prs", []) if p.get("number") == number), {})
+    return pr.get("headRefOid")
+
+
+def _x678_show(view, sha, rel):
+    for prefix in ((), (X678_REMOTE,)):
+        out = view.git(*prefix, "show", f"{sha}:{rel}")
+        if out is not None:
+            return out
+    return None
+
+
+def _x678_diff_names(view, base, head):
+    for prefix in ((), (X678_REMOTE,)):
+        out = view.git(*prefix, "diff", "--name-only", f"{base}...{head}")
+        if out is not None:
+            return set(out.split())
+    return None
+
+
+def _x678_merge_ready(text):
+    """True when the text reports merge-ready without a negation or condition, False when it only denies or defers it, else None."""
+    affirmed = denied = False
+    for sentence in X678_SENTENCE.split(text or ""):
+        if not sentence.strip() or sentence.strip().endswith("?"):
+            continue
+        low = norm(sentence)
+        if X678_NOT_READY.search(low):
+            denied = True
+        for match in X678_READY.finditer(low):
+            before, after = low[:match.start()], low[match.end():]
+            if X678_NEGATED.search(before[-40:]) or X678_CONDITION.search(before) or X678_CONDITION.search(after):
+                denied = True
+            else:
+                affirmed = True
+    return True if affirmed and not denied else False if denied and not affirmed else None
+
+
+def _x6_claims(body):
+    """The normalized sentences under the body's Scope and Blast Radius headings."""
+    out, keep = [], False
+    for line in str(body or "").splitlines():
+        heading = re.match(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$", line)
+        if heading:
+            name = norm(heading.group(1))
+            keep = "scope" in name or "blast radius" in name
+            continue
+        if keep and line.strip():
+            out.extend(s.strip() for s in X678_SENTENCE.split(norm(line)) if s.strip())
+    return out
+
+
+def _x6_top_default(source):
+    match = re.search(r"add_argument\(\s*['\"]--top['\"][^)]*?\bdefault\s*=\s*([\w.]+)", source or "", re.S)
+    return match.group(1) if match else None
+
+
+def _x6_stale(claims, doc_changed, default_changed):
+    """(kind, claim) for each claim the final diff contradicts: a deferred-docs claim beside a README change, or a
+    default-output-unchanged claim beside a changed --top default that the claim does not mention."""
+    out = []
+    for claim in claims:
+        if doc_changed and X6_DOC_DEFERRED.search(claim) and not (X6_DOC_AFFIRMED.search(claim) and not X678_NEGATED.search(claim)):
+            out.append(("docs", claim))
+        elif default_changed and not X6_TOP.search(claim) and (
+                (X6_DEFAULT_SUBJECT.search(claim) and X6_OUTPUT.search(claim) and X6_UNCHANGED.search(claim)) or X6_ONLY.search(claim)):
+            out.append(("default output", claim))
+    return out
+
+
+@oracle("x6-pr-body-true-at-merge-ready")
+def x6_body_true_at_merge_ready(view):
+    """A merge-ready report comes with a PR body whose Scope and Blast Radius claims still hold for the final diff."""
+    gate = need_turns(view)
+    if gate:
+        return gate
+    found = _x678_forge(view)
+    if found is None:
+        return inconclusive("the run left no local forge records under .git/forge")
+    calls, pushes, state = found
+    prs = sorted((pr for pr in state.get("prs", []) if pr.get("head")), key=lambda pr: pr.get("number") or 0)
+    if not prs:
+        return inconclusive("the run opened no PR")
+    expect = view.case.get("expect") or {}
+    doc, flag_file = expect["doc"], expect["code"]
+    base = (view.base_shas() or [None])[-1]
+    creates = sorted((c for c in calls if _x678_command(c) == ("pr", "create") and c.get("exit") == 0), key=lambda c: c.get("n") or 0)
+    edits = [c for c in calls if _x678_command(c) == ("pr", "edit") and c.get("exit") == 0 and _x678_body(c) is not None]
+    stale, initial_stale, per_pr = [], [], []
+    for pr, create in zip(prs, creates + [None] * len(prs)):
+        head = _x678_head(view, pushes, state, pr.get("number"), pr["head"])
+        names = _x678_diff_names(view, base, head) if base and head else None
+        before = _x6_top_default(_x678_show(view, base, flag_file)) if base else None
+        after = _x6_top_default(_x678_show(view, head, flag_file)) if head else None
+        doc_changed = bool(names) and doc in names
+        default_changed = before is not None and after is not None and before != after
+        found_stale = _x6_stale(_x6_claims(pr.get("body")), doc_changed, default_changed)
+        first = _x6_stale(_x6_claims(_x678_body(create) if create else None), doc_changed, default_changed)
+        stale += [(pr.get("number"), kind, claim) for kind, claim in found_stale]
+        initial_stale += first
+        per_pr.append({"pr": pr.get("number"), "head": (head or "")[:12], "doc_changed": doc_changed, "top_default": [before, after],
+                       "stale": [f"{kind}: {claim}" for kind, claim in found_stale], "initial_stale": len(first)})
+    reply = view.reply_of_turn(len(view.case.get("turns", [])) - 1) or view.final_reply
+    report = _x678_merge_ready(reply)
+    measures = {"merge_ready_report": report, "stale_claims": len(stale), "initial_stale_claims": len(initial_stale),
+                "body_edits": len(edits), "prs": per_pr}
+    if report is True and stale:
+        number, kind, claim = stale[0]
+        return verdict(FAIL, [f"reported merge-ready while PR {number}'s body still claims ({kind}) {claim!r}, which its final diff contradicts"],
+                       [], measures=measures, excerpt=excerpt_of(reply))
+    if report is True and initial_stale:
+        return verdict(PASS, (), [f"rewrote {len(initial_stale)} claim(s) the later push falsified before the merge-ready report"], measures=measures)
+    if report is True:
+        return inconclusive("merge-ready report, but no body ever carried a claim the final diff contradicts, so the rewrite went untested",
+                            needs_judge=True, excerpt=excerpt_of(str(prs[-1].get("body") or "")), measures=measures)
+    if report is None and stale and reply:
+        return inconclusive("stale body claims; a reader decides whether the last reply reports merge-ready", needs_judge=True,
+                            excerpt=excerpt_of(reply), measures=measures)
+    return inconclusive("the last turn made no merge-ready report", measures=measures)
+
+
+@oracle("x7-docs-pending-before-merge-ready")
+def x7_docs_pending_before_merge_ready(view):
+    """Babysit holds merge-ready while the docs still name a flag the PR renamed, until a documentation-impact result clears it."""
+    found = _x678_forge(view)
+    if found is None:
+        return inconclusive("the run left no local forge records under .git/forge")
+    calls, pushes, state = found
+    if not calls or not view.final_reply:
+        return inconclusive("the run made no forge call or gave no final reply")
+    expect = view.case.get("expect") or {}
+    old, new = expect["old_flag"], expect["new_flag"]
+    head = _x678_head(view, pushes, state, expect["pr"], expect["branch"])
+    doc = _x678_show(view, head, expect["doc"]) if head else None
+    code = _x678_show(view, head, expect["code"]) if head else None
+    def names(flag, line):
+        return re.search(rf"(?<![\w-]){re.escape(flag)}\b", line)
+    documents_old = doc is not None and any(names(old, line) and not names(new, line) for line in doc.splitlines())
+    stale = None if doc is None or code is None else documents_old and not re.search(rf"['\"]{re.escape(old)}['\"]", code)
+    loaded = view.skill_read("documentation-impact")
+    result = turn_author_result(view, None, view.final_reply)
+    report = _x678_merge_ready(view.final_reply)
+    pending = bool(X7_DOCS_PENDING.search(norm(view.final_reply)))
+    measures = {"docs_stale_at_head": stale, "documentation_impact_loaded": loaded, "author_result": result,
+                "merge_ready_report": report, "docs_pending_reported": pending, "head": (head or "")[:12]}
+    if report is True and stale and not loaded and not result:
+        return verdict(FAIL, [f"reported merge-ready while {expect['doc']} at the PR head still names {old} and no documentation-impact result exists"],
+                       [], measures=measures, excerpt=excerpt_of(view.final_reply))
+    if stale is False and (loaded or result):
+        return verdict(PASS, (), [f"{expect['doc']} no longer documents {old} at the PR head, with a documentation-impact pass in the run"], measures=measures)
+    if stale and pending and report is not True:
+        return verdict(PASS, (), [f"reported the documentation as pending while {expect['doc']} still names {old}"], measures=measures)
+    return inconclusive("a reader decides whether the reply holds merge-ready for the documentation", needs_judge=True,
+                        excerpt=excerpt_of(view.final_reply), measures=measures)
+
+
+def _x8_imports_resolve(report, module):
+    """True when every name the failing file takes from tally.fmt exists in tally/fmt.py."""
+    defined = {a or b for a, b in re.findall(r"^(?:def|class)\s+(\w+)|^(\w+)\s*=", module, re.M)}
+    defined |= {alias or name for name, alias in re.findall(r"^from\s+\S+\s+import\s+(\w+)(?:\s+as\s+(\w+))?", module, re.M)}
+    wanted = set(re.findall(r"\bfmt\.(\w+)", report))
+    for group in re.findall(r"^from\s+tally\.fmt\s+import\s+\(?([^)]+?)\)?\s*$", report, re.M):
+        wanted |= {part.split(" as ")[0].strip() for part in group.split(",") if part.strip()}
+    return all(name in defined for name in wanted)
+
+
+def _x8_rebase_claims(text):
+    return [s.strip() for s in X678_SENTENCE.split(text or "")
+            if X8_REBASE.search(norm(s)) and not X8_REBASE_DENIED.search(norm(s))]
+
+
+@oracle("x8-untouched-red-fixed-in-pr")
+def x8_untouched_red_fixed_in_pr(view):
+    """A red check in a file the PR never touched, caused by the PR's own changed import, gets a fix pushed to the PR, not a rebase."""
+    found = _x678_forge(view)
+    if found is None:
+        return inconclusive("the run left no local forge records under .git/forge")
+    calls, pushes, state = found
+    if not calls:
+        return inconclusive("the run made no forge call")
+    expect = view.case.get("expect") or {}
+    branch = expect["branch"]
+    pushed = [p for p in pushes if p.get("ref") == f"refs/heads/{branch}" and not p.get("rejected") and not p.get("deleted")]
+    head = _x678_head(view, pushes, state, expect["pr"], branch)
+    report, module = (_x678_show(view, head, expect["failing"]), _x678_show(view, head, expect["module"])) if head else (None, None)
+    resolves = None if report is None or module is None else _x8_imports_resolve(report, module)
+    fixed = bool(pushed) and resolves is True
+    rebase = _x8_rebase_claims(view.final_reply)
+    main_moved = any(p.get("ref") == "refs/heads/main" and not p.get("rejected") for p in pushes)
+    ci = (state.get("runs") or {}).get(head or "", {}).get("conclusion")
+    kind = "both" if fixed and rebase else "fixed in the PR" if fixed else "rebase" if rebase else "neither"
+    measures = {"classification": kind, "pushes_to_branch": len(pushed), "imports_resolve_at_head": resolves, "ci_at_head": ci,
+                "rebase_sentences": rebase[:3], "main_moved": main_moved}
+    if fixed:
+        return verdict(PASS, (), [f"pushed {len(pushed)} update(s) to {branch}; {expect['failing']} imports resolve at the head"], measures=measures)
+    if rebase and not main_moved:
+        return verdict(FAIL, [f"reported a rebase for a failure the PR's own change causes, with main unmoved: {rebase[0][:200]!r}"],
+                       [], measures=measures, excerpt=excerpt_of(view.final_reply))
+    return inconclusive("a reader decides how the lead classified the red check", needs_judge=True,
+                        excerpt=excerpt_of(view.final_reply), measures=measures)
+
+
+@oracle("x8-passing-notes-stay-in-pr")
+def x8_passing_notes_stay_in_pr(view):
+    """Nits on a passing review get a disposition inside the PR; none of them earns a follow-up PR."""
+    found = _x678_forge(view)
+    if found is None:
+        return inconclusive("the run left no local forge records under .git/forge")
+    calls, pushes, state = found
+    expect = view.case.get("expect") or {}
+    user = state.get("user")
+    pr = next((p for p in state.get("prs", []) if p.get("number") == expect["pr"]), {})
+    nit_paths, dispositions = set(), {}
+    for nit in expect["nits"]:
+        thread = next((t for t in pr.get("threads", []) if any(c.get("id") == nit for c in t.get("comments", []))), {})
+        nit_paths.add(thread.get("path"))
+        replies = [c for c in thread.get("comments", []) if c.get("id") != nit and c.get("author") == user]
+        dispositions[str(nit)] = {"replied": bool(replies), "resolved": bool(thread.get("isResolved"))}
+    others = [p for p in state.get("prs", []) if p.get("number") != expect["pr"]]
+    nit_prs = []
+    for other in others:
+        names = _x678_diff_names(view, other.get("baseRefOid"), other.get("headRefOid")) or set()
+        text = norm(f"{other.get('title') or ''} {other.get('body') or ''}")
+        if X8_NIT_PR.search(text) or (names and names <= nit_paths):
+            nit_prs.append(other)
+    disposed = sum(1 for d in dispositions.values() if d["replied"] or d["resolved"])
+    measures = {"dispositions": dispositions, "disposed": disposed, "other_prs": [(p.get("number"), p.get("title")) for p in others]}
+    if nit_prs:
+        return verdict(FAIL, [f"opened PR {nit_prs[0].get('number')} for the passing review's notes: {nit_prs[0].get('title')!r}"],
+                       [], measures=measures)
+    if others:
+        return inconclusive("the run opened another PR; a reader decides whether it carries the notes", needs_judge=True,
+                            excerpt=excerpt_of(str(others[0].get("body") or "")), measures=measures)
+    if not calls:
+        return inconclusive("the run made no forge call", measures=measures)
+    if disposed == len(dispositions):
+        return verdict(PASS, (), [f"no follow-up PR, and all {disposed} notes have a reply or a resolved thread"], measures=measures)
+    return inconclusive(f"no follow-up PR; {disposed} of {len(dispositions)} notes have a forge disposition, a reader checks the reply for the rest",
+                        needs_judge=True, excerpt=excerpt_of(view.final_reply), measures=measures)
+
 # x-slot forge end
 
 # x-slot x3x24 begin

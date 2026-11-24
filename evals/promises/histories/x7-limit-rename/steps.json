@@ -1,0 +1,16 @@
+{
+  "fixture": "tally",
+  "steps": [
+    {
+      "dir": "step-1",
+      "delete": [],
+      "message": "docs(tally): document the options and cover the CLI"
+    },
+    {
+      "dir": "step-2",
+      "branch": "feat/limit-flag",
+      "delete": [],
+      "message": "refactor(tally): rename --top to --limit\n\n--limit matches what head, sort, and our other tools call a row cap."
+    }
+  ]
+}

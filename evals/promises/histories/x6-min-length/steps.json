@@ -1,0 +1,10 @@
+{
+  "fixture": "tally",
+  "steps": [
+    {
+      "dir": "step-1",
+      "delete": [],
+      "message": "test(tally): cover word counts and the --top output"
+    }
+  ]
+}

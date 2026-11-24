@@ -1,0 +1,41 @@
+{
+ "promises": [
+  "x7-docs-pending-before-merge-ready"
+ ],
+ "fixture": "tally",
+ "history": "x7-limit-rename",
+ "entry": "poteto-mode",
+ "turns": [
+  "babysit pr 23 and get it merge-ready."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "forge": {
+  "repo": "acme/tally",
+  "push": [
+   "main",
+   "feat/limit-flag"
+  ],
+  "protected": [
+   "main"
+  ],
+  "state": "forge.json",
+  "ci": {
+   "name": "test",
+   "command": "python3 -m unittest discover -s tests",
+   "timeout_s": 120
+  }
+ },
+ "expect": {
+  "pr": 23,
+  "branch": "feat/limit-flag",
+  "doc": "README.md",
+  "code": "tally/__main__.py",
+  "old_flag": "--top",
+  "new_flag": "--limit"
+ },
+ "screen": "X7",
+ "note": "Settles B2, SH5, M48, and M48b. PR 23 renames the --top flag to --limit in code and tests, CI is green, and a maintainer approved it, but README.md still documents --top in its usage line and Options list. Forge readiness holds, so only documentation stands between the PR and merge-ready. The grader fails a merge-ready report while the PR head's README still names --top and the trace holds no documentation-impact load or author result."
+}

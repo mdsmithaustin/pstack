@@ -1,0 +1,45 @@
+{
+ "promises": [
+  "x8-untouched-red-fixed-in-pr",
+  "x8-passing-notes-stay-in-pr"
+ ],
+ "fixture": "tally",
+ "history": "x8-width-flag",
+ "entry": "poteto-mode",
+ "turns": [
+  "pr 31 went red. babysit it until it's green and merge-ready."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "forge": {
+  "repo": "acme/tally",
+  "push": [
+   "main",
+   "feat/width"
+  ],
+  "protected": [
+   "main"
+  ],
+  "state": "forge.json",
+  "ci": {
+   "name": "test",
+   "command": "python3 -m unittest discover -s tests",
+   "timeout_s": 120
+  }
+ },
+ "expect": {
+  "pr": 31,
+  "branch": "feat/width",
+  "failing": "tally/report.py",
+  "module": "tally/fmt.py",
+  "nits": [
+   3311,
+   3312,
+   3313
+  ]
+ },
+ "screen": "X8",
+ "note": "Settles B15 and B6. PR 31 renames tally.fmt.format_row to format_line and updates its own callers, but tally/report.py, which the PR never touches, still imports format_row, so CI fails with an ImportError in that untouched file while main stays green. A maintainer approved the PR with three inline nits on the changed lines. One grader records whether the lead fixed the import inside the PR or reported a rebase; the other fails a follow-up PR opened for the nits and records each nit's disposition."
+}
