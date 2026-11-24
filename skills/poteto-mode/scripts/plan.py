@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 """Print the route, worklist, skill loads, and gates for one poteto-mode playbook.
 
-The lead supplies the playbook and five risk facts. This script applies the
-routing policy, so the answer is the same on every model and harness. Steps and
-their outcome sentences come from the playbook file, which owns them. Gates, panels,
+Only routed playbooks accept risk facts. With no facts or override, their route
+is pending. With all five facts, the script applies the routing policy in
+references/routes.md. The same facts give the same route on every harness.
+Steps and their outcome sentences come from the playbook file, which owns them. Gates, panels,
 and the flags of code-changing playbooks come from routes.json beside the mode entry.
 
-With --step N it prints the full text of one step and the route's gates instead, for the moment that step starts.
+Use --step N to print one step and its gates. For a routed playbook, include
+--route with the route the plan printed. For other playbooks, --route is
+optional with --step. A full plan rejects --route. A step rejects risk facts,
+--user-route, --raise-to, --reason, and --json.
 
-Exit 2 means a usage error, such as an unknown playbook, a missing step, or a lowered route.
+Use --reason only with --raise-to. On a routed playbook, --raise-to requires
+a nonblank reason.
+Supply each risk fact, --user-route, --raise-to, --reason, --step, --route,
+and --harness at most once. Arguments must be valid UTF-8.
+On a usage error, the script writes one line to stderr and exits with status 2.
 """
 import argparse
 import json
@@ -36,15 +44,25 @@ SCRUTINY_LOCAL = ("No remote, so no PR review exists to credit. Brief one `trail
                   "the local branch as pending.")
 RUN_PR = re.compile(r"\bRun \*\*Opening a PR\*\*")
 KEEP_COMMITS = "   still commit when the push or PR is skipped"
+SURROGATE = re.compile("[\udc80-\udcff]")
 NO_CHANGE_ENDPOINT = ("what this playbook's Reply line names", "this playbook does not produce a code change")
+
+
+class PlanParser(argparse.ArgumentParser):
+    def error(self, message):
+        message = " ".join(message.splitlines()).rstrip(".")
+        self.exit(2, f"{self.prog}: error: {message}. Run {self.prog} --help for the flags.\n")
 
 
 class Once(argparse.Action):
     """Refuse a repeated flag, so a later value cannot silently replace an earlier one."""
 
+    given = False
+
     def __call__(self, parser, namespace, values, option_string=None):
-        if getattr(namespace, self.dest) is not None:
+        if self.given:
             parser.error(f"{option_string} was given more than once.")
+        self.given = True
         setattr(namespace, self.dest, values)
 
 
@@ -118,6 +136,8 @@ def render_step(args, manifest):
     if text is None:
         raise SystemExit(f"plan.py: {args.playbook} has no step {args.step}.")
     tiered = manifest["playbooks"].get(args.playbook, {}).get("tiered", False)
+    if tiered and args.route is None:
+        raise SystemExit(f"plan.py: {args.playbook} is routed, so --step needs --route with the route the plan printed.")
     out = [f"{args.playbook} step {args.step}, from {display_path(path)}", ""]
     if tiered and args.route == "lightweight":
         out += ["Lightweight route: do this step's work yourself. Skip its sentences that delegate the work or spawn a design panel, or load a skill the plan did not list. Keep its outcome, its checks, its commands, and the independent scrutiny the plan lists.", ""]
@@ -148,8 +168,7 @@ def route_gates(manifest, playbook, route):
 
 
 def gate_timing(gate, route):
-    when = gate["when"]
-    return when.get(route) or when.get("all") or "; ".join(f"{name}: {text}" for name, text in when.items())
+    return gate["when"].get(route) or gate["when"]["all"]
 
 
 def render_gates(gates, harness):
@@ -248,6 +267,8 @@ def build(args, manifest, endpoint=None):
     found = endpoint or default_endpoint(args.project)
     shown = found[:2] if changes_code else NO_CHANGE_ENDPOINT
     facts, warning = {}, None
+    if args.reason is not None and not args.raise_to:
+        raise SystemExit("plan.py: --reason goes with --raise-to. Drop it, or raise the route.")
     if tiered:
         missing = [name for name in manifest["facts"] if getattr(args, name) is None]
         if args.user_route and args.raise_to:
@@ -262,7 +283,7 @@ def build(args, manifest, endpoint=None):
         if args.raise_to:
             if ROUTES.index(args.raise_to) < ROUTES.index(table):
                 raise SystemExit(f"plan.py: the lead can raise the route, not lower it. The table gives {table}. Only the user lowers a route, with --user-route.")
-            if not args.reason:
+            if not (args.reason or "").strip():
                 raise SystemExit("plan.py: --raise-to needs --reason.")
             route, why, source = args.raise_to, args.reason, "lead"
         if args.user_route:
@@ -272,6 +293,9 @@ def build(args, manifest, endpoint=None):
                            "Tell the user which facts are not low before the first edit.")
             why = "the user set the route"
     else:
+        given = [f"--{name}" for name in manifest["facts"] if getattr(args, name) is not None]
+        if given:
+            raise SystemExit(f"plan.py: {args.playbook} has one procedure, so it takes no risk facts. Drop {', '.join(given)}.")
         route, why, source = "standard", "this playbook has one procedure", "fixed"
         if args.user_route or args.raise_to:
             warning = "This playbook has one procedure, so the requested route does not apply."
@@ -395,20 +419,34 @@ def render(plan, harness):
 
 def main(argv=None):
     manifest = json.loads((MODE / "routes.json").read_text(encoding="utf-8"))
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
+    parser = PlanParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
     parser.add_argument("playbook", help="Playbook id, such as feature or bug-fix")
     for name in manifest["facts"]:
         parser.add_argument(f"--{name}", metavar="LEVEL[:EVIDENCE]", action=Once,
                             help="low, material, or unknown, then a colon and one line saying what was checked")
-    parser.add_argument("--user-route", choices=ROUTES, help="The route the user asked for, in either direction")
-    parser.add_argument("--raise-to", choices=ROUTES, help="A higher route the lead chooses, with --reason")
-    parser.add_argument("--reason", help="Why the lead raises the route")
-    parser.add_argument("--step", type=int, metavar="N", help="Print the full text of step N and the route's gates")
-    parser.add_argument("--route", choices=ROUTES, help="With --step on a routed playbook, the route the plan printed")
-    parser.add_argument("--harness", choices=("claude-code", "codex", "grok", "hermes", "other"), default="other")
+    parser.add_argument("--user-route", choices=ROUTES, action=Once, help="The route the user asked for, in either direction")
+    parser.add_argument("--raise-to", choices=ROUTES, action=Once, help="A higher route the lead chooses, with --reason")
+    parser.add_argument("--reason", action=Once, help="Why the lead raises the route")
+    parser.add_argument("--step", type=int, metavar="N", action=Once, help="Print the full text of step N and the route's gates")
+    parser.add_argument("--route", choices=ROUTES, action=Once, help="With --step on a routed playbook, the route the plan printed")
+    parser.add_argument("--harness", choices=("claude-code", "codex", "grok", "hermes", "other"), default="other", action=Once)
     parser.add_argument("--project", type=Path, default=Path.cwd(), help="Repository to inspect for a remote")
     parser.add_argument("--json", action="store_true")
+    argv = sys.argv[1:] if argv is None else argv
+    undecodable = next((arg for arg in argv if SURROGATE.search(arg)), None)
+    if undecodable is not None:
+        print(f"plan.py: {undecodable!r} is not valid UTF-8.", file=sys.stderr)
+        return 2
     args = parser.parse_args(argv)
+    if args.step is None and args.route:
+        parser.error("--route goes with --step. The full plan takes the risk facts and chooses the route.")
+    if args.step is not None:
+        plan_only = [f"--{name.replace('_', '-')}" for name in (*manifest["facts"], "user_route", "raise_to", "reason")
+                     if getattr(args, name) is not None]
+        if args.json:
+            plan_only.append("--json")
+        if plan_only:
+            parser.error(f"--step prints one step of a plan already made. Drop {', '.join(plan_only)}.")
     try:
         if args.step is not None:
             print(render_step(args, manifest))
