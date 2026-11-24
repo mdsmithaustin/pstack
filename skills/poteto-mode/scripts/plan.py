@@ -24,11 +24,13 @@ On a usage error, the script writes one line to stderr and exits with status 2.
 """
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 MODE = Path(__file__).resolve().parents[1]
 ROUTES = ("lightweight", "standard", "intensive")
@@ -49,8 +51,9 @@ unchecked verified unverified evidence applicable trust me to it is and file fil
 insertions deletion deletions touched one two three four five six seven eight nine ten""".split())
 SCRUTINY_REMOTE = ("Credit an existing independent review of the current revision. Or name human PR review as the scrutiny, "
                    "record the revision it must cover, and report delivery as pending review. Otherwise brief one `trail reviewer`.")
-SCRUTINY_LOCAL = ("No remote, so no PR review exists to credit. Brief one `trail reviewer`, or report the user's review of "
-                  "the local branch as pending.")
+SCRUTINY_LOCAL = ("No pull request will open, so no PR review exists to credit. Brief one `trail reviewer`, or report the user's "
+                  "review of the branch as pending.")
+SCP_REMOTE = re.compile(r"^(?:[^@/]+@)?([^-/:][^/:]*):")
 RUN_PR = re.compile(r"\bRun \*\*Opening a PR\*\*")
 KEEP_COMMITS = "   still commit when the push or PR is skipped"
 SURROGATE = re.compile("[\udc80-\udcff]")
@@ -238,20 +241,76 @@ def table_route(facts):
 
 
 def default_endpoint(project):
-    def git(*args):
-        return subprocess.run(["git", "-C", str(project), *args], capture_output=True, text=True)
-
+    """The default endpoint that references/routes.md's Endpoint table gives `project`."""
     try:
-        inside = git("rev-parse", "--git-dir").returncode == 0
+        local = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True).stdout.split()
     except OSError:
         return "commits on a local branch once Git is available", "Git is not on PATH", False
-    if not inside:
+    env = {name: value for name, value in os.environ.items() if name not in local}
+
+    def git(*args):
+        return subprocess.run(["git", "-C", str(project), *args], capture_output=True, text=True, env=env)
+
+    if git("rev-parse", "--git-dir").returncode != 0:
         return "commits on a first local branch after `git init`", "no Git repository", False
-    if not git("remote").stdout.strip():
+    urls = [line.split("\t", 1)[1].rsplit(" (", 1)[0] for line in git("remote", "-v").stdout.splitlines() if line.endswith(" (push)")]
+    if not urls:
         return "commits on a local branch, with the branch and its diff command in the reply", "no remote", False
-    if shutil.which("gh") or shutil.which("origin"):
-        return "reviewable PR", "remote and a forge CLI found", True
-    return "reviewable PR through a built-in PR tool, else a pushed branch named in the reply", "remote found, no forge CLI on PATH", True
+    hosts = {remote_host(url) for url in urls} - {None}
+    if hosts and shutil.which("origin"):
+        return "reviewable PR", "a network remote and Origin found", True
+    if shutil.which("gh") and hosts & gh_hosts():
+        return "reviewable PR", "a remote on a host gh serves", True
+    if "github.com" in hosts:
+        return "reviewable PR through a built-in PR tool, else a pushed branch named in the reply", "GitHub remote, no forge CLI on PATH", True
+    why = "no PR tool on PATH serves the remote's host" if hosts else "every remote is a local path, which takes no PR"
+    return "a pushed branch, named in the reply", why, False
+
+
+def remote_host(url):
+    """Git reads a colon before the first slash as scp-like host:path, not as a local path."""
+    if "://" in url:
+        try:
+            parts = urlsplit(url)
+            host = None if parts.scheme == "file" else parts.hostname
+        except ValueError:
+            return None
+        ssh = parts.scheme in ("ssh", "git+ssh", "ssh+git")
+    else:
+        match = SCP_REMOTE.match(url)
+        host, ssh = (match.group(1).lower() if match else None), True
+    if host and ssh:
+        host = ssh_hostname(host)
+    return "github.com" if host and (host == "github.com" or host.endswith(".github.com")) else host
+
+
+def ssh_hostname(alias):
+    """Resolve an ssh alias as gh does, with `ssh -G`, which prints the evaluated config and connects to nothing."""
+    try:
+        done = subprocess.run(["ssh", "-G", alias], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return alias
+    found = re.search(r"^hostname (\S+)$", done.stdout, re.M)
+    return found.group(1).lower() if found else alias
+
+
+def gh_hosts():
+    """The hosts gh serves, from the hosts.yml in the config folder gh's own lookup order finds."""
+    if os.environ.get("GH_CONFIG_DIR"):
+        folder = Path(os.environ["GH_CONFIG_DIR"])
+    elif os.environ.get("XDG_CONFIG_HOME"):
+        folder = Path(os.environ["XDG_CONFIG_HOME"]) / "gh"
+    elif os.name == "nt" and os.environ.get("AppData"):
+        folder = Path(os.environ["AppData"]) / "GitHub CLI"
+    else:
+        folder = Path.home() / ".config" / "gh"
+    try:
+        text = (folder / "hosts.yml").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    named = {line.rstrip()[:-1].strip("'\"").lower() for line in text.splitlines()
+             if line[:1] not in ("", " ", "\t", "#", "-") and line.rstrip().endswith(":")}
+    return {"github.com", os.environ.get("GH_HOST", "github.com").lower(), *named}
 
 
 def display_path(path):
@@ -449,6 +508,12 @@ def render(plan, harness):
     return "\n".join(out)
 
 
+def directory(value):
+    if not Path(value).is_dir():
+        raise argparse.ArgumentTypeError(f"{value!r} is not an existing directory")
+    return Path(value)
+
+
 def main(argv=None):
     manifest = json.loads((MODE / "routes.json").read_text(encoding="utf-8"))
     parser = PlanParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
@@ -462,7 +527,7 @@ def main(argv=None):
     parser.add_argument("--step", type=int, metavar="N", action=Once, help="Print the full text of step N and the route's gates")
     parser.add_argument("--route", choices=ROUTES, action=Once, help="With --step on a routed playbook, the route the plan printed")
     parser.add_argument("--harness", choices=("claude-code", "codex", "grok", "hermes", "other"), default="other", action=Once)
-    parser.add_argument("--project", type=Path, default=Path.cwd(), help="Repository to inspect for a remote")
+    parser.add_argument("--project", type=directory, action=Once, help="Repository to inspect for a remote (default: the current directory)")
     parser.add_argument("--json", action="store_true")
     argv = sys.argv[1:] if argv is None else argv
     undecodable = next((arg for arg in argv if SURROGATE.search(arg)), None)
@@ -479,6 +544,11 @@ def main(argv=None):
             plan_only.append("--json")
         if plan_only:
             parser.error(f"--step prints one step of a plan already made. Drop {', '.join(plan_only)}.")
+    elif args.project is None:
+        try:
+            args.project = Path.cwd()
+        except FileNotFoundError:
+            parser.error("the current directory no longer exists, so pass --project.")
     try:
         if args.step is not None:
             print(render_step(args, manifest))

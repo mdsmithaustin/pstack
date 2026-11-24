@@ -669,17 +669,6 @@ class GatesAndEndpoint(unittest.TestCase):
             self.assertEqual(result["default_endpoint"], "what this playbook's Reply line names", name)
             self.assertNotIn("PR", result["default_endpoint"], name)
 
-    def test_endpoint_follows_the_repository(self):
-        with tempfile.TemporaryDirectory() as directory:
-            bare = plan("feature", *LOW, "--project", directory)
-            self.assertIn("git init", bare["default_endpoint"])
-            subprocess.run(["git", "init", "-q", directory], check=True)
-            local = plan("feature", *LOW, "--project", directory)
-            self.assertIn("local branch", local["default_endpoint"])
-            self.assertIn("No remote", local["scrutiny"])
-            subprocess.run(["git", "-C", directory, "remote", "add", "origin", "https://example.invalid/r.git"], check=True)
-            self.assertIn("PR", plan("feature", *LOW, "--project", directory)["default_endpoint"])
-
     def test_every_code_step_that_runs_opening_a_pr_keeps_its_commits(self):
         line = "   still commit when the push or PR is skipped"
         found = set()
@@ -753,6 +742,13 @@ class RepositoryEndpoint(unittest.TestCase):
         result = json.loads(done.stdout)
         return result["default_endpoint"], result["scrutiny"]
 
+    def test_no_repository_and_no_remote_take_local_commits(self):
+        self.tool("gh")
+        self.assertIn("git init", self.endpoint(Path(tempfile.mkdtemp(dir=self.root)))[0])
+        endpoint, scrutiny = self.endpoint(self.repo())
+        self.assertIn("local branch", endpoint)
+        self.assertNotIn("human PR review", scrutiny)
+
     def test_a_local_path_remote_takes_no_pull_request(self):
         self.tool("gh")
         bare = self.root / "bare.git"
@@ -777,6 +773,7 @@ class RepositoryEndpoint(unittest.TestCase):
         self.assertEqual(self.endpoint(other, GH_HOST="git.example.com")[0], "reviewable PR")
         (self.gh_config / "hosts.yml").write_text("git.example.com:\n    user: someone\n", encoding="utf-8")
         self.assertEqual(self.endpoint(other)[0], "reviewable PR")
+        self.assertEqual(self.endpoint(self.repo("https://[broken/o/r.git"))[0], self.PUSHED)
 
     def test_one_remote_that_takes_a_pull_request_is_enough(self):
         self.tool("gh")
