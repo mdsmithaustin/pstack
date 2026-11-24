@@ -300,7 +300,7 @@ class Worklist(unittest.TestCase):
         self.assertEqual(designed["held_for_intensive"], ["architect"])
         self.assertNotIn("architect", designed["loads"])
         intensive = plan("feature", *facts(consequence="material:x", uncertainty="material:y"))
-        self.assertIn("architect", next(step for step in intensive["steps"] if step["name"] == "Designed")["loads"])
+        self.assertIn("architect", next(step for step in intensive["steps"] if step["name"] == "Designed")["conditional"])
 
     def test_lightweight_loads_only_proof_skills(self):
         result = plan("feature", *LOW)
@@ -382,6 +382,14 @@ class ConditionalLoads(unittest.TestCase):
                                    capture_output=True, text=True)
         self.assertEqual(alone.returncode, 0, alone.stderr)
         self.assertEqual(alone.stdout, run(*args).stdout)
+
+    def test_every_skill_a_step_names_exists_in_this_repository(self):
+        intensive = facts(consequence="material:x", uncertainty="material:y")
+        named = {skill for path in (MODE / "playbooks").glob("*.md")
+                 for step in plan(path.stem, *(intensive if MANIFEST["playbooks"].get(path.stem, {}).get("tiered") else []))["steps"]
+                 for skill in step["uses"]}
+        self.assertTrue(named)
+        self.assertEqual({skill for skill in named if not (ROOT / "skills" / skill / "SKILL.md").is_file()}, set())
 
 
 class RenderedRules(unittest.TestCase):

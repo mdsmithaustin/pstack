@@ -40,7 +40,7 @@ NAMED = re.compile(r"(?:`([a-z0-9-]+)`|\*\*([a-z0-9-]+)\*\*) skill")
 SENTENCE_END = re.compile(r"(?<=[.!?])\s")
 FULL_READ = "Read this playbook in full."
 REPLY = "**Reply:**"
-CONDITIONAL = re.compile(r"^\W*(If|When|Where|For|On the|Once|Unless|Otherwise|Only)\b")
+OPENS_WITH_CONDITION = re.compile(r"^\W*(If|When|Where|For|In|On the|Once|Unless|Otherwise|Only)\b")
 WORD = re.compile(r"\bn/a\b|[^\W_]\w*(?:'\w+)?")
 NO_CHECK = re.compile(r"\b(?:not|never|\w+n't)\s+(?:yet\s+|been\s+|really\s+)?(?:check|look|verif(?:y|ied)|test|inspect|review)(?:ed|s)?\b"
                       r"|\bskipped\s+(?:the\s+)?(?:check|look|verification|test|inspection|review)s?\b")
@@ -97,10 +97,9 @@ def read_playbook(path):
 
 
 def step_loads(text):
-    """Split a step's skill loads into those it always makes and those behind a condition in the same sentence."""
     always, conditional = [], []
     for sentence in SENTENCE_END.split(text):
-        target = conditional if CONDITIONAL.match(sentence) else always
+        target = conditional if OPENS_WITH_CONDITION.match(sentence) else always
         target.extend(LOAD.findall(sentence))
     always = list(dict.fromkeys(always))
     return always, [skill for skill in dict.fromkeys(conditional) if skill not in always]
@@ -344,8 +343,7 @@ def build(args, manifest, endpoint=None):
     for number, text in steps:
         loads, conditional, held = route_loads(text, route, tiered, manifest)
         named = [a or b for a, b in NAMED.findall(text)]
-        uses = [] if route == "lightweight" else [s for s in dict.fromkeys(named)
-                                                 if s not in loads + conditional + held and (MODE.parent / s / "SKILL.md").is_file()]
+        uses = [] if route == "lightweight" else [s for s in dict.fromkeys(named) if s not in loads + conditional + held]
         planned.append({"number": number, "name": step_name(text), "outcome": outcome(text), "loads": loads,
                         "conditional": conditional, "uses": uses, "held_for_intensive": held, "skipped": skips.get(step_name(text)),
                         "runs_pr": changes_code and bool(RUN_PR.search(text))})
