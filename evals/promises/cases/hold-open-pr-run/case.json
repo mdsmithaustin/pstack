@@ -1,0 +1,33 @@
+{
+ "promises": [
+  "pr-opens-ready",
+  "pr-calls-name-repo",
+  "pr-pushes-branch-not-trunk",
+  "pr-body-has-default-sections"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "add a --min-count option that hides words seen fewer than N times. keep the default output byte-identical. open a pr when it's done."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "forge": {
+  "repo": "acme/tally",
+  "push": [
+   "main"
+  ],
+  "protected": [
+   "main"
+  ],
+  "ci": {
+   "name": "smoke",
+   "command": "python3 -m tally sample.txt --top 3",
+   "timeout_s": 60
+  }
+ },
+ "screen": "hold",
+ "note": "Opening a PR end to end against the local forge: origin is git@github.com:acme/tally.git, served by .git/forge, and gh is the forge's double"
+}

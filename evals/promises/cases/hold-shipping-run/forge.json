@@ -1,0 +1,35 @@
+{
+ "next_number": 13,
+ "prs": [
+  {
+   "number": 11,
+   "title": "feat(tally): hide rare words with --min-count",
+   "head": "feat/min-count",
+   "base": "main",
+   "author": "dev",
+   "draft": false,
+   "state": "OPEN",
+   "labels": [],
+   "reviewRequests": [],
+   "reviews": [],
+   "threads": [],
+   "comments": [],
+   "body": "## Why\nLong files print a tail of words seen once.\n\n## What changed\n- `--min-count N` hides words seen fewer than N times.\n\n## Scope\n- Single-word counts only.\n\n## Blast Radius\nThe default of 1 keeps output byte-identical.\n\n## Verification\n- `python3 -m unittest discover -s tests`\n"
+  },
+  {
+   "number": 12,
+   "title": "feat(tally): count adjacent word pairs with --pairs",
+   "head": "feat/pairs-stack",
+   "base": "feat/min-count",
+   "author": "dev",
+   "draft": false,
+   "state": "OPEN",
+   "labels": [],
+   "reviewRequests": [],
+   "reviews": [],
+   "threads": [],
+   "comments": [],
+   "body": "## Why\nSome reports want the most common two-word phrases.\n\n## What changed\n- `--pairs` counts adjacent pairs, lowercased like single words.\n\n## Scope\n- Pairs stay within one line.\n\n## Blast Radius\nOnly runs that pass `--pairs` change.\n\n## Verification\n- `python3 -m unittest discover -s tests`\n"
+  }
+ ]
+}

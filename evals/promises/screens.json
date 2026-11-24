@@ -1,0 +1,50 @@
+{
+ "about": "Cases each PR 575 screen group runs from this checkout. Run them with live.py run --skills-at <arm commit>; the cases, fixtures, and graders stay fixed across arms. A case whose case.json sets screen binds no guide promise, gives no freshness receipt, and is graded only for the screen.",
+ "groups": {
+  "S1": {
+   "cases": [
+    "feature-boundary-run",
+    "feature-one-module-run"
+   ],
+   "not_built": "the audit's Refactoring case with a pinned contract (row 30's Refactoring site)"
+  },
+  "S2": {
+   "cases": [],
+   "not_built": "the seeded review PRs of the archived review-screen design (PORTING.md:191); fixture-only, judged by a cross-family reader"
+  },
+  "S3": {
+   "cases": [
+    "technical-writing-run",
+    "unslop-run"
+   ],
+   "not_built": "the small Feature reply and PR body as its own case; hold-open-pr-run records a Feature PR body and reply through the local forge"
+  },
+  "S4": {
+   "cases": [
+    "fork-cache-policy-run",
+    "autonomy-cache-bound-run"
+   ]
+  },
+  "S5": {
+   "cases": [
+    "how-wide-run",
+    "why-run",
+    "reflect-planted-run"
+   ]
+  },
+  "S6": {
+   "cases": [
+    "route-orchestrate",
+    "program-design-store-run",
+    "plan-only-store-run"
+   ]
+  },
+  "hold": {
+   "cases": [
+    "hold-open-pr-run",
+    "hold-babysit-run",
+    "hold-shipping-run"
+   ]
+  }
+ }
+}

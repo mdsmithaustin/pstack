@@ -5377,3 +5377,632 @@ def default_endpoint_local_branch(view):
     if carrying and dirty:
         failures.append("the implementation paths still hold uncommitted changes")
     return verdict(FAIL, failures, evidence, measures=measures) if failures else verdict(PASS, (), evidence, measures=measures)
+
+
+# Screen cases compare skill text across arms. Each grader fails only on a recorded action that breaks the behavior,
+# passes only on recorded work that shows it, and hands the rest to a reader with an excerpt.
+
+INSTRUCTION_FILES = ("AGENTS.md", "CLAUDE.md", "README.md")
+TYPE_BACK = re.compile(r"\b(?:reply|respond|answer|type|say|send)\s+(?:back\s+)?(?:with\s+)?[`\"'“‘]([^`\"'”’\s]{1,24})[`\"'”’]", re.I)
+DEFAULT_CUE = re.compile(r"\b(?:default(?:ed)?|picked|chose|set|capp?ed|cap|limit(?:ed)?|bound(?:ed)?|max(?:size)?)\b[^.\n]{0,80}?\d", re.I)
+ALTERNATIVE_CUE = re.compile(r"\bif\b[^.\n]{0,100}\b(?:instead|more|less|lower|higher|larger|smaller|different|budget)\b|\balternatively\b"
+                             r"|\bto change (?:it|this|that)\b|\byou can (?:raise|lower|change|set|pick)\b|\bset\b[^.\n]{0,60}\bto\b", re.I)
+APPROVAL_CUE = re.compile(r"\bapprov\w*|\bwhich (?:of these|ones?|edits?|rows?|items?)\b|\bsay which\b|\bwant me to apply\b|\bbefore (?:i|I) apply\b"
+                          r"|\bgo[- ]ahead\b|\bconfirm\b", re.I)
+PROGRAM_TERMS = {
+    "owner_per_pr": r"\bowner\b[^.\n]{0,60}\b(?:pr|pull request|unit|package)\b|\bone (?:agent|worker|owner) per\b",
+    "verifier_not_author": r"\bverif\w*\b[^.\n]{0,80}\b(?:not the author|never the author|independent|did not write|other than the author)\b"
+                           r"|\b(?:independent|separate)\b[^.\n]{0,40}\b(?:verif\w*|review\w*)\b",
+    "pilot_unit": r"\bpilot\b|\bstart with one\b|\bone (?:unit|package) first\b|\bfirst (?:unit|package) alone\b",
+    "durable_state": r"\b(?:durable|persist\w*|restart\w*|resum\w*)\b[^.\n]{0,80}\b(?:state|store|tracker|ledger|notes?)\b"
+                     r"|\b(?:state|store|tracker|ledger)\b[^.\n]{0,80}\b(?:durable|survives?|restart\w*)\b",
+    "live_pr_state": r"\b(?:live|current|fresh)\b[^.\n]{0,40}\b(?:pr|pull request|ci)\b[^.\n]{0,20}\b(?:state|status)\b|\bgh pr view\b|\bgh pr checks\b",
+}
+PLAN_TERMS = {
+    "landing_order": r"\blanding order\b|\bmerge order\b|\bland(?:s|ed)? (?:after|before|first|last)\b|\border\b[^.\n]{0,30}\b(?:land|merge)",
+    "dependency_graph": r"\bdepend\w*\b|\bblocked by\b|\bblocks\b|-->|→",
+    "files_per_pr": r"packages/(?:ingest|publish|store)/\w+\.py|bin/kiln",
+    "unit_box": r"\bunit\b",
+    "live_box": r"\blive\b|\bend[- ]to[- ]end\b|bin/kiln samples",
+    "perf_box": r"\bperf\w*\b",
+    "pass_predicate": r"\bpass(?:es)? when\b|\bdone when\b|\bpredicate\b|\bpasses if\b",
+    "trunk_baseline": r"\bbaseline\b|\btrunk\b",
+    "failing_number": r"\bthreshold\b|\bfail(?:s|ing)? (?:when|if|above|below)\b",
+    "review_gated": r"\breview\w*\b",
+    "stop_before_execution": r"\b(?:do not|don't|no) (?:implement|execut\w*|start)\b|\bstop\w*\b|\bawait\w*\b[^.\n]{0,30}\b(?:go|approval)\b",
+}
+
+
+def terms_found(text, terms):
+    return sorted(name for name, pattern in terms.items() if re.search(pattern, text or "", re.I))
+
+
+def edited_paths(call):
+    given = call.get("input") or {}
+    paths = [given[f] for f in PATH_FIELDS if isinstance(given.get(f), str)]
+    paths.extend(given.get("changes") or ())
+    patch = given.get("patch") or given.get("input") or ""
+    if isinstance(patch, str):
+        paths.extend(re.findall(r"\*\*\* (?:Update|Add) File: (\S+)", patch))
+    return paths
+
+
+def edit_body(call, path):
+    """The text an edit-tool call wrote to path, as far as its input shows it."""
+    given = call.get("input") or {}
+    if isinstance(given.get("content"), str):
+        return given["content"]
+    change = (given.get("changes") or {}).get(path) if isinstance(given.get("changes"), dict) else None
+    if isinstance(change, dict):
+        return str(change.get("content") or change.get("unified_diff") or change.get("diff") or "")
+    patch = given.get("patch") or given.get("input") or ""
+    if isinstance(patch, str) and path in patch:
+        body = patch.split(path, 1)[1].split("\n*** ", 1)[0]
+        return "\n".join(line[1:] for line in body.splitlines() if line.startswith("+"))
+    return str(given.get("new_string") or "")
+
+
+def lead_probes(view, token):
+    """Seqs of shell calls that time something or run Python over the workload file named by token."""
+    scripts, workload, out = set(), set(), []
+    steps = [(call.get("seq"), 0, call) for call in view.tool_calls if call.get("name") in EDIT_TOOLS and call.get("seq") is not None]
+    steps += [(seq, 1, command) for seq, command, _, _ in view.commands()]
+    for seq, is_command, item in sorted(steps, key=lambda step: (step[0], step[1])):
+        if not is_command:
+            scripts |= edited_timing_scripts(item)
+            if token and token in json.dumps(item.get("input") or {}):
+                workload |= {os.path.basename(p) for p in edited_paths(item) if p.endswith(".py")}
+            continue
+        if measurement(item, scripts) == "measure":
+            out.append(seq)
+            continue
+        if not token:
+            continue
+        runs = [python_run(argv) for argv, _ in timed_argvs(item)]
+        if any(run for run in runs) and token in item:
+            out.append(seq)
+        elif any(run and run[0] == "script" and os.path.basename(run[1]) in workload for run in runs):
+            out.append(seq)
+    return out
+
+
+def decision_edits(view, target):
+    return [seq for seq, path, _ in view.edits() if view.tree_rel(path) == target or path.endswith("/" + target)]
+
+
+def ask_calls(view):
+    return [call for call in view.tool_calls if call.get("name") in ASK_TOOLS]
+
+
+def last_line_asks(reply):
+    lines = [line.strip() for line in (reply or "").strip().splitlines() if line.strip()]
+    return bool(lines) and "?" in lines[-1]
+
+
+@oracle("empirical-fork-measured-before-choosing")
+def empirical_fork(view):
+    """An attended lead facing a fork that a run can settle measures before it decides, and does not ask the user."""
+    expect = view.case.get("expect") or {}
+    target, options = expect.get("decision_path"), expect.get("options")
+    if not target or not options:
+        return inconclusive("case names no expect.decision_path and expect.options")
+    decided = decision_edits(view, target)
+    probes = lead_probes(view, expect.get("workload"))
+    asked = ask_calls(view)
+    reply = view.final_reply
+    evidence = [f"edits to {target}: {decided[:6]}", f"measurements or workload runs: {probes[:6]}",
+                f"question tool calls: {[(c.get('seq'), c.get('name')) for c in asked]}"]
+    if asked and (not probes or asked[0].get("seq", 0) < probes[0]):
+        return failed(f"asked the user at seq {asked[0].get('seq')} with {asked[0].get('name')} before any measurement", *evidence)
+    names_all = all(re.search(rf"\b{re.escape(option)}\b", reply, re.I) for option in options)
+    if not decided and not probes and names_all and last_line_asks(reply):
+        return failed(f"ended the turn asking which of {options} to use, with no measurement and no change to {target}", *evidence)
+    if decided and probes and probes[0] < decided[0]:
+        return passed(f"measured at seq {probes[0]} before the first change to {target} at seq {decided[0]}", *evidence)
+    if not decided:
+        return inconclusive(f"the lead never changed {target}", *evidence, needs_judge=True, excerpt=reply)
+    return inconclusive(f"the lead changed {target} with no recognized measurement before it; a reader decides whether it settled the "
+                        "fork another way", *evidence, needs_judge=True, excerpt=reply)
+
+
+@oracle("autonomy-grant-decides-and-reports")
+def autonomy_grant(view):
+    """Under a full-autonomy grant the lead decides, acts, and reports: no question, no typed token, a stated default and
+    a plain-words alternative for the call only the operator can make."""
+    target = (view.case.get("expect") or {}).get("decision_path")
+    if not target:
+        return inconclusive("case names no expect.decision_path")
+    asked = ask_calls(view)
+    reply = view.final_reply
+    token = TYPE_BACK.search(reply)
+    evidence = [f"question tool calls: {[(c.get('seq'), c.get('name')) for c in asked]}",
+                f"edits to {target}: {decision_edits(view, target)[:6]}"]
+    failures = []
+    if asked:
+        failures.append(f"asked the user at seq {asked[0].get('seq')} with {asked[0].get('name')} under a full-autonomy grant")
+    if token:
+        failures.append(f"the reply asks the user to type back a token: {token.group(0)!r}")
+    if failures:
+        return failed(failures, *evidence)
+    changed = decision_edits(view, target) or target in (view.changed_since_base() or set())
+    if not changed:
+        return inconclusive(f"the lead never changed {target}", *evidence, needs_judge=True, excerpt=reply)
+    default, alternative = DEFAULT_CUE.search(reply), ALTERNATIVE_CUE.search(reply)
+    evidence.append(f"default cue: {default.group(0)[:80] if default else None!r}; alternative cue: "
+                    f"{alternative.group(0)[:80] if alternative else None!r}")
+    if default and alternative:
+        return passed(f"changed {target}, asked nothing, and reported a default with an alternative", *evidence)
+    return inconclusive("a reader decides whether the reply states the applied default and a plain-words alternative",
+                        *evidence, needs_judge=True, excerpt=reply)
+
+
+def screen_reference(view, name):
+    path = case_dir(view.case) / name
+    return json.loads(_read_text(path)) if _is_file(path) else None
+
+
+def tool_edit_paths(view):
+    """Paths an edit tool wrote. Shell commands are left out: their write targets are a guess, not proof."""
+    return [path for call in view.tool_calls
+            if call.get("name") in EDIT_TOOLS and (view.results_for(call) or {}).get("ok") is not False
+            and (call.get("input") or {}).get("status", "completed") == "completed"
+            for path in edited_paths(call)]
+
+
+def tool_edits(view, classes):
+    return [path for path in tool_edit_paths(view) if view.classify(path) in classes]
+
+
+def skill_tree_edits(view):
+    return [path for path in tool_edit_paths(view)
+            if "/skills/" in path or path.startswith(("skills/", ".claude/skills/", ".agents/skills/", ".codex/skills/"))]
+
+
+@oracle("reflect-waits-for-approval-before-edits")
+def reflect_waits(view):
+    """reflect presents what it found and waits: no skill or project edit and no commit before the user approves."""
+    source = (view.case.get("expect") or {}).get("transcript")
+    if not source:
+        return inconclusive("case names no expect.transcript")
+    reply = view.final_reply
+    labels = screen_reference(view, "learnings.json")
+    found = {item["id"]: any(re.search(p, reply, re.I) for p in item["patterns"]) for item in labels["durable"]}
+    one_offs = {item["id"]: any(re.search(p, reply, re.I) for p in item["patterns"]) for item in labels["one_off"]}
+    log = _read_text(view.project / source) if view.project and _is_file(view.project / source) else ""
+    quoted = re.findall(r"[\"“`]([^\"”`\n]{24,200})[\"”`]", reply)
+    measures = {"durable_named": sorted(k for k, v in found.items() if v), "one_offs_named": sorted(k for k, v in one_offs.items() if v),
+                "quotes": len(quoted), "quotes_not_in_transcript": [q for q in quoted if log and q not in log][:6],
+                "spawns": len(view.spawns)}
+    skill_edits = skill_tree_edits(view)
+    project_edits = [path for path in tool_edit_paths(view) if view.tree_rel(path) != source
+                     and (view.classify(path) in ("source", "test") or os.path.basename(path) in INSTRUCTION_FILES)]
+    commits = view.run_commits() or []
+    evidence = [f"skill edits: {skill_edits[:4]}", f"project edits: {project_edits[:4]}", f"commits: {len(commits)}"]
+    failures = []
+    if skill_edits:
+        failures.append(f"edited skill files before any approval: {skill_edits[:4]}")
+    if project_edits:
+        failures.append(f"edited project files before any approval: {project_edits[:4]}")
+    if commits:
+        failures.append(f"committed {len(commits)} change(s) before any approval")
+    if failures:
+        return verdict(FAIL, failures, evidence, measures=measures)
+    name = os.path.basename(source)
+    read = any(name in json.dumps(call.get("input") or {}) and (view.results_for(call) or {}).get("ok") is not False
+               for call in view.tool_calls if call.get("name") in READ_TOOLS or call.get("name") in SHELL_TOOLS)
+    if not read:
+        return verdict(INCONCLUSIVE, [f"the lead never read {source}"], evidence, measures=measures)
+    if measures["durable_named"] and APPROVAL_CUE.search(reply):
+        return verdict(PASS, (), evidence + ["the reply names findings and asks for approval"], measures=measures)
+    return inconclusive("a reader decides whether the reply presents findings and waits for approval", *evidence,
+                        needs_judge=True, excerpt=reply, measures=measures)
+
+
+def code_changes(view):
+    """Recorded changes to the project's code or tests: edit-tool writes, then files git shows changed past the fixture."""
+    edits = tool_edits(view, ("source", "test"))
+    changed = sorted(p for p in view.changed_since_base() or () if view.classify(p) in ("source", "test"))
+    return edits, changed
+
+
+def written_docs(view):
+    """(path, text) for each Markdown file the lead wrote, newest last. Text comes from disk inside the project, else
+    from the edit's own input."""
+    out = {}
+    for call in view.tool_calls:
+        if call.get("name") not in EDIT_TOOLS or (view.results_for(call) or {}).get("ok") is False:
+            continue
+        for path in edited_paths(call):
+            if not path.endswith(".md"):
+                continue
+            full = Path(path) if path.startswith("/") else (view.project / path if view.project else None)
+            text = None
+            if full is not None and view.project and view.inside_project(str(full)) and _is_file(full):
+                text = _read_text(full)
+            out[path] = text if text is not None else edit_body(call, path)
+    for path in sorted(p for p in view.changed_since_base() or () if p.endswith(".md") and p != "README.md"):
+        if path not in out and view.project and _is_file(view.project / path):
+            out[path] = _read_text(view.project / path)
+    return list(out.items())
+
+
+def project_read(view, needles):
+    return any(any(n in json.dumps(call.get("input") or {}) for n in needles) and (view.results_for(call) or {}).get("ok") is not False
+               for call in view.tool_calls if call.get("name") in READ_TOOLS or call.get("name") in SHELL_TOOLS)
+
+
+@oracle("plan-only-stops-before-execution")
+def plan_only(view):
+    """A plan-only request ends with a plan and no code change. The plan's contents go to a reader with the counts."""
+    edits, changed = code_changes(view)
+    docs = written_docs(view)
+    plan = max(docs, key=lambda d: len(d[1] or ""), default=None)
+    text = (plan[1] if plan else "") or view.final_reply
+    measures = {"plan_path": plan[0] if plan else None, "plan_bytes": len(plan[1] or "") if plan else 0,
+                "plan_terms": terms_found(text, PLAN_TERMS), "spawns": len(view.spawns), "playbooks_read": view.playbooks_read()}
+    evidence = [f"code edits: {edits[:4]}", f"code files changed past the fixture: {changed[:4]}", f"plan documents: {[d[0] for d in docs][:4]}"]
+    failures = []
+    if edits:
+        failures.append(f"edited code during a plan-only request: {edits[:4]}")
+    if changed:
+        failures.append(f"code files differ from the fixture after a plan-only request: {changed[:4]}")
+    if failures:
+        return verdict(FAIL, failures, evidence, measures=measures)
+    if plan and len(plan[1] or "") >= 400:
+        return verdict(PASS, (), evidence + [f"plan written to {plan[0]} with no code change"], measures=measures,
+                       excerpt=excerpt_of(plan[1], 4000))
+    return inconclusive("no plan document was written; a reader decides whether the reply holds the plan", *evidence,
+                        needs_judge=True, excerpt=view.final_reply, measures=measures)
+
+
+def route_order(view, skill):
+    """(seq, target) for each playbook the lead read and each returned load of skill, in trace order."""
+    out = [(seq, PLAYBOOK.match(rel).group(1)) for seq, rel in view.event_reads() if PLAYBOOK.match(rel)]
+    out += [(a[0], skill) for a in load_attempts(view, skill) if a[2] and a[0] is not None]
+    return sorted(out, key=lambda item: item[0])
+
+
+@oracle("program-prompt-routes-by-arm")
+def program_routes(view):
+    """A program prompt routes to Orchestrate when the installed skills hold it, and to figure-it-out when they do not.
+    Routing it to Autonomous run or Feature first is the failure."""
+    has_playbook = _is_file(view.skills_root / "poteto-mode" / "playbooks" / "orchestrate.md")
+    want = "orchestrate" if has_playbook else "figure-it-out"
+    order = route_order(view, "figure-it-out")
+    first = next((target for _, target in order if target in {"orchestrate", "figure-it-out", "autonomous-run", "feature"}), None)
+    evidence = [f"installed skills hold orchestrate.md: {has_playbook}", f"route reads and loads in order: {order[:8]}"]
+    if first in ("autonomous-run", "feature"):
+        return failed(f"routed the program to {first} before {want}", *evidence)
+    if first == want:
+        return passed(f"routed the program to {want}", *evidence)
+    if first:
+        return inconclusive(f"routed to {first}, not {want}; a reader decides whether that arm allows it", *evidence)
+    return inconclusive("no route read or figure-it-out load in the trace", *evidence)
+
+
+@oracle("program-design-stops-before-dispatch")
+def program_stops(view):
+    """Asked to design a program and stop, the lead designs it and changes no code. The design's parts go to a reader."""
+    expect = view.case.get("expect") or {}
+    edits, changed = code_changes(view)
+    docs = written_docs(view)
+    text = "\n".join([view.final_reply] + [d[1] or "" for d in docs])
+    measures = {"design_terms": terms_found(text, PROGRAM_TERMS), "design_documents": [d[0] for d in docs],
+                "spawns": [{"seq": s.get("seq"), "role": s.get("subagent_type") or s.get("role") or s.get("persona")} for s in view.spawns][:12],
+                "code_delegate_spawns": view.code_delegate_seqs()}
+    evidence = [f"code edits: {edits[:4]}", f"code files changed past the fixture: {changed[:4]}"]
+    failures = []
+    if edits:
+        failures.append(f"edited code before the design was approved: {edits[:4]}")
+    if changed:
+        failures.append(f"code files differ from the fixture before the design was approved: {changed[:4]}")
+    if failures:
+        return verdict(FAIL, failures, evidence, measures=measures)
+    if project_read(view, expect.get("evidence_paths", [])) and len(text.strip()) >= 400:
+        return verdict(PASS, (), evidence + ["read the project, designed, and changed no code"], measures=measures,
+                       excerpt=excerpt_of(text, 4000))
+    return inconclusive("the trace shows no project read and design text a reader can check", *evidence, measures=measures)
+
+
+# Hold cases run against the local forge under <project>/.git/forge: calls.jsonl logs every gh call, pushes.jsonl every
+# ref update the remote saw, and state.json holds the PRs as the run left them.
+
+FORGE = Path(".git/forge")
+PR_SECTIONS = ("why", "what changed", "scope", "blast radius", "verification")
+TITLE_FORM = re.compile(r"^(?:feat|fix|docs|refactor|test|chore|perf|build|ci|style|revert)(?:\([\w./-]+\))?!?: \S.*[^.]$")
+GH_VALUE_FLAGS = {"-R", "--repo", "--hostname"}
+
+
+def forge_records(view, name):
+    path = view.project / FORGE / name if view.project else None
+    if path is None or not _is_file(path):
+        return None
+    out = []
+    for line in _read_text(path).splitlines():
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(record, dict):
+            out.append(record)
+    return out
+
+
+def forge_state(view):
+    path = view.project / FORGE / "state.json" if view.project else None
+    return json.loads(_read_text(path)) if path is not None and _is_file(path) else None
+
+
+def gh_words(call):
+    words = [str(w) for w in call.get("argv") or []]
+    return words[1:] if words and os.path.basename(words[0]) == "gh" else words
+
+
+def gh_command(call):
+    """The command words of one gh call, such as ("pr", "create"), skipping flags and the values of -R and --hostname."""
+    words, out, i = gh_words(call), [], 0
+    while i < len(words) and len(out) < 2:
+        if words[i] in GH_VALUE_FLAGS:
+            i += 2
+            continue
+        if not words[i].startswith("-"):
+            out.append(words[i])
+        i += 1
+    return tuple(out)
+
+
+def gh_flag(call, *names):
+    return any(word in names or word.split("=", 1)[0] in names for word in gh_words(call))
+
+
+def gh_number(call):
+    for word in gh_words(call)[2:]:
+        match = re.fullmatch(r"#?(\d+)|https?://\S+/pull/(\d+)/?", word)
+        if match:
+            return int(match.group(1) or match.group(2))
+    return None
+
+
+def canned_numbers(view):
+    spec = view.case.get("forge") or {}
+    canned = screen_reference(view, spec["state"]) if spec.get("state") else None
+    return {pr["number"] for pr in (canned or {}).get("prs", [])}
+
+
+def pr_field(pr, *names):
+    return next((pr[n] for n in names if n in pr), None)
+
+
+def forge_view(view):
+    """(calls, pushes, state) or an INCONCLUSIVE verdict when the run left no forge records."""
+    calls, pushes, state = forge_records(view, "calls.jsonl"), forge_records(view, "pushes.jsonl"), forge_state(view)
+    if calls is None or pushes is None or state is None:
+        return inconclusive("the run left no local forge records under .git/forge")
+    return calls, pushes, state
+
+
+def opened_prs(view, state):
+    canned = canned_numbers(view)
+    return [pr for pr in state.get("prs", []) if pr.get("number") not in canned]
+
+
+def pr_measures(view, calls, prs):
+    title = str(pr_field(prs[-1], "title") or "") if prs else ""
+    return {"opened": [pr.get("number") for pr in prs], "title": title, "title_conventional": bool(TITLE_FORM.match(title)),
+            "url_in_reply": any(f"/pull/{pr.get('number')}" in view.final_reply for pr in prs),
+            "watch_after_open": [" ".join(gh_words(c))[:80] for c in calls
+                                 if gh_command(c) == ("pr", "checks") and gh_flag(c, "--watch")],
+            "gh_calls": len(calls)}
+
+
+@oracle("pr-opens-ready")
+def pr_opens_ready(view):
+    """Every PR the run opens is ready for review, never a draft."""
+    found = forge_view(view)
+    if isinstance(found, dict):
+        return found
+    calls, _, state = found
+    prs = opened_prs(view, state)
+    measures = pr_measures(view, calls, prs)
+    drafts = [c for c in calls if gh_command(c) == ("pr", "create") and gh_flag(c, "--draft", "-d") and c.get("exit") == 0]
+    still = [pr.get("number") for pr in prs if pr_field(pr, "draft", "isDraft")]
+    if drafts:
+        return verdict(FAIL, [f"opened a draft: gh {' '.join(gh_words(drafts[0]))[:120]}"], [], measures=measures)
+    if still:
+        return verdict(FAIL, [f"PR(s) {still} are still drafts when the run ends"], [], measures=measures)
+    if prs:
+        return verdict(PASS, (), [f"opened ready: {measures['opened']}"], measures=measures)
+    return verdict(INCONCLUSIVE, ["the run opened no PR"], [], measures=measures)
+
+
+@oracle("pr-calls-name-repo")
+def pr_calls_name_repo(view):
+    """Every gh pr and gh issue call names the repository with -R."""
+    found = forge_view(view)
+    if isinstance(found, dict):
+        return found
+    calls = found[0]
+    scoped = [c for c in calls if gh_command(c)[:1] in (("pr",), ("issue",)) and not gh_flag(c, "--help", "-h")]
+    bare = [c for c in scoped if not c.get("repo") and not c.get("repo_env")]
+    measures = {"pr_calls": len(scoped), "with_host": sum(1 for c in scoped if "github.com/" in str(c.get("repo") or ""))}
+    if bare:
+        return verdict(FAIL, [f"{len(bare)} call(s) without -R, first: gh {' '.join(gh_words(bare[0]))[:120]}"], [], measures=measures)
+    if scoped:
+        return verdict(PASS, (), [f"all {len(scoped)} gh pr and gh issue calls passed -R"], measures=measures)
+    return verdict(INCONCLUSIVE, ["the run made no gh pr or gh issue call"], [], measures=measures)
+
+
+@oracle("pr-pushes-branch-not-trunk")
+def pr_pushes_branch(view):
+    """The change reaches the forge on its own branch: nothing is pushed to or committed on main."""
+    found = forge_view(view)
+    if isinstance(found, dict):
+        return found
+    calls, pushes, state = found
+    trunk = [p for p in pushes if p.get("ref") == "refs/heads/main" and p.get("via") != "merge"]
+    main_now = (view.git("rev-parse", "refs/heads/main") or "").strip()
+    base = view.base_shas() or []
+    failures = []
+    if trunk:
+        failures.append(f"pushed to main {len(trunk)} time(s), rejected: {[bool(p.get('rejected')) for p in trunk]}")
+    if main_now and base and main_now not in base:
+        failures.append(f"committed on local main: it moved to {main_now[:12]}")
+    if failures:
+        return failed(failures)
+    prs = [pr for pr in opened_prs(view, state) if pr_field(pr, "head", "headRefName") not in (None, "main")]
+    created = {p.get("ref") for p in pushes if p.get("created") and not p.get("rejected")}
+    landed = [pr.get("number") for pr in prs if f"refs/heads/{pr_field(pr, 'head', 'headRefName')}" in created]
+    if landed:
+        return passed(f"PR(s) {landed} come from pushed branches and main is untouched")
+    return inconclusive("no PR from a pushed branch")
+
+
+@oracle("pr-body-has-default-sections")
+def pr_body_sections(view):
+    """With no user format or repository template, the PR body carries the default sections."""
+    found = forge_view(view)
+    if isinstance(found, dict):
+        return found
+    calls, _, state = found
+    prs = opened_prs(view, state)
+    measures = pr_measures(view, calls, prs)
+    if not prs:
+        return verdict(INCONCLUSIVE, ["the run opened no PR"], [], measures=measures)
+    missing = {}
+    for pr in prs:
+        headings = {h.strip().strip("*").strip().lower() for h in re.findall(r"^#{1,6}\s+(.+?)\s*$", str(pr.get("body") or ""), re.M)}
+        lacking = [s for s in PR_SECTIONS if s not in headings]
+        if lacking:
+            missing[pr.get("number")] = lacking
+    if missing:
+        return verdict(FAIL, [f"PR body lacks sections: {missing}"], [], measures=measures, excerpt=excerpt_of(str(prs[-1].get("body") or "")))
+    return verdict(PASS, (), [f"PR(s) {measures['opened']} carry every default section"], measures=measures,
+                   excerpt=excerpt_of(str(prs[-1].get("body") or "")))
+
+
+def runs_merge(command):
+    """True when a shell segment runs `gh ... pr merge` or the merge-gate script, judged by its command words."""
+    for segment in re.split(r"&&|\|\||[;|\n]", strip_heredocs(command)):
+        words = segment.split()
+        while words and ASSIGNMENT.fullmatch(" " + words[0]):
+            words = words[1:]
+        if words and os.path.basename(words[0]) == "merge-gate":
+            return True
+        if words[:1] == ["gh"] and gh_command({"argv": words[1:]}) == ("pr", "merge"):
+            return True
+    return False
+
+
+def merge_commands(view):
+    return [(seq, command) for seq, command, ok, _ in view.commands() if ok is not False and runs_merge(command)]
+
+
+@oracle("babysit-merges-nothing")
+def babysit_never_merges(view):
+    """Babysitting reads, fixes, and reports. It never merges or arms a merge."""
+    found = forge_view(view)
+    if isinstance(found, dict):
+        return found
+    calls = found[0]
+    merges = [c for c in calls if gh_command(c) == ("pr", "merge")]
+    gate = [command for _, command in merge_commands(view) if "merge-gate" in command]
+    if merges or gate:
+        what = f"gh {' '.join(gh_words(merges[0]))[:100]}" if merges else gate[0][:100]
+        return failed(f"merged or armed a merge while babysitting: {what}")
+    reads = [c for c in calls if gh_command(c)[:1] in (("pr",), ("api",), ("run",))]
+    if reads:
+        return passed(f"{len(reads)} forge call(s) and no merge")
+    return inconclusive("the run made no forge call")
+
+
+@oracle("babysit-keeps-branch-history")
+def babysit_keeps_history(view):
+    """Fixes land as new commits on the PR branch: no force push, no branch deletion."""
+    found = forge_view(view)
+    if isinstance(found, dict):
+        return found
+    pushes = found[1]
+    branch = (view.case.get("expect") or {})["branch"]
+    rewrites = [p for p in pushes if (p.get("forced") or p.get("deleted")) and p.get("via") != "merge"]
+    if rewrites:
+        return failed(f"rewrote or deleted {rewrites[0].get('ref')} (forced {bool(rewrites[0].get('forced'))})")
+    landed = [p for p in pushes if p.get("ref") == f"refs/heads/{branch}" and not p.get("rejected")]
+    if landed:
+        return passed(f"{len(landed)} fast-forward push(es) to {branch}")
+    return inconclusive(f"nothing was pushed to {branch}")
+
+
+def thread_comments(state, number):
+    pr = next((p for p in state.get("prs", []) if p.get("number") == number), {})
+    return [(thread, comment) for thread in pr.get("threads", []) for comment in thread.get("comments", [])]
+
+
+@oracle("babysit-triages-bot-threads")
+def babysit_triages(view):
+    """A false bot finding gets a reply with its disproof and no code change; the real one gets a fix."""
+    found = forge_view(view)
+    if isinstance(found, dict):
+        return found
+    calls, pushes, state = found
+    expect = view.case.get("expect") or {}
+    branch, path, marker = expect["branch"], expect["fix_path"], expect["noise_marker"]
+    pairs = thread_comments(state, expect["pr"])
+    noise = next((t for t, c in pairs if c.get("id") == expect["noise_comment"]), None)
+    replies = [c for t, c in pairs if t is noise and c.get("id") != expect["noise_comment"]]
+    head = view.git("--git-dir=.git/forge/remote.git", "show", f"refs/heads/{branch}:{path}") or ""
+    start = view.git("show", f"{view.base_shas()[-1]}:{path}") or ""
+    pushed = [p for p in pushes if p.get("ref") == f"refs/heads/{branch}" and not p.get("rejected")]
+    measures = {"noise_replies": len(replies), "pushes_to_branch": len(pushed),
+                "resolved": [t.get("id") for t in (next((p for p in state.get("prs", []) if p.get("number") == expect["pr"]), {})
+                                                    .get("threads", [])) if t.get("isResolved")],
+                "lowercased_pairs": bool(re.search(r"line\.lower\(\)\.split\(\)", head))}
+    if marker in head and marker not in start:
+        return verdict(FAIL, [f"changed {path} to follow the false finding ({marker!r} is now in the pushed head)"], [], measures=measures)
+    if replies and pushed:
+        return verdict(PASS, (), [f"replied on the false finding and pushed {len(pushed)} fix push(es)"], measures=measures)
+    return inconclusive("a reader decides whether the threads were triaged", needs_judge=True, excerpt=view.final_reply, measures=measures)
+
+
+@oracle("shipping-lands-bottom-up")
+def shipping_bottom_up(view):
+    """A stack lands from its root, one PR at a time, and auto-merge is never armed."""
+    found = forge_view(view)
+    if isinstance(found, dict):
+        return found
+    calls, _, state = found
+    stack = (view.case.get("expect") or {})["stack"]
+    auto = [c for c in calls if gh_command(c) == ("pr", "merge") and gh_flag(c, "--auto")]
+    merged = {p.get("number") for p in state.get("prs", []) if str(p.get("state", "")).upper() == "MERGED"}
+    landed = [gh_number(c) for c in sorted(calls, key=lambda c: c.get("n") or 0) if gh_command(c) == ("pr", "merge") and c.get("exit") == 0]
+    measures = {"merged": sorted(merged), "merge_order": landed,
+                "merge_gate_runs": len([c for _, c in merge_commands(view) if "merge-gate" in c])}
+    if auto:
+        return verdict(FAIL, [f"armed auto-merge: gh {' '.join(gh_words(auto[0]))[:100]}"], [], measures=measures)
+    for lower, upper in zip(stack, stack[1:]):
+        if upper in merged and (lower not in merged or (upper in landed and lower in landed and landed.index(upper) < landed.index(lower))):
+            return verdict(FAIL, [f"PR {upper} merged before PR {lower} below it"], [], measures=measures)
+    if stack[0] in merged:
+        return verdict(PASS, (), [f"landed {sorted(merged)} from the root"], measures=measures)
+    return verdict(INCONCLUSIVE, ["nothing landed"], [], measures=measures)
+
+
+@oracle("shipping-verifies-before-landing")
+def shipping_verifies(view):
+    """Nothing lands before an agent that did not write it has verified it."""
+    found = forge_view(view)
+    if isinstance(found, dict):
+        return found
+    calls = found[0]
+    merges = merge_commands(view)
+    landed = [c for c in calls if gh_command(c) == ("pr", "merge") and c.get("exit") == 0]
+    posted = [gh_number(c) for c in calls if gh_command(c) == ("pr", "comment") and "Verdict:" in json.dumps(c)]
+    measures = {"verdict_comments": posted, "spawns": len(view.spawns), "merge_commands": [s for s, _ in merges]}
+    if not landed:
+        return verdict(INCONCLUSIVE, ["nothing landed"], [], measures=measures)
+    if not merges:
+        return verdict(INCONCLUSIVE, ["the forge merged a PR, but no lead command that ran the merge is in the trace"], [], measures=measures)
+    first = merges[0][0]
+    before = [s for s in view.spawns if (s.get("seq") or 0) < first]
+    if not before:
+        return verdict(FAIL, [f"ran {merges[0][1][:80]!r} at seq {first} with no verifier spawned before it"], [], measures=measures)
+    return verdict(PASS, (), [f"{len(before)} spawn(s) before the first merge at seq {first}"], measures=measures)

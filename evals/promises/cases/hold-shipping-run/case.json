@@ -1,0 +1,41 @@
+{
+ "promises": [
+  "shipping-lands-bottom-up",
+  "shipping-verifies-before-landing"
+ ],
+ "fixture": "tally",
+ "history": "tally-stack",
+ "entry": "poteto-mode",
+ "turns": [
+  "land the stack, prs 11 and 12."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "forge": {
+  "repo": "acme/tally",
+  "push": [
+   "main",
+   "feat/min-count",
+   "feat/pairs-stack"
+  ],
+  "protected": [
+   "main"
+  ],
+  "state": "forge.json",
+  "ci": {
+   "name": "test",
+   "command": "python3 -m unittest discover -s tests",
+   "timeout_s": 120
+  }
+ },
+ "expect": {
+  "stack": [
+   11,
+   12
+  ]
+ },
+ "screen": "hold",
+ "note": "a green two-PR stack with no reviews; the bundled merge-gate needs bun, which no sandbox here provides, so a lead may stop at landing"
+}

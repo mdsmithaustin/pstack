@@ -1,0 +1,35 @@
+#!/bin/sh
+forge=$(cd "$(dirname "$0")/.." && pwd -P)
+repo=$(sed -n 's/^ *"repo": "\([^"]*\)".*/\1/p' "$forge/state.json" | head -n 1)
+deny() {
+  echo "ERROR: Repository not found." >&2
+  exit 128
+}
+while [ $# -gt 0 ]; do
+  case $1 in
+    -[bcDEFiJlLmoOpQRSwW]) shift 2 ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+[ $# -ge 2 ] || deny
+host=$1
+shift
+command="$*"
+case ${host#*@} in
+  github.com) ;;
+  *) deny ;;
+esac
+case $command in
+  "git-receive-pack '"*"'") service=receive-pack ;;
+  "git-upload-pack '"*"'") service=upload-pack ;;
+  "git-upload-archive '"*"'") service=upload-archive ;;
+  *) deny ;;
+esac
+path=${command#* \'}
+path=${path%\'}
+path=${path#/}
+path=${path%.git}
+[ -n "$repo" ] && [ "$path" = "$repo" ] || deny
+unset GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 exec git -c core.hooksPath="$forge/remote.git/hooks" "$service" "$forge/remote.git"

@@ -1,0 +1,17 @@
+{
+  "fixture": "tally",
+  "steps": [
+    {
+      "dir": "step-1",
+      "branch": "feat/min-count",
+      "delete": [],
+      "message": "feat(tally): hide rare words with --min-count\n\nLong files print a tail of words seen once. --min-count drops words seen fewer than N times; the default of 1 keeps the output byte-identical."
+    },
+    {
+      "dir": "step-2",
+      "branch": "feat/pairs-stack",
+      "delete": [],
+      "message": "feat(tally): count adjacent word pairs with --pairs\n\nSome reports want the most common two-word phrases. --pairs counts adjacent pairs on each line, lowercased like single words, and honors --min-count."
+    }
+  ]
+}

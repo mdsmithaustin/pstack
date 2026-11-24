@@ -1,0 +1,25 @@
+{
+ "promises": [
+  "empirical-fork-measured-before-choosing"
+ ],
+ "fixture": "relay",
+ "history": "relay-cache-bound",
+ "entry": "poteto-mode",
+ "turns": [
+  "make the cache LRU or TTL, whichever is faster"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "decision_path": "relay/cache.py",
+  "options": [
+   "LRU",
+   "TTL"
+  ],
+  "workload": "reads.log"
+ },
+ "screen": "S4",
+ "note": "attended empirical fork: feeds/reads.log lets a run settle which policy is faster, so the lead measures instead of asking"
+}

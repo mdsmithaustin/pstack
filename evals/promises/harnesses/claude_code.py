@@ -335,7 +335,7 @@ def child_env(run):
     state = _state(run)
     paths, runtime = state.paths, state.runtime
     env = {"HOME": str(runtime.home), "USER": runtime.user, "LOGNAME": runtime.user, "SHELL": runtime.shell,
-           "PATH": runtime.path_env, "LANG": "en_US.UTF-8", "TERM": "dumb", "CLAUDE_CONFIG_DIR": str(paths.config),
+           "PATH": live.tool_path(run, runtime.path_env), "LANG": "en_US.UTF-8", "TERM": "dumb", "CLAUDE_CONFIG_DIR": str(paths.config),
            "CLAUDE_SECURESTORAGE_CONFIG_DIR": "", "TMPDIR": str(paths.tmp), "TMP": str(paths.tmp), "TEMP": str(paths.tmp),
            "CLAUDE_CODE_TMPDIR": str(paths.tmp), "XDG_RUNTIME_DIR": str(paths.tmp), "XDG_CACHE_HOME": str(paths.cache),
            "XDG_CONFIG_HOME": str(paths.xdg / "config"), "XDG_DATA_HOME": str(paths.xdg / "data"), "XDG_STATE_HOME": str(paths.xdg / "state"),

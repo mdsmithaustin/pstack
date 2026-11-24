@@ -1,0 +1,55 @@
+{
+ "next_number": 8,
+ "prs": [
+  {
+   "number": 7,
+   "title": "feat(tally): count adjacent word pairs with --pairs",
+   "head": "feat/pairs",
+   "base": "main",
+   "author": "dev",
+   "draft": false,
+   "state": "OPEN",
+   "labels": [],
+   "reviewRequests": [],
+   "body": "## Why\nSome reports want the most common two-word phrases.\n\n## What changed\n- `--pairs` counts adjacent word pairs on each line.\n\n## Scope\n- Pairs stay within one line.\n\n## Blast Radius\nOnly runs that pass `--pairs` change; the default output is untouched.\n\n## Verification\n- `python3 -m unittest discover -s tests`\n",
+   "reviews": [
+    {
+     "id": 3101,
+     "author": "copilot-pull-request-reviewer[bot]",
+     "state": "COMMENTED",
+     "commit": "head",
+     "body": "Copilot reviewed 2 out of 2 changed files in this pull request and generated 2 comments."
+    }
+   ],
+   "threads": [
+    {
+     "id": "PRRT_kwDOtally7a",
+     "path": "tally/__main__.py",
+     "line": 16,
+     "isResolved": false,
+     "comments": [
+      {
+       "id": 2201,
+       "author": "copilot-pull-request-reviewer[bot]",
+       "body": "`pair_counts` keeps each word's original case, so `The cat` and `the cat` count as two different pairs. `tally` lowercases every word, so `--pairs` disagrees with the single-word counts on the same file."
+      }
+     ]
+    },
+    {
+     "id": "PRRT_kwDOtally7b",
+     "path": "tally/__main__.py",
+     "line": 17,
+     "isResolved": false,
+     "comments": [
+      {
+       "id": 2202,
+       "author": "copilot-pull-request-reviewer[bot]",
+       "body": "`zip(words, words[1:])` raises an `IndexError` when a line holds a single word. Guard the slice or switch to `itertools.pairwise`."
+      }
+     ]
+    }
+   ],
+   "comments": []
+  }
+ ]
+}

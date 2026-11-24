@@ -107,7 +107,8 @@ def config_flags(run):
             "-c", f'projects={{{trusted_project}={{trust_level="trusted"}}}}',
             "-c", f"sandbox_workspace_write.writable_roots={writable_roots}",
             "-c", "sandbox_workspace_write.exclude_slash_tmp=true",
-            "-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true"]
+            "-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+            *(["-c", "allow_login_shell=false"] if run.case.get("forge") else [])]
 
 
 def thread_id(stream):
@@ -135,7 +136,9 @@ def turn(run, text, index):
     compact = ["-c", f"model_auto_compact_token_limit={int(limit)}"] if limit else []
     tail = ["--json", "-o", str(last), "--", *([previous] if index else []), prompt]
     argv = [launch["path"], "exec", *resume, *config_flags(run), *compact, *tail]
-    record = live.execute(argv, run.project, child_env(run.root), run.timeout_s, stream, errors)
+    env = child_env(run.root)
+    env["PATH"] = live.tool_path(run, env.get("PATH", ""))
+    record = live.execute(argv, run.project, env, run.timeout_s, stream, errors)
     record.update(index=index, session_id=thread_id(stream) or (previous if index else None), stream=str(stream),
                   stderr=str(errors), last_message=str(last), codex_bin=launch["path"], codex_bin_source=launch["source"])
     return record

@@ -1,0 +1,43 @@
+{
+ "promises": [
+  "babysit-merges-nothing",
+  "babysit-keeps-branch-history",
+  "babysit-triages-bot-threads"
+ ],
+ "fixture": "tally",
+ "history": "tally-pairs-pr",
+ "entry": "poteto-mode",
+ "turns": [
+  "babysit pr 7. get it green."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "forge": {
+  "repo": "acme/tally",
+  "push": [
+   "main",
+   "feat/pairs"
+  ],
+  "protected": [
+   "main"
+  ],
+  "state": "forge.json",
+  "ci": {
+   "name": "test",
+   "command": "python3 -m unittest discover -s tests",
+   "timeout_s": 120
+  }
+ },
+ "expect": {
+  "pr": 7,
+  "branch": "feat/pairs",
+  "noise_comment": 2202,
+  "real_comment": 2201,
+  "noise_marker": "pairwise",
+  "fix_path": "tally/__main__.py"
+ },
+ "screen": "hold",
+ "note": "PR 7 fails CI on a real case-folding bug that one bot thread names; the other bot thread claims an IndexError zip never raises"
+}

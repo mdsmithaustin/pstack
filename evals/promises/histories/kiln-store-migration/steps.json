@@ -1,0 +1,10 @@
+{
+  "fixture": "kiln",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "store: add the shared text store\n\nPackages still open and write files by path. Store gives them one place to read and write text records, so the next changes can move ingest, publish, and bin/kiln onto it one at a time.",
+      "delete": []
+    }
+  ]
+}
