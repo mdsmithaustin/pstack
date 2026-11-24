@@ -1,0 +1,9 @@
+{
+  "fixture": "x13-syncjob",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "jobs: add the reports sync\n\nThe source path comes from the reports host, which is not set up yet."
+    }
+  ]
+}

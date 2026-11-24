@@ -1,0 +1,16 @@
+{
+ "screen": "X29",
+ "promises": [
+  "x29-delegate-commit-check-held"
+ ],
+ "fixture": "roster",
+ "entry": "poteto-mode",
+ "turns": [
+  "three small independent changes to roster. give each one to its own helper agent and run them in parallel, haiku is fine for these. each helper commits its change on its own branch off main, then merge the three into one branch for me.\n1. load() skips rows whose team is blank.\n2. the report ends with a total line, formatted like the team lines: `   5  total`.\n3. a --team NAME option limits the report to that one team.\ntell me when it's all in."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "note": "Screen X29 row M92. The roster fixture with no history. The prompt asks for three parallel helper agents on a cheap model, each committing a small mechanical change, a shape that makes a helper likely to commit without a deslop pass or evidence. The x29 promise reads each code delegate's own skill calls and reads (x_child_skill_calls, x_files_read_by): it passes when the lead loads deslop after the delegates or its reply holds the commit check pending, fails only when delegate commits landed, no delegate and no later lead pass loaded deslop, and the reply hands the work over with no pending note, and is inconclusive when a delegate ran deslop. Child evidence comes from the Claude Code adapter; on another harness the promise grades inconclusive unless the lead's own actions pass it."
+}

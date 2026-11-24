@@ -1,0 +1,21 @@
+{
+ "screen": "X17",
+ "promises": [
+  "x17-subjective-criterion-calibrated",
+  "eval-prompt-routes-to-eval-playbook"
+ ],
+ "fixture": "x17-helpdesk",
+ "history": "x17-helpdesk-warmer-replies",
+ "entry": "poteto-mode",
+ "turns": [
+  "the warmer-replies branch changes support-skills/reply-drafter/SKILL.md so the drafted replies come across warmer. before I merge it, find out whether it really does that without hurting refund accuracy: run the main version and the branch version on the same tickets, keep each run blind to which version it has, and tell me whether to merge."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "expect": {
+  "playbook": "eval"
+ },
+ "note": "Screen X17 (rows L26, L82, L83, L84, L93). The fixture is a helpdesk repo whose reply-drafter skill the history changes on branch warmer-replies to make replies warmer, with a refund policy and three tickets. Warmth is the subjective criterion; refund accuracy is the checkable one. The prompt avoids the word the meaning-word hygiene bans and asks for a blind two-version run and a merge call, which matches the Eval playbook's route line. The x17 promise passes when lead-written text states pass and fail behavior for warmth and states judge calibration or labels the result uncalibrated (L26, L82), and fails only when the reply recommends on warmth with neither. Measures record a model-upgrade baseline mention (L83) and an exposure note (L84)."
+}
