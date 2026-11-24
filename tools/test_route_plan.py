@@ -867,8 +867,8 @@ class RepositoryEndpoint(unittest.TestCase):
     def test_a_project_that_is_not_a_directory_is_a_usage_error(self):
         regular = self.root / "regular"
         regular.write_text("", encoding="utf-8")
-        for project in (self.root / "missing", regular):
-            with self.subTest(project=project.name):
+        for project in ("", self.root / "missing", regular):
+            with self.subTest(project=project):
                 done = run("feature", *LOW, "--project", str(project))
                 self.assertEqual(done.returncode, 2, done.stdout)
                 self.assertIn("--project", done.stderr)

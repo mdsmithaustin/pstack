@@ -511,7 +511,7 @@ def render(plan, harness):
 
 
 def directory(value):
-    if not Path(value).is_dir():
+    if not os.path.isdir(value):
         raise argparse.ArgumentTypeError(f"{value!r} is not an existing directory")
     return Path(value)
 
