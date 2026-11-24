@@ -45,7 +45,7 @@ WORD = re.compile(r"\bn/a\b|[^\W_]\w*(?:'\w+)?")
 NO_CHECK = re.compile(r"\b(?:not|never|\w+n't)\s+(?:yet\s+|been\s+|really\s+)?(?:check|look|verif(?:y|ied)|test|inspect|review)(?:ed|s)?\b"
                       r"|\bskipped\s+(?:the\s+)?(?:check|look|verification|test|inspection|review)s?\b")
 THIN_WORDS = frozenset("""ok okay fine none n/a na unknown low tbd yes no same trivial nothing not did didn't never check checked
-unchecked verified unverified evidence applicable trust me to it is file files line lines loc change changes changed insertion
+unchecked verified unverified evidence applicable trust me to it is and file files line lines loc change changes changed insertion
 insertions deletion deletions touched one two three four five six seven eight nine ten""".split())
 SCRUTINY_REMOTE = ("Credit an existing independent review of the current revision. Or name human PR review as the scrutiny, "
                    "record the revision it must cover, and report delivery as pending review. Otherwise brief one `trail reviewer`.")
