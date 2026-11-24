@@ -6,7 +6,7 @@ Keep concrete root values and whether `PSTACK_TEMP_ROOT` is set only in the prog
 
 ## Resolve the installed skills root
 
-Set `PSTACK_HARNESS_SKILL` to the absolute logical path of this `pstack-harness/SKILL.md` as the session loaded or read it. Preserve that logical path even when the directory is a symlink. This block does not require a Git repository or network access. Use it for installed sibling files and local tools. Run the plan check with `node "${PSTACK_SKILLS_ROOT:?}/poteto-mode/scripts/check-plan.mjs" "$PLAN_PATH"`.
+Set `PSTACK_HARNESS_SKILL` to the absolute logical path of this `pstack-harness/SKILL.md` as the session loaded or read it. Preserve that logical path even when the directory is a symlink. This block does not require a Git repository or network access. Use it for installed sibling files and local tools.
 
 ```sh
 case "${PSTACK_HARNESS_SKILL:-}" in
