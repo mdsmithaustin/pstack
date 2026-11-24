@@ -263,9 +263,10 @@ def default_endpoint(project):
     hosts = {remote_host(url) for url in urls} - {None}
     if hosts and shutil.which("origin"):
         return "reviewable PR", "a network remote and Origin found", True
-    if hosts and shutil.which("gh") and ("github.com" in hosts or any(gh_has_token(host) for host in hosts)):
+    has_github = any(host == "github.com" for host in hosts)
+    if hosts and shutil.which("gh") and (has_github or any(gh_has_token(host) for host in hosts)):
         return "reviewable PR", "a remote on a host gh serves", True
-    if "github.com" in hosts:
+    if has_github:
         return "reviewable PR through a built-in PR tool, else a pushed branch named in the reply", "GitHub remote, no forge CLI on PATH", True
     why = "no PR tool on PATH serves the remote's host" if hosts else "no remote names a network host, so none takes a PR"
     return "a pushed branch, named in the reply", why, False
