@@ -1,13 +1,16 @@
 import importlib.util
 import json
+import ntpath
 import os
 import re
+import runpy
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 MODE = ROOT / "skills/poteto-mode"
@@ -750,7 +753,7 @@ class RepositoryEndpoint(unittest.TestCase):
         self.assertNotIn("human PR review", scrutiny)
 
     def test_a_local_path_remote_takes_no_pull_request(self):
-        self.tool("gh")
+        self.tool("origin")
         bare = self.root / "bare.git"
         subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True, env=self.GIT_ENV)
         for url in (str(bare), bare.as_uri()):
@@ -758,6 +761,13 @@ class RepositoryEndpoint(unittest.TestCase):
                 endpoint, scrutiny = self.endpoint(self.repo(url))
                 self.assertEqual(endpoint, self.PUSHED)
                 self.assertNotIn("human PR review", scrutiny)
+
+    def test_windows_drive_paths_have_no_remote_host(self):
+        remote_host = runpy.run_path(str(SCRIPT))["remote_host"]
+        with patch.object(os, "path", ntpath):
+            for url in (r"Z:\repos\bare.git", "Z:/repos/bare.git", "Z:bare.git"):
+                with self.subTest(url=url):
+                    self.assertIsNone(remote_host(url))
 
     def test_gh_serves_github_and_the_hosts_its_config_names(self):
         self.tool("gh")
@@ -779,12 +789,15 @@ class RepositoryEndpoint(unittest.TestCase):
         self.tool("gh")
         forge = self.repo("https://forge.example.invalid/o/r.git")
         nested = self.repo("https://nested.example.invalid/o/r.git")
-        for indent in ("", "  "):
-            with self.subTest(indent=indent):
-                (self.gh_config / "hosts.yml").write_text(
-                    f"# hosts\n{indent}forge.example.invalid: # internal forge\n"
-                    f"{indent}    git_protocol: ssh\n{indent}    users:\n"
-                    f"{indent}        nested.example.invalid: {{}}\n", encoding="utf-8")
+        configs = [
+            f"# hosts\n{indent}forge.example.invalid: # internal forge\n"
+            f"{indent}    git_protocol: ssh\n{indent}    users:\n"
+            f"{indent}        nested.example.invalid: {{}}\n" for indent in ("", "  ")
+        ]
+        configs.append('{"forge.example.invalid": {git_protocol: ssh, users: {nested.example.invalid: {}}}}')
+        for config in configs:
+            with self.subTest(config=config):
+                (self.gh_config / "hosts.yml").write_text(config, encoding="utf-8")
                 endpoint, scrutiny = self.endpoint(forge)
                 self.assertEqual(endpoint, "reviewable PR")
                 self.assertIn("human PR review", scrutiny)

@@ -268,7 +268,9 @@ def default_endpoint(project):
 
 
 def remote_host(url):
-    """Git reads a colon before the first slash as scp-like host:path, not as a local path."""
+    """Return the network host of a Git push URL, or None for a local path."""
+    if os.path.splitdrive(url)[0]:
+        return None
     if "://" in url:
         try:
             parts = urlsplit(url)
@@ -306,13 +308,14 @@ def gh_hosts():
         folder = Path(os.environ["AppData"]) / "GitHub CLI"
     else:
         folder = Path.home() / ".config" / "gh"
+    hosts = {"github.com", os.environ.get("GH_HOST", "github.com").lower()}
     try:
-        text = (folder / "hosts.yml").read_text(encoding="utf-8", errors="replace")
+        with (folder / "hosts.yml").open("rb") as stream:
+            from _yaml import mapping_keys
+            hosts.update(key.lower() for key in mapping_keys(stream))
     except OSError:
-        text = ""
-    keys = re.findall(r"^( *)([^\s#]\S*?)[ \t]*:(?=[ \t]|$)", text, re.M)
-    named = {key.strip("'\"").lower() for indent, key in keys if indent == keys[0][0]}
-    return {"github.com", os.environ.get("GH_HOST", "github.com").lower(), *named}
+        pass
+    return hosts
 
 
 def display_path(path):
