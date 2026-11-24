@@ -11385,15 +11385,6 @@
    ],
    "text": "It's deliberately heavy machinery."
   },
-  "adc441cd1549": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "pr-steps-run-unasked",
-   "sources": [
-    "port"
-   ],
-   "text": "In a repository with a remote, the run ends by pushing a branch and opening a PR."
-  },
   "ade9c8f77734": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -12225,6 +12216,15 @@
     "port"
    ],
    "text": "The PR adds `agents/openai.yaml`, so on Codex the skill it drafts loads only when you type it or a skill tells the agent to use it."
+  },
+  "c2542994c16e": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "pr-steps-run-unasked",
+   "sources": [
+    "port"
+   ],
+   "text": "In a repository with a remote that can take a pull request, the run ends by pushing a branch and opening a PR."
   },
   "c2bab70174a6": {
    "class": "promise",
