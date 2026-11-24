@@ -121,6 +121,22 @@ class EvidenceUsageErrors(unittest.TestCase):
                 self.assertEqual(len(done.stderr.splitlines()), 1, done.stderr)
                 self.assertIn(f"{flag} was given more than once", done.stderr)
 
+    def test_an_unknown_or_mistyped_flag_points_to_help_on_one_line(self):
+        cases = {
+            "--raise-too": ("feature", *LOW, "--raise-too", "standard"),
+            "--reversability": ("feature", "--reversability", "low:one revert undoes it"),
+            "--steps": ("feature", "--steps", "3"),
+            "--bogus": ("feature", "--bogus"),
+        }
+        for flag, args in cases.items():
+            with self.subTest(flag=flag):
+                done = run(*args)
+                self.assertEqual(done.returncode, 2, done.stdout[:80])
+                self.assertEqual(done.stdout, "")
+                self.assertEqual(len(done.stderr.splitlines()), 1, done.stderr)
+                self.assertIn(flag, done.stderr)
+                self.assertIn("--help", done.stderr)
+
     def test_an_argument_that_is_not_utf8_is_a_usage_error(self):
         cases = {
             "fact": ("bug-fix", *facts(consequence=b"low:caf\xe9 caller found by grep")),
