@@ -15,7 +15,7 @@ python3 "${PSTACK_SKILLS_ROOT:?}/poteto-mode/scripts/risk-facts.py" [--symbol <n
 | Consequence | `--consequence` | Data loss, permissions, incorrect results, compatibility, and user-visible disruption. |
 | Reach | `--reach` | Shared callers, public interfaces, dependencies, and affected workflows. |
 | Uncertainty | `--uncertainty` | Unclear requirements, unfamiliar code, weak tests, contested design, and behavior you cannot reproduce. |
-| Accumulated complexity | `--complexity` | Repeated changes, growing conditionals, duplication, exceptions, and recurring repairs. Apply the review lens's [Accumulated complexity](review-lens.md#accumulated-complexity) check when extending code. |
+| Accumulated complexity | `--complexity` | Repeated changes, growing conditionals, duplication, exceptions, and recurring repairs. |
 | Reversibility and detection | `--reversibility` | Whether a failure is visible, whether a rollback exists, and whether recovery preserves data. |
 
 Write each fact as the level, a colon, and what you checked:
