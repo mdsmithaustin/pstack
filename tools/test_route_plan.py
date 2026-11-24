@@ -468,12 +468,30 @@ class StepRecovery(unittest.TestCase):
                         continue
                     self.assertEqual(len(kept), 1, printed)
                     named = re.findall(r"`([a-z0-9-]+)`", kept[0])
-                    self.assertEqual(named, step["loads"] + step["conditional"])
+                    self.assertEqual(named, step["loads"])
                     if not named:
                         self.assertIn("none", kept[0])
         self.assertIn(f"{self.KEPT} none.", run("feature", "--step", "1", "--route", "lightweight").stdout)
         self.assertIn(f"{self.KEPT} `spec-probes`.", run("feature", "--step", "4", "--route", "lightweight").stdout)
         self.assertNotIn(self.KEPT, run("feature", "--step", "4", "--route", "standard").stdout)
+
+    def test_a_lightweight_step_labels_its_conditional_loads_as_the_plan_does(self):
+        label = "   load only when the step's own condition holds: "
+        checked = 0
+        for name, entry in MANIFEST["playbooks"].items():
+            if not entry.get("tiered"):
+                continue
+            full = [row[len(label):].split(", ") for row in run(name, *LOW).stdout.split("\n") if row.startswith(label)]
+            for step in plan(name, *LOW)["steps"]:
+                checked += len(step["conditional"])
+                with self.subTest(playbook=name, step=step["number"]):
+                    printed = run(name, "--step", str(step["number"]), "--route", "lightweight").stdout
+                    rows = [row for row in printed.split("\n") if row.startswith(label)]
+                    self.assertEqual(rows, [label + ", ".join(step["conditional"])] if step["conditional"] else [])
+                    for skill in step["conditional"]:
+                        self.assertTrue(any(skill in names for names in full), skill)
+        self.assertGreater(checked, 0)
+        self.assertIn(f"{self.KEPT} none.\n{label}poteto-tdd\n", run("bug-fix", "--step", "5", "--route", "lightweight").stdout)
 
 
 class OneStepUsageErrors(unittest.TestCase):
