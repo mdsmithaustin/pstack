@@ -20,7 +20,7 @@ reflect tooling: opus
 reflect judgment, divergent, synthesizer: opus
 arena runners: fable, opus, sonnet
 arena cross-judge pool: fable, opus, sonnet
-swarm workers: sonnet
+swarm workers: opus
 architect runners: fable, opus, sonnet
 interrogate reviewers: fable, opus, sonnet
 trail reviewer: opus
@@ -42,7 +42,7 @@ reflect tooling: opus@high
 reflect judgment, divergent, synthesizer: opus@xhigh
 arena runners: fable@xhigh, opus@high, sonnet@high
 arena cross-judge pool: fable@xhigh, opus@high, sonnet@high
-swarm workers: sonnet@high
+swarm workers: opus@high
 architect runners: fable@xhigh, opus@high, sonnet@high
 interrogate reviewers: fable@xhigh, opus@high, sonnet@high
 trail reviewer: opus@high
@@ -63,7 +63,7 @@ reflect tooling: gpt-6-sol@xhigh
 reflect judgment, divergent, synthesizer: gpt-6-sol@max
 arena runners: gpt-6-sol@max, gpt-6-sol@xhigh, gpt-6-luna@xhigh
 arena cross-judge pool: gpt-6-sol@max, gpt-6-sol@xhigh, gpt-6-luna@xhigh
-swarm workers: gpt-6-luna@xhigh
+swarm workers: gpt-6-sol@xhigh
 architect runners: gpt-6-sol@max, gpt-6-sol@xhigh, gpt-6-luna@xhigh
 interrogate reviewers: gpt-6-sol@max, gpt-6-sol@xhigh, gpt-6-luna@xhigh
 trail reviewer: gpt-6-astra@high
