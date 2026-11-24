@@ -1,0 +1,24 @@
+{
+ "screen": "X4",
+ "note": "Settles O53, O58, H12, H13, and M79; AF5 only through the saved role and arm a replacement uses; H14 is not built (it needs an orch store, and S6 decides whether Orchestrate stays). live.py resumes one harness's session, so the history plants session 1 as state: the last commit on word-filters is the resume note a Claude Code session wrote in the shape pause-safely.md asks for (active playbook Feature at step 6, role feature arm 1, builders ran on sonnet, one implemented and one pending directive verbatim, a pending CI report, a builder child with no liveness observation). The Codex lead picks it up. Run on Codex with the default PATH.",
+ "promises": [
+  "x4-pickup-restores-directives",
+  "x4-pickup-treats-prior-model-as-history",
+  "x4-pickup-keeps-child-liveness-unknown",
+  "x4-pickup-delivers-owed-report"
+ ],
+ "fixture": "tally",
+ "history": "x4-pickup-handoff",
+ "entry": "poteto-mode",
+ "turns": [
+  "my last session paused this branch and left a handoff in RESUME.md. pick it up from there and finish the job, and tell me when CI finishes"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "session-pickup"
+ },
+ "tmp_lock": false
+}

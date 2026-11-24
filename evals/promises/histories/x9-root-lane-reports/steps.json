@@ -1,0 +1,23 @@
+{
+  "fixture": "tally",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "ci: run the unit tests from one script\n\nThe hosted runner and a local check now run the same command, sh ci/run.sh.",
+      "delete": []
+    },
+    {
+      "dir": "step-2",
+      "message": "tally: add --min-length (#11)\n\nShort words crowd out the counts. --min-length N drops words shorter than N characters.",
+      "delete": [],
+      "branch": "pr-12-min-length"
+    },
+    {
+      "dir": "step-3",
+      "message": "root run state, never committed",
+      "delete": [],
+      "branch": "main",
+      "commit": false
+    }
+  ]
+}

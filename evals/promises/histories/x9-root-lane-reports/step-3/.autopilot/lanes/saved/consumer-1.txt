@@ -1,0 +1,5 @@
+$ git rev-parse --abbrev-ref HEAD
+pr-12-min-length
+$ python3 -m tally sample.txt --top 3 --min-length 3
+$ echo $?
+0
