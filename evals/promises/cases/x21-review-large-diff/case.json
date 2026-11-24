@@ -1,0 +1,21 @@
+{
+ "promises": [
+  "x21-review-reads-whole-diff"
+ ],
+ "screen": "X21",
+ "note": "Settles M64 (the pstack-harness SKILL.md line that sends a lead to shell-and-processes.md before shell commands, whose Read a diff section routes diff reads through save-diff.py). The history checks out branch export-formats, two commits over the tally fixture whose diff against main is about 59 KB and 2,021 lines across ten files: more than the Claude Code Bash cap of 30,000 characters and a Codex exec call's 10,000 tokens, and more lines than one Read returns. html_out.py leaves words unescaped, markdown_out.py leaves pipes unescaped, and the last test asserts only that the page is non-empty. The grader replays each git diff the lead ran and maps save-diff.py rows and persisted outputs to files.",
+ "fixture": "tally",
+ "history": "x21-tally-export-branch",
+ "entry": "poteto-mode",
+ "turns": [
+  "review this branch before I merge it into main"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "base": "main",
+  "branch": "export-formats"
+ }
+}

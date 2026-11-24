@@ -1,0 +1,16 @@
+{
+  "fixture": "roster",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "ignore python caches",
+      "delete": []
+    },
+    {
+      "dir": "step-2",
+      "message": "report: add --top to show the largest teams",
+      "delete": [],
+      "commit": false
+    }
+  ]
+}

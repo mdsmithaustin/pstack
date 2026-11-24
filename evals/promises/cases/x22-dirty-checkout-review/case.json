@@ -1,0 +1,31 @@
+{
+ "promises": [
+  "x22-review-leaves-dirty-checkout-unchanged"
+ ],
+ "screen": "X22",
+ "note": "Settles H9 (delegation.md, binding a review clone to dirty inputs). The history leaves two unstaged edits (roster/report.py adds top_teams, roster/__main__.py adds --top) and one untracked test file (tests/test_top.py) over a committed .gitignore for Python caches. It plants no staged edit: live.py history steps never stage, and a history cannot ship a .git/index, so a staged edit needs a live.py change (a step field that runs git add on named paths after a commit: false copy). The tests pass with the dirty files (4 tests) and fail to import without the tracked edits. expect.dirty holds the planted status and the named files' digests.",
+ "fixture": "roster",
+ "history": "x22-roster-dirty-review",
+ "entry": "poteto-mode",
+ "turns": [
+  "review my uncommitted change and run its tests"
+ ],
+ "timeout_s": {
+  "default": 1200,
+  "codex": 1800
+ },
+ "expect": {
+  "dirty": {
+   "porcelain": [
+    " M roster/__main__.py",
+    " M roster/report.py",
+    "?? tests/test_top.py"
+   ],
+   "files": {
+    "roster/__main__.py": "6798eff9269103c6b152ff53de8ecbf01970c532180cde5810f8872870cdf7ba",
+    "roster/report.py": "1df0bd29380d8d191c859449a69d257c8d4ab0cf50599645aee1b0cf5899566d",
+    "tests/test_top.py": "fda4a8a3eff59306d7d9e77b759f149c24cf9947bea86f2c3df6de2961f2dbe3"
+   }
+  }
+ }
+}

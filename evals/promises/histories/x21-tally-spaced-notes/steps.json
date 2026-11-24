@@ -1,0 +1,10 @@
+{
+  "fixture": "tally",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "notes: add team sync and planning notes\n\ntally now prints a one-line error for a file it cannot open instead of a traceback.",
+      "delete": []
+    }
+  ]
+}
