@@ -769,32 +769,32 @@ class RepositoryEndpoint(unittest.TestCase):
                 with self.subTest(url=url):
                     self.assertIsNone(remote_host(url))
 
-    def test_gh_serves_github_and_the_hosts_its_config_names(self):
+    def test_gh_serves_github(self):
         self.tool("gh")
         for url in ("https://github.com/o/r.git", "git@github.com:o/r.git", "ssh://git@ssh.github.com:443/o/r.git"):
             with self.subTest(url=url):
                 endpoint, scrutiny = self.endpoint(self.repo(url))
                 self.assertEqual(endpoint, "reviewable PR")
                 self.assertIn("human PR review", scrutiny)
-        other = self.repo("https://git.example.com/o/r.git")
-        endpoint, scrutiny = self.endpoint(other)
-        self.assertEqual(endpoint, self.PUSHED)
-        self.assertNotIn("human PR review", scrutiny)
-        self.assertEqual(self.endpoint(other, GH_HOST="git.example.com")[0], "reviewable PR")
-        (self.gh_config / "hosts.yml").write_text("git.example.com:\n    user: someone\n", encoding="utf-8")
-        self.assertEqual(self.endpoint(other)[0], "reviewable PR")
         self.assertEqual(self.endpoint(self.repo("https://[broken/o/r.git"))[0], self.PUSHED)
 
-    def test_only_top_level_configured_hosts_get_pr_review(self):
-        self.tool("gh")
+    @unittest.skipUnless(shutil.which("gh"), "requires GitHub CLI")
+    def test_gh_serves_enterprise_hosts(self):
+        (self.bin / "gh").symlink_to(shutil.which("gh"))
         forge = self.repo("https://forge.example.invalid/o/r.git")
         nested = self.repo("https://nested.example.invalid/o/r.git")
-        configs = [
+        endpoint, scrutiny = self.endpoint(forge)
+        self.assertEqual(endpoint, self.PUSHED)
+        self.assertNotIn("human PR review", scrutiny)
+        self.assertEqual(self.endpoint(forge, GH_HOST="forge.example.invalid")[0], "reviewable PR")
+        self.assertEqual(self.endpoint(forge, GH_HOST="forge.example.invalid", GH_ENTERPRISE_TOKEN="fixture")[0], "reviewable PR")
+        configs = ["forge.example.invalid:\n    user: someone\n", "forge.example.invalid:\n    oauth_token: fixture\n"]
+        configs.extend(
             f"# hosts\n{indent}forge.example.invalid: # internal forge\n"
-            f"{indent}    git_protocol: ssh\n{indent}    users:\n"
+            f"{indent}    oauth_token: fixture\n{indent}    users:\n"
             f"{indent}        nested.example.invalid: {{}}\n" for indent in ("", "  ")
-        ]
-        configs.append('{"forge.example.invalid": {git_protocol: ssh, users: {nested.example.invalid: {}}}}')
+        )
+        configs.append('{"forge.example.invalid": {oauth_token: fixture, users: {nested.example.invalid: {}}}}')
         for config in configs:
             with self.subTest(config=config):
                 (self.gh_config / "hosts.yml").write_text(config, encoding="utf-8")

@@ -263,7 +263,7 @@ def default_endpoint(project):
     hosts = {remote_host(url) for url in urls} - {None}
     if hosts and shutil.which("origin"):
         return "reviewable PR", "a network remote and Origin found", True
-    if shutil.which("gh") and hosts & gh_hosts():
+    if hosts and shutil.which("gh") and ("github.com" in hosts or hosts & gh_hosts()):
         return "reviewable PR", "a remote on a host gh serves", True
     if "github.com" in hosts:
         return "reviewable PR through a built-in PR tool, else a pushed branch named in the reply", "GitHub remote, no forge CLI on PATH", True
@@ -312,7 +312,7 @@ def gh_hosts():
         folder = Path(os.environ["AppData"]) / "GitHub CLI"
     else:
         folder = Path.home() / ".config" / "gh"
-    hosts = {"github.com", os.environ.get("GH_HOST", "github.com").lower()}
+    hosts = {os.environ.get("GH_HOST", "").lower()}
     try:
         with (folder / "hosts.yml").open("rb") as stream:
             from _yaml import mapping_keys
