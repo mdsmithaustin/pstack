@@ -737,12 +737,15 @@ class RepositoryEndpoint(unittest.TestCase):
             subprocess.run(["git", "-C", str(path), "remote", "add", f"r{index}", url], check=True, env=self.GIT_ENV)
         return path
 
-    def endpoint(self, project, **env):
+    def run_plan(self, project, *args, **env):
         env = {"PATH": str(self.bin), "HOME": str(self.root), "GH_CONFIG_DIR": str(self.gh_config), **env}
-        done = subprocess.run([sys.executable, str(SCRIPT), "feature", *LOW, "--project", str(project), "--json"],
+        done = subprocess.run([sys.executable, str(SCRIPT), "feature", *LOW, "--project", str(project), *args],
                               capture_output=True, text=True, env=env)
         self.assertEqual(done.returncode, 0, done.stderr)
-        result = json.loads(done.stdout)
+        return done
+
+    def endpoint(self, project, **env):
+        result = json.loads(self.run_plan(project, "--json", **env).stdout)
         return result["default_endpoint"], result["scrutiny"]
 
     def test_no_repository_and_no_remote_take_local_commits(self):
@@ -786,9 +789,11 @@ class RepositoryEndpoint(unittest.TestCase):
         endpoint, scrutiny = self.endpoint(forge)
         self.assertEqual(endpoint, self.PUSHED)
         self.assertNotIn("human PR review", scrutiny)
-        self.assertEqual(self.endpoint(forge, GH_HOST="forge.example.invalid")[0], "reviewable PR")
+        self.assertEqual(self.endpoint(forge, GH_HOST="forge.example.invalid")[0], self.PUSHED)
         self.assertEqual(self.endpoint(forge, GH_HOST="forge.example.invalid", GH_ENTERPRISE_TOKEN="fixture")[0], "reviewable PR")
-        configs = ["forge.example.invalid:\n    user: someone\n", "forge.example.invalid:\n    oauth_token: fixture\n"]
+        (self.gh_config / "hosts.yml").write_text("forge.example.invalid:\n    user: someone\n", encoding="utf-8")
+        self.assertEqual(self.endpoint(forge)[0], self.PUSHED)
+        configs = ["forge.example.invalid:\n    oauth_token: fixture\n"]
         configs.extend(
             f"# hosts\n{indent}forge.example.invalid: # internal forge\n"
             f"{indent}    oauth_token: fixture\n{indent}    users:\n"
@@ -802,6 +807,30 @@ class RepositoryEndpoint(unittest.TestCase):
                 self.assertEqual(endpoint, "reviewable PR")
                 self.assertIn("human PR review", scrutiny)
                 self.assertEqual(self.endpoint(nested)[0], self.PUSHED)
+
+    def test_gh_token_output_is_discarded(self):
+        self.tool("gh", 'echo sentinel-token\n'
+                        'for fd in 0 1 2; do [ "/dev/fd/$fd" -ef /dev/null ] || exit 1; done')
+        repo = self.repo("https://forge.example.invalid/o/r.git")
+        for args in ((), ("--json",)):
+            with self.subTest(args=args):
+                done = self.run_plan(repo, *args)
+                self.assertNotIn("sentinel-token", done.stdout)
+                self.assertNotIn("sentinel-token", done.stderr)
+                if args:
+                    self.assertEqual(json.loads(done.stdout)["default_endpoint"], "reviewable PR")
+                else:
+                    self.assertIn("reviewable PR", done.stdout)
+
+    def test_gh_probes_each_enterprise_host_at_most_once(self):
+        self.tool("gh", 'echo called >> "$HOME/gh-calls"\nexit 1')
+        calls = self.root / "gh-calls"
+        github = self.repo("https://github.com/o/a.git", "https://ssh.github.com/o/b.git")
+        self.assertEqual(self.endpoint(github)[0], "reviewable PR")
+        self.assertFalse(calls.exists())
+        enterprise = self.repo("https://forge.example.invalid/o/a.git", "git@forge.example.invalid:o/b.git")
+        self.assertEqual(self.endpoint(enterprise)[0], self.PUSHED)
+        self.assertEqual(calls.read_text().splitlines(), ["called"])
 
     def test_one_remote_that_takes_a_pull_request_is_enough(self):
         self.tool("gh")
@@ -819,7 +848,7 @@ class RepositoryEndpoint(unittest.TestCase):
                 self.assertEqual(self.endpoint(self.repo(url))[0], "reviewable PR")
 
     def test_a_dash_leading_host_never_reaches_ssh(self):
-        self.tool("gh")
+        self.tool("gh", "exit 1")
         self.tool("ssh", ': > "$HOME/ssh-called"')
         for url in ("ssh://-oProxyCommand=x/o/r.git", "git@-invalid:o/r.git"):
             with self.subTest(url=url):
