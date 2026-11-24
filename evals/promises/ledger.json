@@ -12226,15 +12226,6 @@
    ],
    "text": "The PR adds `agents/openai.yaml`, so on Codex the skill it drafts loads only when you type it or a skill tells the agent to use it."
   },
-  "c2542994c16e": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "pr-steps-run-unasked",
-   "sources": [
-    "port"
-   ],
-   "text": "In a repository with a remote that can take a pull request, the run ends by pushing a branch and opening a PR."
-  },
   "c2bab70174a6": {
    "class": "promise",
    "file": "10-recipes-and-pitfalls.md",
@@ -12563,6 +12554,15 @@
     "port"
    ],
    "text": "If you skipped ahead, go back to [setup](./01-setup.md) and run one real task."
+  },
+  "c91d1bf83742": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "pr-steps-run-unasked",
+   "sources": [
+    "port"
+   ],
+   "text": "When the repository has a remote and a tool that can open a pull request on it, the run ends by pushing a branch and opening a PR."
   },
   "c9a74a7d503e": {
    "class": "promise",

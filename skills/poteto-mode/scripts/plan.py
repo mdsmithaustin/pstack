@@ -529,7 +529,7 @@ def main(argv=None):
     parser.add_argument("--step", type=int, metavar="N", action=Once, help="Print the full text of step N and the route's gates")
     parser.add_argument("--route", choices=ROUTES, action=Once, help="With --step on a routed playbook, the route the plan printed")
     parser.add_argument("--harness", choices=("claude-code", "codex", "grok", "hermes", "other"), default="other", action=Once)
-    parser.add_argument("--project", type=directory, action=Once, help="Directory to inspect for a repository and its remotes (default: the current directory)")
+    parser.add_argument("--project", type=directory, action=Once, metavar="DIR", help="Directory to inspect for a repository and its remotes (default: the current directory)")
     parser.add_argument("--json", action="store_true")
     argv = sys.argv[1:] if argv is None else argv
     undecodable = next((arg for arg in argv if SURROGATE.search(arg)), None)
