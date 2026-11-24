@@ -1323,7 +1323,7 @@
   },
   "endpoint-follows-user-then-repository": {
    "check": "static",
-   "claim": "A task runs to the endpoint the user states. Without one it stops at the plan's default: a PR for a github.com remote, a pushed branch for other remotes such as GitHub Enterprise, or a local branch when there is no remote.",
+   "claim": "The task runs to the endpoint the user states. Otherwise it uses the default in the plan.",
    "evidence": [
     {
      "file": "skills/poteto-mode/references/routes.md",
@@ -4687,18 +4687,6 @@
     "port"
    ],
    "text": "Don't memorize the list."
-  },
-  "005706341a82": {
-   "also": [
-    "default-endpoint-local-branch-without-remote"
-   ],
-   "class": "promise",
-   "file": "02-poteto-mode.md",
-   "promise": "endpoint-follows-user-then-repository",
-   "sources": [
-    "port"
-   ],
-   "text": "The task runs to the endpoint you state, and without one it stops at the plan's default, such as a pull request for a github.com remote, a pushed branch for GitHub Enterprise, or a local branch when there is no remote."
   },
   "00b0aedd9675": {
    "class": "context",
@@ -8857,7 +8845,8 @@
   },
   "6bcd34fc5a60": {
    "also": [
-    "skipped-step-stays-in-worklist"
+    "skipped-step-stays-in-worklist",
+    "default-endpoint-local-branch-without-remote"
    ],
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -11134,15 +11123,6 @@
    ],
    "text": "For a choice between options, it returns a recommendation with a trade-offs table."
   },
-  "a8dfcede98e8": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "pr-steps-run-unasked",
-   "sources": [
-    "port"
-   ],
-   "text": "You don't have to ask for the PR."
-  },
   "a92b1a2827cd": {
    "class": "context",
    "file": "05-build-and-clean.md",
@@ -13305,15 +13285,6 @@
    ],
    "text": "One weird session is an anecdote, not a rule."
   },
-  "de5d86fa0629": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "pr-steps-run-unasked",
-   "sources": [
-    "port"
-   ],
-   "text": "When the repository has a github.com remote, the run ends by pushing a branch and opening a PR, and on other hosts it stops at a pushed branch unless you ask for a PR."
-  },
   "decaadc93e36": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -13573,6 +13544,15 @@
    ],
    "text": "After 3 blocks in a row or 20 in total, auto mode goes back to prompting, and nobody answers a prompt overnight."
   },
+  "e37db77b1530": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "endpoint-follows-user-then-repository",
+   "sources": [
+    "port"
+   ],
+   "text": "Check the endpoint in the plan to see where this run will stop."
+  },
   "e39a2b0963f1": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -13702,6 +13682,15 @@
     "port"
    ],
    "text": "For a queue you want merged, add the pushes and merges you accept to `autoMode.allow` in your settings first, or pick Autopilot-stack and land the PRs yourself."
+  },
+  "e6f22c63baf5": {
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "endpoint-follows-user-then-repository",
+   "sources": [
+    "port"
+   ],
+   "text": "You can also set the endpoint or use the [default endpoint](../../skills/poteto-mode/references/routes.md#endpoint) shown in the plan."
   },
   "e6fed9f2f6fe": {
    "class": "promise",
