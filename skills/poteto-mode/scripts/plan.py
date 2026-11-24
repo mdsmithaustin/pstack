@@ -53,7 +53,7 @@ SCRUTINY_REMOTE = ("Credit an existing independent review of the current revisio
                    "record the revision it must cover, and report delivery as pending review. Otherwise brief one `trail reviewer`.")
 SCRUTINY_LOCAL = ("No pull request will open, so no PR review exists to credit. Brief one `trail reviewer`, or report the user's "
                   "review of the branch as pending.")
-SCP_REMOTE = re.compile(r"^(?:[^@/]+@)?([^-/:][^/:]*):")
+SCP_REMOTE = re.compile(r"^(?:[^/:]+@)?([^@/:]+):")
 RUN_PR = re.compile(r"\bRun \*\*Opening a PR\*\*")
 KEEP_COMMITS = "   still commit when the push or PR is skipped"
 SURROGATE = re.compile("[\udc80-\udcff]")
@@ -310,8 +310,8 @@ def gh_hosts():
         text = (folder / "hosts.yml").read_text(encoding="utf-8", errors="replace")
     except OSError:
         text = ""
-    keys = re.findall(r"^([^\s#-]\S*?)[ \t]*:(?=[ \t]|$)", text, re.M)
-    named = {key.strip("'\"").lower() for key in keys}
+    keys = re.findall(r"^( *)([^\s#]\S*?)[ \t]*:(?=[ \t]|$)", text, re.M)
+    named = {key.strip("'\"").lower() for indent, key in keys if indent == keys[0][0]}
     return {"github.com", os.environ.get("GH_HOST", "github.com").lower(), *named}
 
 
