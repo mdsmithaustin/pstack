@@ -4,7 +4,7 @@ Read this reference before you wait for a human reply, and before you answer a n
 
 A run is unattended when any of these is true:
 
-- The operator gave the go for Autopilot-full, Autopilot-stack, or Orchestrate.
+- The operator gave the go for Autopilot-full or Autopilot-stack.
 - The user said they are stepping away, said not to wait for them, or gave a grant that names no-mistakes.
 - The **pstack-harness** skill's `question` action shows that this top-level session cannot reach a human.
 

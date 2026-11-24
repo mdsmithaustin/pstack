@@ -38,7 +38,7 @@ The endpoint the user or host states governs. Without one, the plan prints the d
 - Another review pass needs a named unresolved concern.
 - Principles and Autonomy govern design and scope.
 
-For a large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, call the Skill tool with `figure-it-out` even when a narrower playbook like Feature fits. Call the Skill tool with `figure-it-out` whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead.
+For a large or cross-cutting effort (a migration across many call sites or packages, a multi-day program, an ambitious multi-part change), or work the user steps away from to trust later, call the Skill tool with `figure-it-out` even when a narrower playbook like Feature fits. Call the Skill tool with `figure-it-out` whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task.
 
 - **Investigation.** Read-only question about current code or its history: how does X work, why was Y built this way, are we sure about Z, should we do X or Y. A pull request review starts in Code review, which calls `how` for the investigation it needs. `playbooks/investigation.md`.
 - **Code review.** Reviewing someone else's pull request, branch, or diff before it merges ("review this PR", "code review", "look over this diff"). `playbooks/code-review.md`.
@@ -51,7 +51,7 @@ For a large or cross-cutting effort (a migration across many call sites, an ambi
 - **Shipping.** Asked to land or ship a green stack. The half after Babysit. Independently verifying a green stack, then landing the contiguous verified run bottom-up through `gh` by default or Origin when its CLI is available. `playbooks/shipping.md`.
 - **Opening a PR.** Use when the matched playbook produces a PR. `playbooks/opening-a-pr.md`.
 
-For any of these, or when none above fits, read [more playbooks](references/playbooks.md) and match there: Research, Hillclimb, Runtime forensics, Trace forensics, Visual parity, Authoring or modifying a skill, Eval, Autonomous run, Orchestrate, Autopilot-full, Autopilot-stack, Session pickup, Pause safely, Multi-phase or multi-PR plan, Worktree and simulator cleanup.
+For any of these, or when none above fits, read [more playbooks](references/playbooks.md) and match there: Research, Hillclimb, Runtime forensics, Trace forensics, Visual parity, Authoring or modifying a skill, Eval, Autonomous run, Autopilot-full, Autopilot-stack, Session pickup, Pause safely, Multi-phase or multi-PR plan, Worktree and simulator cleanup.
 
 ## Apply the mode
 

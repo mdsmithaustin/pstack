@@ -71,7 +71,7 @@ For a quick status instead of an audit, run [`/ketchup`](../../skills/ketchup/SK
 
 ## When the night holds a queue, not a task
 
-The contract above drives one task to one finish condition. Some nights hold more, a queue of independent changes or a whole program. Three playbooks scale the same trust up.
+The contract above drives one task to one finish condition. Some nights hold more, a queue of independent changes or a whole program. Two playbooks and one skill scale the same trust up.
 
 [Autopilot-full](../../skills/poteto-mode/playbooks/autopilot-full.md) runs a queue of independent PRs to merged. Each PR gets one owner agent that carries it from build through merge, and no owner merges on its own verdict. A swarm of fresh verifiers checks the owner's code-ready head. A later rebase or minor fix gets one fresh verifier, and only new behavior or a large new diff calls the full swarm again. Only a clean verdict on the patch that merges authorizes the merge:
 
@@ -89,15 +89,15 @@ On Claude Code, check your permission mode before you leave. Interactive session
 /poteto-mode autopilot these five changes, but don't merge. i'll land them in the morning.
 ```
 
-[Orchestrate](../../skills/poteto-mode/playbooks/orchestrate.md) is for a program that outlives any single agent: multi-day, many stacked PRs, fleets of subagents under one standing coordinator chat. The coordinator decides which agent does each piece of work, checks what each one produces, keeps the lowest unmerged PR green, and never writes code itself. After a restart, the coordinator reads retained completions and attempt identities from `.orchestrate/`, then reconciles them with runtime evidence, pushed branches, and open PRs. Missing runtime evidence leaves an attempt uncertain. A replacement resolves the saved role and exact panel arm like any other spawn. Before dispatch, the coordinator records its predecessor and the harness, model, and effort that will run it. The [orch reference](../../skills/poteto-mode/scripts/orch/README.md) describes acknowledgment. It's deliberately heavy machinery. If one agent could finish the work in a session, the playbook itself routes you back to the overnight contract above:
+A whole program, such as a migration across many packages, has no playbook of its own. `/poteto-mode` routes large or cross-cutting work to [`/figure-it-out`](../../skills/figure-it-out/SKILL.md), which designs one rigorous run for it:
 
 ```text
-/poteto-mode orchestrate the store migration. own it until every package is converted and merged. i'll check in twice a day.
+/poteto-mode migrate every package to the new store. own it until each one is converted and merged. i'll check in twice a day.
 ```
 
 ## Run a program from one coordinator chat
 
-One long-running chat can coordinate a whole body of work, such as a feature, a migration, a perf push, or a tech-debt cleanup. The coordinator doesn't write code. It directs subagents, which run on your machine. That's the shape the Orchestrate playbook expects. Start your prompts to the coordinator with `/poteto-mode`, and the subagents it spawns follow the playbooks.
+One long-running chat can coordinate a whole body of work, such as a feature, a migration, a perf push, or a tech-debt cleanup. The coordinator doesn't write code. It directs subagents, which run on your machine. Start your prompts to the coordinator with `/poteto-mode`, and the subagents it spawns follow the playbooks.
 
 A few habits help:
 

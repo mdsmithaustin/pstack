@@ -1,6 +1,6 @@
 # Route work through `/poteto-mode`
 
-`/poteto-mode` is the front door. You give it a goal, it matches one of twenty-five playbooks, tracks progress under the mode's [worklist and completion rules](../../skills/poteto-mode/SKILL.md#playbooks), and calls the other skills as the steps need them. In this page you learn what a good prompt looks like, and how little of one you actually need.
+`/poteto-mode` is the front door. You give it a goal, it matches one of twenty-four playbooks, tracks progress under the mode's [worklist and completion rules](../../skills/poteto-mode/SKILL.md#playbooks), and calls the other skills as the steps need them. In this page you learn what a good prompt looks like, and how little of one you actually need.
 
 ![A dispatcher pulls a switch lever to route robots on rail handcars toward lit gates, under a /poteto-mode departure board listing BUG FIX, FEATURE, and INVESTIGATION.](./images/router.jpg)
 
@@ -29,7 +29,7 @@ flowchart TD
     J --> K
 ```
 
-The diagram shows the common routes. There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, reviewing someone else's pull request or diff, visual parity, authoring and evaluating skills, autonomous runs, opening a PR, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue or a stack on autopilot, orchestrating project-scale programs, session pickup, pausing safely, multi-phase plans, and worktree cleanup. The [playbook directory](../../skills/poteto-mode/playbooks/) has the full set.
+The diagram shows the common routes. There are also playbooks for hillclimbing a metric, diagnosing runtime symptoms and captured traces, prototypes, reviewing someone else's pull request or diff, visual parity, authoring and evaluating skills, autonomous runs, opening a PR, babysitting a PR or stack to merge-ready, shipping a verified stack, running a PR queue or a stack on autopilot, session pickup, pausing safely, multi-phase plans, and worktree cleanup. The [playbook directory](../../skills/poteto-mode/playbooks/) has the full set.
 
 For Bug fix, Feature, Refactoring, and Perf issue, the mode also decides how much process the task gets. It records five risk facts with evidence, and a script maps them to a lightweight, standard, or intensive route. Lightweight work is done directly, with no design panel and no delegate for the work, though a review that a rule requires still runs. You can set the route yourself in either direction by saying so. The task runs to the endpoint you state, and without one it stops at the furthest reviewable state the repository supports, such as a pull request, or a local branch when there is no remote.
 
