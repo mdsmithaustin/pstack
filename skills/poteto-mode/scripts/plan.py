@@ -50,7 +50,8 @@ NO_CHANGE_ENDPOINT = ("what this playbook's Reply line names", "this playbook do
 
 class PlanParser(argparse.ArgumentParser):
     def error(self, message):
-        self.exit(2, f"{self.prog}: error: {' '.join(message.splitlines())}\n")
+        message = " ".join(message.splitlines()).rstrip(".")
+        self.exit(2, f"{self.prog}: error: {message}. Run {self.prog} --help for the flags.\n")
 
 
 class Once(argparse.Action):
