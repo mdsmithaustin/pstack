@@ -1,0 +1,20 @@
+{
+ "promises": [
+  "reflect-waits-for-approval-before-edits"
+ ],
+ "fixture": "tally",
+ "history": "tally-session-log",
+ "entry": "reflect",
+ "turns": [
+  "reflect on yesterday's session in this repo. its transcript is notes/session-2026-11-20.jsonl. capture what we learned so the next run doesn't repeat it."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "transcript": "notes/session-2026-11-20.jsonl"
+ },
+ "screen": "S5",
+ "note": "the planted session holds five durable learnings and three one-offs, labeled in learnings.json for recall and precision measures"
+}

@@ -1,0 +1,25 @@
+{
+ "promises": [
+  "program-prompt-routes-by-arm",
+  "program-design-stops-before-dispatch"
+ ],
+ "fixture": "kiln",
+ "history": "kiln-store-migration",
+ "entry": "poteto-mode",
+ "turns": [
+  "orchestrate the store migration and own it until every package is converted and merged. i check in twice a day. design the program first and stop there; i'll approve it at my next check-in."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "evidence_paths": [
+   "README.md",
+   "packages/",
+   "bin/kiln"
+  ]
+ },
+ "screen": "S6",
+ "note": "program prompt stopped at the design phase; routing is graded against the installed tree, so the port, upstream #1043, and deletion arms share this case"
+}

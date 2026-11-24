@@ -31,6 +31,7 @@ CASES = HERE / "cases"
 FIXTURES = HERE / "fixtures"
 HISTORIES = HERE / "histories"
 WORKSPACE = "w"
+FORGE_BIN = Path(".git/forge/bin")
 ENTRY_PREFIX = re.compile(r"^/([a-z][a-z0-9-]*)\s*(.*)$", re.S)
 HARNESSES = {
     "claude-code": "harnesses.claude_code",
@@ -235,6 +236,14 @@ def make_project(case, dest):
         if step.get("commit", True):
             git_run(dest, "add", "-A")
             git_run(dest, "commit", "-q", "--allow-empty", "-F", "-", input=step["message"], text=True)
+    if case.get("forge"):
+        import forge
+        forge.provision(dest, case["forge"], CASES / case["id"], git_run)
+
+
+def tool_path(run, path):
+    """The agent's PATH. A forge case puts its `gh` and ssh doubles first, so forge actions stay local and logged."""
+    return f"{run.project / FORGE_BIN}:{path}" if run.case.get("forge") else path
 
 
 def baseline(project):
@@ -299,6 +308,8 @@ def run_case(harness, case_id, skills_at, out, index, hermes_retain_out=None, mo
     if (model or effort) and harness not in RUN_OVERRIDES:
         raise ValueError(f"--model and --effort support {', '.join(RUN_OVERRIDES)}, not {harness}")
     case = load_case(case_id)
+    if case.get("forge") and harness not in RUN_OVERRIDES:
+        raise ValueError(f"{case_id} needs the local forge, which {', '.join(RUN_OVERRIDES)} put on PATH, not {harness}")
     if case.get("deferred") or case.get("kind", "live") != "live":
         raise SystemExit(f"{case_id} does not run live: kind {case.get('kind', 'live')}, deferred {case.get('deferred')}")
     module = adapter(harness)

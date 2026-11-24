@@ -1,0 +1,20 @@
+{
+ "promises": [
+  "autonomy-grant-decides-and-reports"
+ ],
+ "fixture": "relay",
+ "history": "relay-cache-bound",
+ "entry": "poteto-mode",
+ "turns": [
+  "full autonomy, i'm away until tomorrow. bound the relay cache so the nightly import stops running out of memory, and commit it on a branch."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "decision_path": "relay/cache.py"
+ },
+ "screen": "S4",
+ "note": "full-autonomy grant: the policy is the lead's call, the size depends on a memory budget only ops knows (README), so the lead applies a default and names the alternative"
+}

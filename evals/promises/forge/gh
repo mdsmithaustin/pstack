@@ -1,0 +1,1863 @@
+#!/usr/bin/env python3
+import fcntl
+import itertools
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import tempfile
+import traceback
+import zlib
+from datetime import datetime, timezone
+from pathlib import Path
+
+FORGE = Path(__file__).resolve().parent.parent
+REMOTE = FORGE / "remote.git"
+VERSION = "gh version 2.83.1 (2026-10-15)\nhttps://github.com/cli/cli/releases/tag/v2.83.1"
+TOKEN = "gho_" + "kR7mQ2xV9pL4nT8wB3cZ6yH1sD5fJ0aG2wUi"
+STATE = {}
+DERIVED = set()
+FILES = {}
+ERR = []
+
+
+class Exit(Exception):
+    def __init__(self, code, message=None, unsupported=False):
+        super().__init__(message)
+        self.code, self.message, self.unsupported = code, message, unsupported
+
+
+def fail(message, code=1):
+    raise Exit(code, message)
+
+
+def unsupported(message):
+    raise Exit(1, message, True)
+
+
+def say(text):
+    sys.stdout.write(text if text.endswith("\n") else text + "\n")
+
+
+def warn(text):
+    ERR.append(text if text.endswith("\n") else text + "\n")
+    sys.stderr.write(ERR[-1])
+
+
+def dumps(value):
+    return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+
+
+def now():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def new_id():
+    STATE["next_id"] += 1
+    return STATE["next_id"]
+
+
+def read_input(path):
+    if path == "-":
+        text = sys.stdin.read()
+    else:
+        try:
+            text = Path(path).read_text(encoding="utf-8")
+        except OSError:
+            fail(f"open {path}: no such file or directory")
+    FILES[path] = text[:65536]
+    return text
+
+
+def parse(args, spec):
+    kinds, alias = {}, {}
+    for item in spec.split():
+        names, kind = item.split(":")
+        names = names.split("|")
+        for name in names:
+            alias[name] = names[0]
+        kinds[names[0]] = kind
+    opts = {k: [] if kind == "list" else False if kind == "bool" else None for k, kind in kinds.items()}
+    pos, i = [], 0
+    while i < len(args):
+        arg = args[i]
+        i += 1
+        if arg == "--":
+            pos += args[i:]
+            break
+        if not arg.startswith("-") or arg == "-":
+            pos.append(arg)
+            continue
+        name, eq, value = arg.lstrip("-").partition("=")
+        key = alias.get(name)
+        if key is None or (arg.startswith("--") != (len(name) > 1)):
+            unsupported(f"unknown flag: {arg.split('=')[0]}" if arg.startswith("--")
+                        else f"unknown shorthand flag: '{name[:1]}' in {arg}")
+        if kinds[key] == "bool":
+            opts[key] = value != "false" if eq else True
+            continue
+        if not eq:
+            if i >= len(args) and key == "json":
+                value = ""
+            elif i >= len(args):
+                fail(f"flag needs an argument: {arg}")
+            else:
+                value = args[i]
+                i += 1
+        if kinds[key] == "list":
+            opts[key].append(value)
+        else:
+            opts[key] = value
+    return opts, pos
+
+
+def one_arg(pos, usage):
+    if len(pos) > 1:
+        fail(f"accepts at most 1 arg(s), received {len(pos)}\n\nUsage:  {usage}")
+    return pos[0] if pos else None
+
+
+def git_env(extra=None):
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    return {**env, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", **(extra or {})}
+
+
+def rgit(*args, check=True, text=True, env=None):
+    result = subprocess.run(["git", "--git-dir", str(REMOTE), *args], capture_output=True, text=text,
+                            env=git_env(env))
+    if check and result.returncode:
+        raise RuntimeError(f"git {' '.join(args)}: {result.stderr}")
+    return result
+
+
+def lgit(*args):
+    return subprocess.run(["git", *args], capture_output=True, text=True)
+
+
+def tip(branch):
+    return rgit("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", check=False).stdout.strip() or None
+
+
+def commit_of(rev):
+    return rgit("rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}", check=False).stdout.strip() or None
+
+
+def commits_between(base, head):
+    out = rgit("log", "--reverse", "--format=%H%x1f%s%x1f%b%x1f%an%x1f%ae%x1f%aI%x1e", f"{base}..{head}").stdout
+    rows = []
+    for record in out.split("\x1e"):
+        parts = record.strip("\n").split("\x1f")
+        if len(parts) == 6:
+            oid, subject, body, name, email, date = parts
+            rows.append({"oid": oid, "messageHeadline": subject, "messageBody": body.strip(),
+                         "authoredDate": date, "committedDate": date,
+                         "authors": [{"name": name, "email": email, "login": ""}]})
+    return rows
+
+
+def numstat(base, head):
+    files = []
+    for line in rgit("diff", "--numstat", f"{base}...{head}").stdout.splitlines():
+        added, deleted, path = line.split("\t", 2)
+        files.append({"path": path, "additions": int(added) if added.isdigit() else 0,
+                      "deletions": int(deleted) if deleted.isdigit() else 0})
+    return files
+
+
+def log_push(entry):
+    with open(FORGE / "pushes.jsonl", "a", encoding="utf-8") as log:
+        log.write(json.dumps(entry) + "\n")
+
+
+URL_RE = re.compile(r"^(?:(?:ssh://)?(?:[\w.-]+@)?github\.com[:/]/?|https?://(?:[^@/]+@)?github\.com/)"
+                    r"([^/]+)/([^/]+?)(?:\.git)?/?$")
+
+
+def target(flag=None):
+    given = flag or os.environ.get("GH_REPO")
+    if given:
+        name = re.sub(r"^(?:https?://)?github\.com/", "", given).removesuffix(".git").strip("/")
+        if name.count("/") != 1:
+            fail(f'expected the "[HOST/]OWNER/REPO" format, got "{given}"')
+    else:
+        name = origin_repo()
+    if name.lower() != STATE["repo"].lower():
+        fail(f"GraphQL: Could not resolve to a Repository with the name '{name}'. (repository)")
+    return STATE["repo"]
+
+
+def origin_repo():
+    if lgit("rev-parse", "--git-dir").returncode:
+        fail("failed to run git: fatal: not a git repository (or any of the parent directories): .git")
+    remotes = {}
+    for line in lgit("config", "--get-regexp", r"^remote\..*\.url$").stdout.splitlines():
+        key, _, url = line.partition(" ")
+        remotes[key[len("remote."):-len(".url")]] = url
+    if not remotes:
+        fail("no git remotes found")
+    order = sorted(remotes, key=lambda r: (["upstream", "github", "origin"] + [r]).index(r))
+    for name in order:
+        match = URL_RE.match(remotes[name])
+        if match:
+            return f"{match.group(1)}/{match.group(2)}"
+    fail("none of the git remotes configured for this repository point to a known GitHub host. "
+         "To tell gh about a new GitHub host, please use `gh auth login`")
+
+
+def repo_url():
+    return f"https://github.com/{STATE['repo']}"
+
+
+def current_branch():
+    result = lgit("symbolic-ref", "--quiet", "--short", "HEAD")
+    if result.returncode:
+        fail("could not determine current branch: failed to run git: not on any branch")
+    return result.stdout.strip()
+
+
+def is_bot(login):
+    return login.endswith("[bot]")
+
+
+def short_login(login):
+    return login.removesuffix("[bot]")
+
+
+def association(login):
+    return "OWNER" if login == STATE["user"] else "NONE"
+
+
+def rest_user(login):
+    return {"login": login, "id": zlib.crc32(login.encode()) % 100000000, "node_id": f"U_kgDO{zlib.crc32(login.encode())}",
+            "type": "Bot" if is_bot(login) else "User",
+            "html_url": f"https://github.com/apps/{short_login(login)}" if is_bot(login) else f"https://github.com/{login}",
+            "site_admin": False}
+
+
+def gql_author(login):
+    return {"login": short_login(login)}
+
+
+def pr_url(pr):
+    return f"{repo_url()}/pull/{pr['number']}"
+
+
+def find_item(number):
+    for item in STATE["prs"] + STATE["issues"]:
+        if item["number"] == number:
+            return item
+    return None
+
+
+def find_pr(number):
+    for pr in STATE["prs"]:
+        if pr["number"] == number:
+            return pr
+    fail(f"GraphQL: Could not resolve to a PullRequest with the number of {number}. (repository.pullRequest)")
+
+
+def select_pr(arg):
+    if arg is None:
+        arg = current_branch()
+        matches = [pr for pr in STATE["prs"] if pr["head"] == arg]
+        if not matches:
+            fail(f'no pull requests found for branch "{arg}"')
+        return sorted(matches, key=lambda pr: (pr["state"] == "OPEN", pr["number"]))[-1]
+    match = re.match(r"^https?://github\.com/([^/]+/[^/]+)/pull/(\d+)", arg)
+    if match:
+        target(match.group(1))
+        return find_pr(int(match.group(2)))
+    if re.fullmatch(r"#?\d+", arg):
+        return find_pr(int(arg.lstrip("#")))
+    matches = [pr for pr in STATE["prs"] if pr["head"] == arg]
+    if not matches:
+        fail(f'no pull requests found for branch "{arg}"')
+    return sorted(matches, key=lambda pr: (pr["state"] == "OPEN", pr["number"]))[-1]
+
+
+BUCKETS = {"SUCCESS": "pass", "SKIPPED": "skipping", "NEUTRAL": "skipping", "CANCELLED": "cancel",
+           "ERROR": "fail", "FAILURE": "fail", "TIMED_OUT": "fail", "ACTION_REQUIRED": "fail",
+           "STARTUP_FAILURE": "fail"}
+
+
+def bucket(check):
+    return BUCKETS.get(check["conclusion"] or "", "pending")
+
+
+def ci_run(sha, branch="", title=""):
+    runs = STATE["runs"]
+    if sha in runs:
+        return runs[sha]
+    run_id = STATE["next_run_id"]
+    STATE["next_run_id"] += 2
+    runs[sha] = {"id": run_id, "job": run_id + 1, "sha": sha, "branch": branch, "title": title, "attempt": 0}
+    execute_run(runs[sha])
+    return runs[sha]
+
+
+def execute_run(run):
+    ci = STATE["ci"]
+    run["attempt"] += 1
+    run["startedAt"] = now()
+    work = Path(tempfile.mkdtemp(prefix="runner-"))
+    archive = rgit("archive", "--format=tar", run["sha"], text=False).stdout
+    subprocess.run(["tar", "-x", "-C", str(work)], input=archive, check=True)
+    proc = subprocess.Popen(ci["command"], shell=True, cwd=work, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, start_new_session=True, env=git_env())
+    timeout = ci.get("timeout_s", 600)
+    try:
+        out, _ = proc.communicate(timeout=timeout)
+        code = proc.returncode
+    except subprocess.TimeoutExpired:
+        os.killpg(proc.pid, signal.SIGKILL)
+        out, _ = proc.communicate()
+        code = None
+    name = STATE["repo"].split("/")[1]
+    text = out.decode("utf-8", "replace")
+    for path in {str(work), os.path.realpath(work)}:
+        text = text.replace(path, f"/__w/{name}/{name}")
+    if code is None:
+        text += f"\n##[error]The job has exceeded the maximum execution time of {timeout}s."
+    elif code:
+        text += f"\n##[error]Process completed with exit code {code}."
+    subprocess.run(["rm", "-rf", str(work)])
+    lines = text.splitlines()
+    (FORGE / "ci" / f"{run['id']}.log").write_text(text, encoding="utf-8")
+    run.update(conclusion="SUCCESS" if code == 0 else "FAILURE", completedAt=now(), output="\n".join(lines[-200:]))
+
+
+def ci_check(run):
+    ci = STATE["ci"]
+    return {"name": ci["name"], "workflow": ci["name"], "status": "COMPLETED", "conclusion": run["conclusion"],
+            "link": f"{repo_url()}/actions/runs/{run['id']}/job/{run['job']}",
+            "startedAt": run["startedAt"], "completedAt": run["completedAt"]}
+
+
+def checks_for(pr):
+    ci = [ci_check(ci_run(pr["headRefOid"], pr["head"], pr["title"]))] if STATE["ci"] else []
+    return ci + canned_checks(pr)
+
+
+def canned_checks(pr):
+    checks = []
+    for canned in pr["checks"]:
+        conclusion = (canned.get("conclusion") or "").upper() or None
+        if conclusion in ("PENDING", "QUEUED", "IN_PROGRESS"):
+            conclusion = None
+        checks.append({"name": canned["name"], "workflow": canned.get("workflow", ""),
+                       "status": "COMPLETED" if conclusion else "IN_PROGRESS", "conclusion": conclusion,
+                       "link": f"{pr_url(pr)}/checks", "startedAt": pr["createdAt"],
+                       "completedAt": pr["createdAt"] if conclusion else None})
+    return checks
+
+
+def derive(pr):
+    if pr["state"] != "OPEN" or pr["number"] in DERIVED:
+        return
+    DERIVED.add(pr["number"])
+    pr["headRefOid"] = tip(pr["head"]) or pr["headRefOid"]
+    pr["baseRefOid"] = tip(pr["base"]) or pr["baseRefOid"]
+    clean = rgit("merge-tree", "--write-tree", "--no-messages", pr["baseRefOid"], pr["headRefOid"],
+                 check=False).returncode == 0
+    pr["mergeable"] = "MERGEABLE" if clean else "CONFLICTING"
+
+
+def merge_state(pr):
+    derive(pr)
+    if pr["state"] == "OPEN":
+        if pr["mergeable"] == "CONFLICTING":
+            pr["mergeStateStatus"] = "DIRTY"
+        elif any(bucket(c) in ("fail", "pending") for c in checks_for(pr)):
+            pr["mergeStateStatus"] = "BLOCKED"
+        else:
+            pr["mergeStateStatus"] = "CLEAN"
+    return pr["mergeStateStatus"]
+
+
+def latest_reviews(pr):
+    latest = {}
+    for review in pr["reviews"]:
+        latest[review["author"]] = review
+    return list(latest.values())
+
+
+def review_decision(pr):
+    states = {r["state"] for r in latest_reviews(pr)}
+    return "CHANGES_REQUESTED" if "CHANGES_REQUESTED" in states else "APPROVED" if "APPROVED" in states else ""
+
+
+def gql_check(check):
+    return {"__typename": "CheckRun", "name": check["name"], "status": check["status"],
+            "conclusion": check["conclusion"] or "", "detailsUrl": check["link"], "workflowName": check["workflow"],
+            "startedAt": check["startedAt"], "completedAt": check["completedAt"] or "0001-01-01T00:00:00Z"}
+
+
+def gql_review(pr, review):
+    return {"id": f"PRR_kwDO{review['id']}", "author": gql_author(review["author"]),
+            "authorAssociation": association(review["author"]), "body": review.get("body", ""),
+            "submittedAt": review["submittedAt"], "includesCreatedEdit": False, "reactionGroups": [],
+            "state": review["state"], "commit": {"oid": review.get("commit") or pr["headRefOid"]}}
+
+
+def gql_comment(pr, comment):
+    return {"id": f"IC_kwDO{comment['id']}", "author": gql_author(comment["author"]),
+            "authorAssociation": association(comment["author"]), "body": comment["body"],
+            "createdAt": comment["createdAt"], "includesCreatedEdit": False, "isMinimized": False,
+            "minimizedReason": "", "reactionGroups": [], "url": f"{pr_url(pr)}#issuecomment-{comment['id']}",
+            "viewerDidAuthor": comment["author"] == STATE["user"]}
+
+
+def pr_files(pr):
+    return numstat(pr["baseRefOid"], pr["headRefOid"])
+
+
+PR_FIELDS = {
+    "additions": lambda pr: sum(f["additions"] for f in pr_files(pr)),
+    "author": lambda pr: gql_author(pr["author"]),
+    "autoMergeRequest": lambda pr: pr["autoMergeRequest"],
+    "baseRefName": lambda pr: pr["base"],
+    "baseRefOid": lambda pr: pr["baseRefOid"],
+    "body": lambda pr: pr["body"],
+    "changedFiles": lambda pr: len(pr_files(pr)),
+    "closed": lambda pr: pr["state"] != "OPEN",
+    "closedAt": lambda pr: pr["closedAt"],
+    "comments": lambda pr: [gql_comment(pr, c) for c in pr["comments"]],
+    "commits": lambda pr: commits_between(pr["baseRefOid"], pr["headRefOid"]),
+    "createdAt": lambda pr: pr["createdAt"],
+    "deletions": lambda pr: sum(f["deletions"] for f in pr_files(pr)),
+    "files": pr_files,
+    "headRefName": lambda pr: pr["head"],
+    "headRefOid": lambda pr: pr["headRefOid"],
+    "id": lambda pr: f"PR_kwDO{pr['number']}",
+    "isDraft": lambda pr: pr["draft"],
+    "labels": lambda pr: [{"id": f"LA_kwDO{zlib.crc32(l.encode())}", "name": l, "description": "", "color": "ededed"}
+                          for l in pr["labels"]],
+    "latestReviews": lambda pr: [gql_review(pr, r) for r in latest_reviews(pr)],
+    "mergeCommit": lambda pr: {"oid": pr["mergeCommit"]} if pr["mergeCommit"] else None,
+    "mergeStateStatus": merge_state,
+    "mergeable": lambda pr: pr["mergeable"],
+    "mergedAt": lambda pr: pr["mergedAt"],
+    "number": lambda pr: pr["number"],
+    "reviewDecision": review_decision,
+    "reviewRequests": lambda pr: [{"__typename": "Bot" if is_bot(r) else "User", "login": short_login(r)}
+                                  for r in pr["reviewRequests"]],
+    "reviews": lambda pr: [gql_review(pr, r) for r in pr["reviews"]],
+    "state": lambda pr: pr["state"],
+    "statusCheckRollup": lambda pr: [gql_check(c) for c in checks_for(pr)],
+    "title": lambda pr: pr["title"],
+    "url": pr_url,
+}
+ISSUE_FIELDS = {
+    "author": lambda i: gql_author(i["author"]),
+    "body": lambda i: i["body"],
+    "closed": lambda i: i["state"] != "OPEN",
+    "comments": lambda i: [gql_comment(i, c) for c in i["comments"]],
+    "createdAt": lambda i: i["createdAt"],
+    "labels": lambda i: [{"name": l, "description": "", "color": "ededed"} for l in i["labels"]],
+    "number": lambda i: i["number"],
+    "state": lambda i: i["state"],
+    "title": lambda i: i["title"],
+    "url": lambda i: f"{repo_url()}/issues/{i['number']}",
+}
+RUN_FIELDS = {
+    "attempt": lambda r: r["attempt"],
+    "conclusion": lambda r: r["conclusion"].lower(),
+    "createdAt": lambda r: r["startedAt"],
+    "databaseId": lambda r: r["id"],
+    "displayTitle": lambda r: r["title"],
+    "event": lambda r: "pull_request",
+    "headBranch": lambda r: r["branch"],
+    "headSha": lambda r: r["sha"],
+    "name": lambda r: STATE["ci"]["name"],
+    "number": lambda r: r["id"] - 18000000000,
+    "startedAt": lambda r: r["startedAt"],
+    "status": lambda r: "completed",
+    "updatedAt": lambda r: r["completedAt"],
+    "url": lambda r: f"{repo_url()}/actions/runs/{r['id']}",
+    "workflowName": lambda r: STATE["ci"]["name"],
+}
+CHECK_FIELDS = {
+    "bucket": bucket,
+    "completedAt": lambda c: c["completedAt"] or "0001-01-01T00:00:00Z",
+    "description": lambda c: "",
+    "event": lambda c: "pull_request",
+    "link": lambda c: c["link"],
+    "name": lambda c: c["name"],
+    "startedAt": lambda c: c["startedAt"],
+    "state": lambda c: c["conclusion"] or "IN_PROGRESS",
+    "workflow": lambda c: c["workflow"],
+}
+REPO_FIELDS = {
+    "defaultBranchRef": lambda _: {"name": "main"},
+    "deleteBranchOnMerge": lambda _: False,
+    "mergeCommitAllowed": lambda _: True,
+    "rebaseMergeAllowed": lambda _: True,
+    "squashMergeAllowed": lambda _: True,
+    "name": lambda _: STATE["repo"].split("/")[1],
+    "nameWithOwner": lambda _: STATE["repo"],
+    "owner": lambda _: {"id": rest_user(STATE["repo"].split("/")[0])["node_id"], "login": STATE["repo"].split("/")[0]},
+    "url": lambda _: repo_url(),
+}
+
+
+def json_fields(spec, table):
+    if spec is None:
+        return None
+    names = [f.strip() for f in spec.split(",") if f.strip()]
+    listing = "\n".join(f"  {name}" for name in sorted(table))
+    if not names:
+        fail(f"Specify one or more comma-separated fields for `--json`:\n{listing}")
+    for name in names:
+        if name not in table:
+            fail(f'Unknown JSON field: "{name}"\nAvailable fields:\n{listing}')
+    return sorted(set(names))
+
+
+def export(item, fields, table):
+    return {name: table[name](item) for name in fields}
+
+
+def emit(value, expr):
+    if expr is None:
+        say(dumps(value))
+        return
+    for result in jq(expr, value):
+        say(result if isinstance(result, str) else dumps(result))
+
+
+def need_json(opts):
+    if opts.get("jq") and opts.get("json") is None:
+        fail("cannot use `--jq` without specifying `--json`")
+
+
+class JqParseError(Exception):
+    pass
+
+
+class JqError(Exception):
+    pass
+
+
+def jq(expr, value):
+    try:
+        program = JqParser(expr).program()
+    except JqParseError as exc:
+        unsupported(f"failed to parse jq expression (line 1, column {exc.args[0] + 1})\n    {expr}")
+    try:
+        return list(program(value))
+    except JqError as exc:
+        fail(str(exc))
+
+
+def type_name(v):
+    return ("null" if v is None else "boolean" if isinstance(v, bool) else "number" if isinstance(v, (int, float))
+            else "string" if isinstance(v, str) else "array" if isinstance(v, list) else "object")
+
+
+def truthy(v):
+    return v is not None and v is not False
+
+
+def rank(v):
+    if isinstance(v, bool):
+        return 2 if v else 1
+    return {"null": 0, "number": 3, "string": 4, "array": 5, "object": 6}[type_name(v)]
+
+
+def order(a, b):
+    ra, rb = rank(a), rank(b)
+    if ra != rb:
+        return (ra > rb) - (ra < rb)
+    if isinstance(a, list):
+        for x, y in zip(a, b):
+            c = order(x, y)
+            if c:
+                return c
+        return (len(a) > len(b)) - (len(a) < len(b))
+    if isinstance(a, dict):
+        c = order(sorted(a), sorted(b))
+        if c:
+            return c
+        for k in sorted(a):
+            c = order(a[k], b[k])
+            if c:
+                return c
+        return 0
+    if isinstance(a, (int, float, str)) and not isinstance(a, bool):
+        return (a > b) - (a < b)
+    return 0
+
+
+def index(v, k):
+    if v is None:
+        return None
+    if isinstance(v, dict) and isinstance(k, str):
+        return v.get(k)
+    if isinstance(v, list) and isinstance(k, int) and not isinstance(k, bool):
+        return v[k] if -len(v) <= k < len(v) else None
+    expected = "an object" if isinstance(k, str) else "an array"
+    raise JqError(f"expected {expected} but got: {type_name(v)} ({dumps(v)})")
+
+
+def iterate(v):
+    if isinstance(v, list):
+        return list(v)
+    if isinstance(v, dict):
+        return list(v.values())
+    raise JqError(f"cannot iterate over: {type_name(v)} ({dumps(v)})")
+
+
+def contains(a, b):
+    if type_name(a) != type_name(b):
+        raise JqError(f"{type_name(a)} ({dumps(a)}) and {type_name(b)} ({dumps(b)}) cannot have their containment checked")
+    if isinstance(a, str):
+        return b in a
+    if isinstance(a, list):
+        return all(any(type_name(x) == type_name(y) and contains(x, y) for x in a) for y in b)
+    if isinstance(a, dict):
+        return all(k in a and type_name(a[k]) == type_name(v) and contains(a[k], v) for k, v in b.items())
+    return a == b
+
+
+def tostr(v):
+    return v if isinstance(v, str) else dumps(v)
+
+
+def tsv_cell(v):
+    if v is None:
+        return ""
+    if isinstance(v, str):
+        return v.replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n").replace("\r", "\\r")
+    if isinstance(v, (list, dict)):
+        raise JqError(f"{type_name(v)} ({dumps(v)}) is not valid in a csv row")
+    return dumps(v)
+
+
+def csv_cell(v):
+    if isinstance(v, str):
+        return '"' + v.replace('"', '""') + '"'
+    return tsv_cell(v)
+
+
+def string_arg(fn, x):
+    for s in fn(x):
+        if not isinstance(s, str):
+            raise JqError(f"{type_name(s)} ({dumps(s)}) cannot be used as a string argument")
+        yield s
+
+
+class JqParser:
+    IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+    NUMBER = re.compile(r"\d+(?:\.\d+)?")
+    COMPARE = ("==", "!=", "<=", ">=", "<", ">")
+
+    def __init__(self, src):
+        self.s, self.i = src, 0
+
+    def ws(self):
+        while self.i < len(self.s) and self.s[self.i].isspace():
+            self.i += 1
+
+    def peek(self, tok):
+        self.ws()
+        return self.s.startswith(tok, self.i)
+
+    def eat(self, tok):
+        if self.peek(tok):
+            self.i += len(tok)
+            return True
+        return False
+
+    def expect(self, tok):
+        if not self.eat(tok):
+            raise JqParseError(self.i)
+
+    def word(self):
+        self.ws()
+        m = self.IDENT.match(self.s, self.i)
+        return m.group() if m else None
+
+    def keyword(self, name):
+        if self.word() == name:
+            self.i += len(name)
+            return True
+        return False
+
+    def program(self):
+        node = self.pipe()
+        self.ws()
+        if self.i != len(self.s):
+            raise JqParseError(self.i)
+        return node
+
+    def pipe(self):
+        left = self.comma()
+        if self.peek("|=") or not self.eat("|"):
+            return left
+        right = self.pipe()
+        return lambda x: (z for y in left(x) for z in right(y))
+
+    def comma(self):
+        items = [self.alt()]
+        while self.eat(","):
+            items.append(self.alt())
+        if len(items) == 1:
+            return items[0]
+        return lambda x: (y for f in items for y in f(x))
+
+    def alt(self):
+        left = self.or_()
+        while self.eat("//"):
+            right, first = self.or_(), left
+
+            def node(x, first=first, right=right):
+                found = []
+                try:
+                    found = [v for v in first(x) if truthy(v)]
+                except JqError:
+                    pass
+                return iter(found) if found else right(x)
+            left = node
+        return left
+
+    def or_(self):
+        left = self.and_()
+        while self.keyword("or"):
+            right, first = self.and_(), left
+            left = lambda x, a=first, b=right: (
+                True if truthy(l) else truthy(r) for l in a(x) for r in ([None] if truthy(l) else b(x)))
+        return left
+
+    def and_(self):
+        left = self.compare()
+        while self.keyword("and"):
+            right, first = self.compare(), left
+            left = lambda x, a=first, b=right: (
+                False if not truthy(l) else truthy(r) for l in a(x) for r in ([None] if not truthy(l) else b(x)))
+        return left
+
+    def compare(self):
+        left = self.postfix()
+        for op in self.COMPARE:
+            if self.eat(op):
+                right = self.postfix()
+                test = {"==": lambda c: c == 0, "!=": lambda c: c != 0, "<": lambda c: c < 0,
+                        "<=": lambda c: c <= 0, ">": lambda c: c > 0, ">=": lambda c: c >= 0}[op]
+                return lambda x: (test(order(l, r)) for r in right(x) for l in left(x))
+        return left
+
+    def postfix(self):
+        node = self.primary()
+        while True:
+            self.ws()
+            if self.s.startswith(".", self.i) and self.i + 1 < len(self.s) and (
+                    self.IDENT.match(self.s, self.i + 1) or self.s[self.i + 1] in '"['):
+                self.i += 1
+                node = self.suffix(node, dotted=True)
+            elif self.peek("["):
+                node = self.suffix(node, dotted=False)
+            elif self.eat("?"):
+                inner = node
+
+                def node(x, inner=inner):
+                    try:
+                        return iter(list(inner(x)))
+                    except JqError:
+                        return iter(())
+            else:
+                return node
+
+    def suffix(self, node, dotted):
+        if dotted and self.s[self.i] != "[":
+            key = self.field_name()
+            return lambda x: (index(v, key) for v in node(x))
+        self.expect("[")
+        if self.eat("]"):
+            return lambda x: (e for v in node(x) for e in iterate(v))
+        key = self.pipe()
+        self.expect("]")
+        return lambda x: (index(v, k) for v in node(x) for k in key(x))
+
+    def field_name(self):
+        if self.s[self.i] == '"':
+            parts = self.string_parts()
+            if any(not isinstance(p, str) for p in parts):
+                raise JqParseError(self.i)
+            return "".join(parts)
+        m = self.IDENT.match(self.s, self.i)
+        self.i = m.end()
+        return m.group()
+
+    def string_parts(self):
+        self.i += 1
+        parts, buf = [], []
+        escapes = {'"': '"', "\\": "\\", "/": "/", "n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f"}
+        while self.i < len(self.s):
+            c = self.s[self.i]
+            self.i += 1
+            if c == '"':
+                parts.append("".join(buf))
+                return parts
+            if c != "\\":
+                buf.append(c)
+                continue
+            if self.i >= len(self.s):
+                break
+            e = self.s[self.i]
+            self.i += 1
+            if e in escapes:
+                buf.append(escapes[e])
+            elif e == "u":
+                buf.append(chr(int(self.s[self.i:self.i + 4], 16)))
+                self.i += 4
+            elif e == "(":
+                parts.append("".join(buf))
+                buf = []
+                parts.append(self.pipe())
+                self.expect(")")
+            else:
+                raise JqParseError(self.i)
+        raise JqParseError(self.i)
+
+    def string(self):
+        parts = self.string_parts()
+
+        def node(x):
+            pools = [[p] if isinstance(p, str) else [tostr(v) for v in p(x)] for p in parts]
+            return ("".join(combo) for combo in itertools.product(*pools))
+        return node
+
+    def primary(self):
+        self.ws()
+        if self.i >= len(self.s):
+            raise JqParseError(self.i)
+        c = self.s[self.i]
+        if c == "." and not self.s.startswith("..", self.i):
+            self.i += 1
+            if self.i < len(self.s) and (self.IDENT.match(self.s, self.i) or self.s[self.i] == '"'):
+                key = self.field_name()
+                return lambda x: iter([index(x, key)])
+            return lambda x: iter([x])
+        if c == '"':
+            return self.string()
+        m = self.NUMBER.match(self.s, self.i)
+        if m:
+            self.i = m.end()
+            value = float(m.group()) if "." in m.group() else int(m.group())
+            return lambda x: iter([value])
+        if self.eat("("):
+            inner = self.pipe()
+            self.expect(")")
+            return inner
+        if self.eat("["):
+            if self.eat("]"):
+                return lambda x: iter([[]])
+            inner = self.pipe()
+            self.expect("]")
+            return lambda x: iter([list(inner(x))])
+        if self.eat("{"):
+            return self.obj()
+        if self.eat("@tsv"):
+            return lambda x: iter(["\t".join(tsv_cell(v) for v in self.row(x))])
+        if self.eat("@csv"):
+            return lambda x: iter([",".join(csv_cell(v) for v in self.row(x))])
+        name = self.word()
+        if name is None:
+            raise JqParseError(self.i)
+        self.i += len(name)
+        return self.function(name)
+
+    def row(self, x):
+        if not isinstance(x, list):
+            raise JqError(f"{type_name(x)} ({dumps(x)}) cannot be csv-formatted, only an array can be")
+        return x
+
+    def args(self, count):
+        if count == 0:
+            return []
+        self.expect("(")
+        args = [self.pipe()]
+        while self.eat(";"):
+            args.append(self.pipe())
+        self.expect(")")
+        if len(args) != count:
+            raise JqParseError(self.i)
+        return args
+
+    def function(self, name):
+        has_args = self.peek("(")
+        constants = {"true": True, "false": False, "null": None}
+        if name in constants and not has_args:
+            return lambda x: iter([constants[name]])
+        if not has_args:
+            simple = {
+                "empty": lambda x: [],
+                "not": lambda x: [not truthy(x)],
+                "length": lambda x: [self.length(x)],
+                "keys": lambda x: [sorted(x) if isinstance(x, dict) else list(range(len(iterate(x))))],
+                "first": lambda x: [index(x, 0)],
+                "last": lambda x: [index(x, -1)],
+                "any": lambda x: [any(truthy(v) for v in iterate(x))],
+                "all": lambda x: [all(truthy(v) for v in iterate(x))],
+            }
+            if name not in simple:
+                raise JqParseError(self.i)
+            fn = simple[name]
+            return lambda x: iter(fn(x))
+        if name in ("select", "map", "first", "any", "all"):
+            (f,) = self.args(1)
+            return {
+                "select": lambda x: (x for v in f(x) if truthy(v)),
+                "map": lambda x: iter([[y for e in iterate(x) for y in f(e)]]),
+                "first": lambda x: itertools.islice(f(x), 1),
+                "any": lambda x: iter([any(truthy(y) for e in iterate(x) for y in f(e))]),
+                "all": lambda x: iter([all(truthy(y) for e in iterate(x) for y in f(e))]),
+            }[name]
+        if name in ("join", "test", "startswith", "contains"):
+            (f,) = self.args(1)
+            if name == "contains":
+                return lambda x: (contains(x, b) for b in f(x))
+            if name == "join":
+                return lambda x: (sep.join("" if v is None else tostr(v) for v in iterate(x))
+                                  for sep in string_arg(f, x))
+            check = {"test": lambda s, a: re.search(a, s) is not None, "startswith": lambda s, a: s.startswith(a)}[name]
+
+            def node(x):
+                if not isinstance(x, str):
+                    raise JqError(f"{type_name(x)} ({dumps(x)}) cannot be matched, as it is not a string")
+                return (check(x, a) for a in string_arg(f, x))
+            return node
+        raise JqParseError(self.i)
+
+    @staticmethod
+    def length(x):
+        if x is None:
+            return 0
+        if isinstance(x, bool):
+            raise JqError("boolean (" + dumps(x) + ") has no length")
+        if isinstance(x, (int, float)):
+            return abs(x)
+        return len(x)
+
+    def obj(self):
+        entries = []
+        if not self.eat("}"):
+            while True:
+                entries.append(self.entry())
+                if self.eat("}"):
+                    break
+                self.expect(",")
+
+        def node(x):
+            pools = [[(k, v) for k in key(x) for v in val(x)] for key, val in entries]
+            for combo in itertools.product(*pools):
+                out = {}
+                for k, v in combo:
+                    if not isinstance(k, str):
+                        raise JqError(f"object keys must be strings")
+                    out[k] = v
+                yield out
+        return node
+
+    def entry(self):
+        self.ws()
+        if self.s.startswith('"', self.i):
+            key = self.string()
+        elif self.eat("("):
+            key = self.pipe()
+            self.expect(")")
+        else:
+            name = self.word()
+            if name is None:
+                raise JqParseError(self.i)
+            self.i += len(name)
+            key = lambda x, name=name: iter([name])
+        if not self.eat(":"):
+            return key, lambda x: (index(x, k) for k in key(x))
+        return key, self.objval()
+
+    def objval(self):
+        left = self.alt()
+        if self.peek("|=") or not self.eat("|"):
+            return left
+        right = self.objval()
+        return lambda x: (z for y in left(x) for z in right(y))
+
+
+def cmd_version(args):
+    if args:
+        unsupported(f"unknown flag: {args[0]}")
+    say(VERSION)
+
+
+def cmd_auth(args):
+    if not args or args[0] not in ("status", "token"):
+        unsupported(f'unknown command "{args[0] if args else ""}" for "gh auth"')
+    opts, pos = parse(args[1:], "hostname|h:str show-token|t:bool active|a:bool" if args[0] == "status"
+                      else "hostname|h:str user|u:str")
+    if pos:
+        fail(f'unknown command "{pos[0]}" for "gh auth {args[0]}"')
+    host = opts["hostname"] or "github.com"
+    if host != "github.com":
+        fail(f"You are not logged into any accounts on {host}" if args[0] == "status"
+             else f"no oauth token found for {host}")
+    if args[0] == "token":
+        say(TOKEN)
+        return
+    token = TOKEN if opts.get("show-token") else "gho_" + "*" * 36
+    say(f"github.com\n  ✓ Logged in to github.com account {STATE['user']} (keyring)\n  - Active account: true\n"
+        f"  - Git operations protocol: ssh\n  - Token: {token}\n  - Token scopes: 'gist', 'read:org', 'repo', 'workflow'")
+
+
+def cmd_repo(args):
+    if not args or args[0] != "view":
+        unsupported(f'unknown command "{args[0] if args else ""}" for "gh repo"')
+    opts, pos = parse(args[1:], "json:str jq|q:str")
+    need_json(opts)
+    target(one_arg(pos, "gh repo view [<repository>] [flags]"))
+    fields = json_fields(opts["json"], REPO_FIELDS)
+    if fields:
+        emit(export(None, fields, REPO_FIELDS), opts["jq"])
+        return
+    readme = rgit("show", "main:README.md", check=False).stdout
+    say(f"name:\t{STATE['repo']}\ndescription:\t\n--\n{readme}")
+
+
+def cmd_browse(args):
+    fail("could not open a browser: no browser found in this environment")
+
+
+def pr_arg(pos, usage):
+    return select_pr(one_arg(pos, usage))
+
+
+def pr_create(opts, pos):
+    if pos:
+        fail(f'unknown command "{pos[0]}" for "gh pr create"')
+    head = opts["head"]
+    if head and ":" in head:
+        owner, _, head = head.partition(":")
+        if owner != STATE["repo"].split("/")[0]:
+            unsupported("pull request create failed: GraphQL: Head repository could not be resolved (createPullRequest)")
+    explicit = bool(head)
+    head = head or current_branch()
+    base = opts["base"] or "main"
+    if not opts["fill"] and (opts["title"] is None or opts["body"] is None and opts["body-file"] is None):
+        fail("must provide `--title` and `--body` (or `--fill` or `fill-first` or `--fillverbose`) "
+             "when not running interactively")
+    head_oid = tip(head)
+    if not head_oid:
+        if explicit:
+            fail(f"pull request create failed: GraphQL: Head sha can't be blank, Base sha can't be blank, "
+                 f"No commits between {base} and {head}, Head ref must be a branch (createPullRequest)")
+        fail("aborted: you must first push the current branch to a remote, or use the --head flag")
+    base_oid = tip(base)
+    if not base_oid:
+        fail("pull request create failed: GraphQL: Base ref must be a branch (createPullRequest)")
+    for pr in STATE["prs"]:
+        if pr["state"] == "OPEN" and pr["head"] == head and pr["base"] == base:
+            fail(f'a pull request for branch "{head}" into branch "{base}" already exists:\n{pr_url(pr)}')
+    commits = commits_between(base_oid, head_oid)
+    if not commits:
+        fail(f"pull request create failed: GraphQL: No commits between {base} and {head} (createPullRequest)")
+    title, body = opts["title"], opts["body"]
+    if opts["body-file"] is not None:
+        body = read_input(opts["body-file"])
+    if opts["fill"]:
+        if len(commits) == 1:
+            fill_title, fill_body = commits[0]["messageHeadline"], commits[0]["messageBody"]
+        else:
+            fill_title = re.sub(r"[-_]", " ", head)
+            fill_body = "".join(f"- {c['messageHeadline']}\n" for c in commits)
+        title = fill_title if title is None else title
+        body = fill_body if body is None else body
+    number = STATE["next_number"]
+    STATE["next_number"] += 1
+    pr = {"number": number, "title": title, "body": body, "head": head, "base": base, "author": STATE["user"],
+          "draft": opts["draft"], "state": "OPEN", "labels": list(opts["label"]), "reviewRequests": [], "checks": [],
+          "reviews": [], "threads": [], "comments": [], "createdAt": now(), "mergedAt": None, "closedAt": None,
+          "mergeCommit": None, "autoMergeRequest": None, "headRefOid": head_oid, "baseRefOid": base_oid,
+          "mergeable": "UNKNOWN", "mergeStateStatus": "UNKNOWN"}
+    STATE["prs"].append(pr)
+    derive(pr)
+    say(pr_url(pr))
+
+
+def pr_view(opts, pos):
+    need_json(opts)
+    fields = json_fields(opts["json"], PR_FIELDS)
+    pr = pr_arg(pos, "gh pr view [<number> | <url> | <branch>] [flags]")
+    derive(pr)
+    if fields:
+        emit(export(pr, fields, PR_FIELDS), opts["jq"])
+        return
+    files = pr_files(pr)
+    state = "DRAFT" if pr["draft"] and pr["state"] == "OPEN" else pr["state"]
+    reviewers = ", ".join([f"{short_login(r)} (Requested)" for r in pr["reviewRequests"]] +
+                          [f"{short_login(r['author'])} ({r['state'].title().replace('_', ' ')})"
+                           for r in latest_reviews(pr)])
+    auto = "enabled" if pr["autoMergeRequest"] else "disabled"
+    say(f"title:\t{pr['title']}\nstate:\t{state}\nauthor:\t{pr['author']}\nlabels:\t{', '.join(pr['labels'])}\n"
+        f"assignees:\t\nreviewers:\t{reviewers}\nprojects:\t\nmilestone:\t\nnumber:\t{pr['number']}\n"
+        f"url:\t{pr_url(pr)}\nadditions:\t{sum(f['additions'] for f in files)}\n"
+        f"deletions:\t{sum(f['deletions'] for f in files)}\nauto-merge:\t{auto}\n--\n{pr['body']}")
+    if opts["comments"]:
+        for c in pr["comments"]:
+            say(f"author:\t{short_login(c['author'])}\nassociation:\t{association(c['author']).lower()}\n"
+                f"edited:\tfalse\nstatus:\tnone\n--\n{c['body']}\n--")
+
+
+def pr_list(opts, pos):
+    need_json(opts)
+    if pos:
+        fail(f"accepts 0 arg(s), received {len(pos)}")
+    state = (opts["state"] or "open").upper()
+    if state not in ("OPEN", "CLOSED", "MERGED", "ALL"):
+        fail(f'invalid argument "{opts["state"]}" for "-s, --state" flag: valid values are '
+             '{open|closed|merged|all}')
+    prs = [pr for pr in sorted(STATE["prs"], key=lambda p: -p["number"])
+           if state == "ALL" or pr["state"] == state
+           if opts["head"] in (None, pr["head"]) and opts["base"] in (None, pr["base"])]
+    prs = prs[:int(opts["limit"] or 30)]
+    for pr in prs:
+        derive(pr)
+    fields = json_fields(opts["json"], PR_FIELDS)
+    if fields:
+        emit([export(pr, fields, PR_FIELDS) for pr in prs], opts["jq"])
+        return
+    for pr in prs:
+        shown = "DRAFT" if pr["draft"] and pr["state"] == "OPEN" else pr["state"]
+        say(f"{pr['number']}\t{pr['title']}\t{pr['head']}\t{shown}\t{pr['createdAt']}")
+
+
+def pr_diff(opts, pos):
+    pr = pr_arg(pos, "gh pr diff [<number> | <url> | <branch>] [flags]")
+    derive(pr)
+    if opts["name-only"]:
+        for f in pr_files(pr):
+            say(f["path"])
+        return
+    sys.stdout.write(rgit("diff", f"{pr['baseRefOid']}...{pr['headRefOid']}").stdout)
+
+
+def pr_checks(opts, pos):
+    need_json(opts)
+    fields = json_fields(opts["json"], CHECK_FIELDS)
+    pr = pr_arg(pos, "gh pr checks [<number> | <url> | <branch>] [flags]")
+    derive(pr)
+    checks = checks_for(pr)
+    if not checks:
+        fail(f"no {'required ' if opts['required'] else ''}checks reported on the '{pr['head']}' branch")
+    if fields:
+        emit([export(c, fields, CHECK_FIELDS) for c in checks], opts["jq"])
+        return
+    for c in checks:
+        say(f"{c['name']}\t{bucket(c)}\t{'0' if not c['completedAt'] else '12s'}\t{c['link']}\t")
+    buckets = {bucket(c) for c in checks}
+    if "fail" in buckets:
+        raise Exit(1)
+    if "pending" in buckets:
+        raise Exit(8)
+
+
+def pr_edit(opts, pos):
+    pr = pr_arg(pos, "gh pr edit [<number> | <url> | <branch>] [flags]")
+    if opts["title"] is not None:
+        pr["title"] = opts["title"]
+    if opts["body-file"] is not None:
+        pr["body"] = read_input(opts["body-file"])
+    elif opts["body"] is not None:
+        pr["body"] = opts["body"]
+    if opts["base"]:
+        if not tip(opts["base"]):
+            fail(f"GraphQL: Proposed base branch '{opts['base']}' was not found (updatePullRequest)")
+        pr["base"] = opts["base"]
+    pr["labels"] = [l for l in pr["labels"] if l not in opts["remove-label"]]
+    pr["labels"] += [l for l in opts["add-label"] if l not in pr["labels"]]
+    say(pr_url(pr))
+
+
+def pr_ready(opts, pos):
+    pr = pr_arg(pos, "gh pr ready [<number> | <url> | <branch>] [flags]")
+    if pr["state"] != "OPEN":
+        fail(f"X Pull request {STATE['repo']}#{pr['number']} is closed. Only draft pull requests can be marked as \"ready for review\"")
+    pr["draft"] = False
+    warn(f"✓ Pull request {STATE['repo']}#{pr['number']} is marked as \"ready for review\"")
+
+
+def pr_close(opts, pos):
+    pr = pr_arg(pos, "gh pr close {<number> | <url> | <branch>} [flags]")
+    if pr["state"] != "OPEN":
+        warn(f"! Pull request {STATE['repo']}#{pr['number']} ({pr['title']}) is already {pr['state'].lower()}")
+        return
+    derive(pr)
+    pr.update(state="CLOSED", closedAt=now())
+    warn(f"✓ Closed pull request {STATE['repo']}#{pr['number']} ({pr['title']})")
+
+
+def pr_comment(opts, pos):
+    pr = pr_arg(pos, "gh pr comment [<number> | <url> | <branch>] [flags]")
+    body = read_input(opts["body-file"]) if opts["body-file"] is not None else opts["body"]
+    if body is None:
+        fail("`--body` or `--body-file` required when not running interactively")
+    if opts["edit-last"]:
+        mine = [c for c in pr["comments"] if c["author"] == STATE["user"]]
+        if not mine:
+            fail("no comments found for current user")
+        mine[-1]["body"] = body
+        say(f"{pr_url(pr)}#issuecomment-{mine[-1]['id']}")
+        return
+    comment = {"id": new_id(), "author": STATE["user"], "body": body, "createdAt": now()}
+    pr["comments"].append(comment)
+    say(f"{pr_url(pr)}#issuecomment-{comment['id']}")
+
+
+def pr_merge(opts, pos):
+    pr = pr_arg(pos, "gh pr merge [<number> | <url> | <branch>] [flags]")
+    name = f"{STATE['repo']}#{pr['number']}"
+    if opts["disable-auto"]:
+        pr["autoMergeRequest"] = None
+        warn(f"✓ Auto-merge disabled for pull request {name}")
+        return
+    methods = [m for m in ("squash", "merge", "rebase") if opts[m]]
+    if len(methods) > 1:
+        fail("only one of --merge, --rebase, or --squash can be enabled")
+    if not methods:
+        fail("--merge, --rebase, or --squash required when not running interactively")
+    method = methods[0]
+    if pr["state"] == "MERGED":
+        fail(f"X Pull request {name} was already merged")
+    if pr["state"] == "CLOSED":
+        fail(f"X Pull request {name} is closed")
+    if pr["draft"]:
+        fail(f"X Pull request {name} is still a draft")
+    status = merge_state(pr)
+    if opts["match-head-commit"] and opts["match-head-commit"] != pr["headRefOid"]:
+        fail("GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)")
+    subject = opts["subject"]
+    body = read_input(opts["body-file"]) if opts["body-file"] is not None else opts["body"]
+    if opts["auto"] and status != "CLEAN":
+        pr["autoMergeRequest"] = {"authorEmail": None, "commitBody": body, "commitHeadline": subject,
+                                  "mergeMethod": method.upper(), "enabledAt": now(),
+                                  "enabledBy": {"login": STATE["user"]}}
+        warn(f"✓ Pull request {name} will be automatically merged via {method} when all requirements are met")
+        return
+    blocked = {"DIRTY": "the merge commit cannot be cleanly created",
+               "BLOCKED": "the base branch policy prohibits the merge"}.get(status)
+    if blocked and not (opts["admin"] and status == "BLOCKED"):
+        message = (f"X Pull request {name} is not mergeable: {blocked}.\n"
+                   "To have the pull request merged after all the requirements have been met, add the `--auto` flag.")
+        if status == "BLOCKED":
+            message += "\nTo use administrator privileges to immediately merge the pull request, add the `--admin` flag."
+        fail(message)
+    merge(pr, method, subject, body)
+    verb = {"squash": "Squashed and merged", "merge": "Merged", "rebase": "Rebased and merged"}[method]
+    warn(f"✓ {verb} pull request {name} ({pr['title']})")
+    if opts["delete-branch"]:
+        delete_head(pr, local=opts["repo"] is None)
+
+
+def merge(pr, method, subject, body):
+    base_oid, head_oid = tip(pr["base"]), pr["headRefOid"]
+    tree = rgit("merge-tree", "--write-tree", "--no-messages", base_oid, head_oid).stdout.split()[0]
+    owner = STATE["repo"].split("/")[0]
+    if method == "merge":
+        parents = [base_oid, head_oid]
+        subject = subject or f"Merge pull request #{pr['number']} from {owner}/{pr['head']}"
+        body = pr["title"] if body is None else body
+    else:
+        parents = [base_oid]
+        commits = commits_between(base_oid, head_oid)
+        subject = subject or f"{pr['title']} (#{pr['number']})"
+        if body is None:
+            body = (commits[0]["messageBody"] if len(commits) == 1
+                    else "\n\n".join(f"* {c['messageHeadline']}" for c in commits))
+    user = STATE["user"]
+    host = "github.com"
+    env = {"GIT_AUTHOR_NAME": user, "GIT_AUTHOR_EMAIL": "@".join((user, f"users.noreply.{host}")),
+           "GIT_COMMITTER_NAME": "GitHub", "GIT_COMMITTER_EMAIL": "@".join(("noreply", host))}
+    message = subject + (f"\n\n{body}" if body else "") + "\n"
+    args = ["commit-tree", tree, *itertools.chain.from_iterable(("-p", p) for p in parents), "-m", message]
+    new = rgit(*args, env=env).stdout.strip()
+    rgit("update-ref", f"refs/heads/{pr['base']}", new, base_oid)
+    log_push({"ref": f"refs/heads/{pr['base']}", "old": base_oid, "new": new, "created": False, "deleted": False,
+              "forced": False, "rejected": False, "reason": None, "via": "merge", "pr": pr["number"],
+              "method": method})
+    pr.update(state="MERGED", mergedAt=now(), closedAt=now(), mergeCommit=new, autoMergeRequest=None,
+              baseRefOid=base_oid)
+
+
+def delete_head(pr, local):
+    head = pr["head"]
+    old = tip(head)
+    if old:
+        rgit("update-ref", "-d", f"refs/heads/{head}", old)
+        log_push({"ref": f"refs/heads/{head}", "old": old, "new": "0" * len(old), "created": False, "deleted": True,
+                  "forced": False, "rejected": False, "reason": None, "via": "merge", "pr": pr["number"]})
+    for child in STATE["prs"]:
+        if child["state"] == "OPEN" and child["base"] == head:
+            child["base"] = pr["base"]
+    if local and lgit("rev-parse", "--verify", "--quiet", f"refs/heads/{head}").returncode == 0:
+        if lgit("symbolic-ref", "--quiet", "--short", "HEAD").stdout.strip() == head:
+            switched = lgit("checkout", "-q", pr["base"])
+            if switched.returncode:
+                warn(f"! Could not switch to branch {pr['base']}: {switched.stderr.strip()}")
+                warn(f"✓ Deleted remote branch {head}")
+                return
+        lgit("branch", "-D", head)
+        warn(f"✓ Deleted local branch {head} and switched to branch {pr['base']}")
+    warn(f"✓ Deleted remote branch {head}")
+
+
+PR_COMMANDS = {
+    "create": (pr_create, "title|t:str body|b:str body-file|F:str base|B:str head|H:str draft|d:bool fill|f:bool "
+                          "label|l:list"),
+    "view": (pr_view, "json:str jq|q:str comments|c:bool"),
+    "list": (pr_list, "state|s:str head|H:str base|B:str json:str jq|q:str limit|L:str"),
+    "diff": (pr_diff, "name-only:bool"),
+    "checks": (pr_checks, "json:str jq|q:str watch:bool required:bool fail-fast:bool interval|i:str"),
+    "edit": (pr_edit, "title|t:str body|b:str body-file|F:str base|B:str add-label:list remove-label:list"),
+    "ready": (pr_ready, ""),
+    "close": (pr_close, ""),
+    "comment": (pr_comment, "body|b:str body-file|F:str edit-last:bool"),
+    "merge": (pr_merge, "squash|s:bool merge|m:bool rebase|r:bool auto:bool disable-auto:bool admin:bool "
+                        "delete-branch|d:bool subject|t:str body|b:str body-file|F:str match-head-commit:str"),
+}
+
+
+def cmd_pr(args):
+    if not args or args[0] not in PR_COMMANDS:
+        unsupported(f'unknown command "{args[0] if args else ""}" for "gh pr"')
+    fn, spec = PR_COMMANDS[args[0]]
+    opts, pos = parse(args[1:], spec + " repo|R:str")
+    target(opts["repo"])
+    fn(opts, pos)
+
+
+def issue_url(issue):
+    return f"{repo_url()}/issues/{issue['number']}"
+
+
+def cmd_issue(args):
+    specs = {"create": "title|t:str body|b:str body-file|F:str label|l:list",
+             "list": "state|s:str json:str jq|q:str limit|L:str", "view": "json:str jq|q:str comments|c:bool"}
+    if not args or args[0] not in specs:
+        unsupported(f'unknown command "{args[0] if args else ""}" for "gh issue"')
+    opts, pos = parse(args[1:], specs[args[0]] + " repo|R:str")
+    target(opts["repo"])
+    if args[0] == "create":
+        body = read_input(opts["body-file"]) if opts["body-file"] is not None else opts["body"]
+        if opts["title"] is None or body is None:
+            fail("must provide `--title` and `--body` when not running interactively")
+        number = STATE["next_number"]
+        STATE["next_number"] += 1
+        issue = {"number": number, "title": opts["title"], "body": body, "state": "OPEN", "labels": opts["label"],
+                 "author": STATE["user"], "comments": [], "createdAt": now()}
+        STATE["issues"].append(issue)
+        say(issue_url(issue))
+        return
+    need_json(opts)
+    fields = json_fields(opts["json"], ISSUE_FIELDS)
+    if args[0] == "list":
+        state = (opts["state"] or "open").upper()
+        issues = [i for i in sorted(STATE["issues"], key=lambda i: -i["number"]) if state == "ALL" or i["state"] == state]
+        issues = issues[:int(opts["limit"] or 30)]
+        if fields:
+            emit([export(i, fields, ISSUE_FIELDS) for i in issues], opts["jq"])
+            return
+        for i in issues:
+            say(f"{i['number']}\t{i['state']}\t{i['title']}\t{', '.join(i['labels'])}\t{i['createdAt']}")
+        return
+    arg = one_arg(pos, "gh issue view {<number> | <url>} [flags]")
+    if arg is None:
+        fail("argument required")
+    match = re.search(r"(\d+)$", arg)
+    number = int(match.group(1)) if match else 0
+    issue = next((i for i in STATE["issues"] if i["number"] == number), None)
+    if issue is None:
+        fail(f"GraphQL: Could not resolve to an issue or pull request with the number of {number}. (repository.issue)")
+    if fields:
+        emit(export(issue, fields, ISSUE_FIELDS), opts["jq"])
+        return
+    say(f"title:\t{issue['title']}\nstate:\t{issue['state']}\nauthor:\t{issue['author']}\n"
+        f"labels:\t{', '.join(issue['labels'])}\ncomments:\t{len(issue['comments'])}\nassignees:\t\n"
+        f"projects:\t\nmilestone:\t\nnumber:\t{issue['number']}\n--\n{issue['body']}")
+
+
+def all_runs():
+    for pr in STATE["prs"]:
+        if pr["state"] == "OPEN" and STATE["ci"]:
+            derive(pr)
+    return sorted(STATE["runs"].values(), key=lambda r: -r["id"])
+
+
+def find_run(arg):
+    if arg is None:
+        fail("run or job ID required when not running interactively")
+    for run in STATE["runs"].values():
+        if str(run["id"]) == arg:
+            return run
+    fail(f"HTTP 404: Not Found ({'https://api.github.com/repos/' + STATE['repo'] + '/actions/runs/' + arg})")
+
+
+def cmd_run(args):
+    specs = {"list": "branch|b:str json:str jq|q:str limit|L:str", "view": "log:bool log-failed:bool json:str jq|q:str",
+             "rerun": "failed:bool"}
+    if not args or args[0] not in specs:
+        unsupported(f'unknown command "{args[0] if args else ""}" for "gh run"')
+    opts, pos = parse(args[1:], specs[args[0]] + " repo|R:str")
+    target(opts["repo"])
+    if args[0] == "list":
+        need_json(opts)
+        runs = [r for r in all_runs() if opts["branch"] in (None, r["branch"])][:int(opts["limit"] or 20)]
+        fields = json_fields(opts["json"], RUN_FIELDS)
+        if fields:
+            emit([export(r, fields, RUN_FIELDS) for r in runs], opts["jq"])
+            return
+        for r in runs:
+            say(f"completed\t{r['conclusion'].lower()}\t{r['title']}\t{STATE['ci']['name']}\t{r['branch']}\t"
+                f"pull_request\t{r['id']}\t12s\t{r['startedAt']}")
+        return
+    need_json(opts)
+    fields = json_fields(opts.get("json"), RUN_FIELDS)
+    run = find_run(one_arg(pos, f"gh run {args[0]} [<run-id>] [flags]"))
+    if args[0] == "rerun":
+        if opts["failed"] and run["conclusion"] == "SUCCESS":
+            fail(f"run {run['id']} cannot be rerun; its workflow file may be broken")
+        execute_run(run)
+        return
+    if fields:
+        emit(export(run, fields, RUN_FIELDS), opts["jq"])
+        return
+    name = STATE["ci"]["name"]
+    if opts["log"] or opts["log-failed"]:
+        if opts["log-failed"] and run["conclusion"] == "SUCCESS":
+            return
+        for line in run["output"].splitlines():
+            say(f"{name}\tRun {STATE['ci']['command']}\t{run['completedAt']} {line}")
+        return
+    mark = "✓" if run["conclusion"] == "SUCCESS" else "X"
+    say(f"\n{mark} {run['branch']} {name} · {run['id']}\nTriggered via pull_request\n\nJOBS\n"
+        f"{mark} {name} in 12s (ID {run['job']})\n\nFor more information about the job, try: "
+        f"gh run view --job={run['job']}\nView this run on GitHub: {repo_url()}/actions/runs/{run['id']}")
+
+
+class HttpError(Exception):
+    def __init__(self, status, message, unknown_route=False):
+        super().__init__(message)
+        self.status, self.message, self.unknown_route = status, message, unknown_route
+
+
+def api_base():
+    return f"https://api.github.com/repos/{STATE['repo']}"
+
+
+def rest_pr(pr):
+    status = merge_state(pr)
+    files = pr_files(pr)
+    owner = STATE["repo"].split("/")[0]
+    side = lambda ref, oid: {"label": f"{owner}:{ref}", "ref": ref, "sha": oid, "repo": {"full_name": STATE["repo"]}}
+    return {"url": f"{api_base()}/pulls/{pr['number']}", "id": 2000000000 + pr["number"],
+            "node_id": f"PR_kwDO{pr['number']}", "html_url": pr_url(pr), "diff_url": f"{pr_url(pr)}.diff",
+            "number": pr["number"], "state": "open" if pr["state"] == "OPEN" else "closed", "locked": False,
+            "title": pr["title"], "user": rest_user(pr["author"]), "body": pr["body"],
+            "labels": [{"name": l} for l in pr["labels"]], "draft": pr["draft"], "created_at": pr["createdAt"],
+            "updated_at": pr["createdAt"], "closed_at": pr["closedAt"], "merged_at": pr["mergedAt"],
+            "merge_commit_sha": pr["mergeCommit"], "requested_reviewers": [rest_user(r) for r in pr["reviewRequests"]],
+            "head": side(pr["head"], pr["headRefOid"]), "base": side(pr["base"], pr["baseRefOid"]),
+            "merged": pr["state"] == "MERGED", "mergeable": pr["mergeable"] == "MERGEABLE",
+            "mergeable_state": status.lower(), "auto_merge": pr["autoMergeRequest"],
+            "comments": len(pr["comments"]), "review_comments": sum(len(t["comments"]) for t in pr["threads"]),
+            "commits": len(commits_between(pr["baseRefOid"], pr["headRefOid"])),
+            "additions": sum(f["additions"] for f in files), "deletions": sum(f["deletions"] for f in files),
+            "changed_files": len(files)}
+
+
+def rest_review(pr, review):
+    return {"id": review["id"], "node_id": f"PRR_kwDO{review['id']}", "user": rest_user(review["author"]),
+            "body": review.get("body", ""), "state": review["state"],
+            "html_url": f"{pr_url(pr)}#pullrequestreview-{review['id']}",
+            "pull_request_url": f"{api_base()}/pulls/{pr['number']}",
+            "author_association": association(review["author"]), "submitted_at": review["submittedAt"],
+            "commit_id": review.get("commit") or pr["headRefOid"]}
+
+
+def rest_review_comment(pr, thread, comment):
+    first = thread["comments"][0]
+    commit = comment.get("commit") or pr["headRefOid"]
+    out = {"url": f"{api_base()}/pulls/comments/{comment['id']}", "id": comment["id"],
+           "node_id": f"PRRC_kwDO{comment['id']}", "pull_request_review_id": comment.get("review"), "diff_hunk": "",
+           "path": thread["path"], "line": thread.get("line"), "original_line": thread.get("line"), "side": "RIGHT",
+           "commit_id": commit, "original_commit_id": commit, "user": rest_user(comment["author"]),
+           "body": comment["body"], "created_at": comment["createdAt"], "updated_at": comment["createdAt"],
+           "html_url": f"{pr_url(pr)}#discussion_r{comment['id']}",
+           "pull_request_url": f"{api_base()}/pulls/{pr['number']}",
+           "author_association": association(comment["author"]), "subject_type": "line"}
+    if comment is not first:
+        out["in_reply_to_id"] = first["id"]
+    return out
+
+
+def rest_issue_comment(item, comment):
+    page = f"{pr_url(item)}" if "head" in item else issue_url(item)
+    return {"url": f"{api_base()}/issues/comments/{comment['id']}", "id": comment["id"],
+            "node_id": f"IC_kwDO{comment['id']}", "user": rest_user(comment["author"]), "body": comment["body"],
+            "created_at": comment["createdAt"], "updated_at": comment["createdAt"],
+            "html_url": f"{page}#issuecomment-{comment['id']}", "issue_url": f"{api_base()}/issues/{item['number']}",
+            "author_association": association(comment["author"])}
+
+
+def check_runs(sha):
+    checks = []
+    if STATE["ci"]:
+        branch = next((pr["head"] for pr in STATE["prs"] if pr["headRefOid"] == sha), "")
+        checks.append(ci_check(ci_run(sha, branch)))
+    for pr in STATE["prs"]:
+        if pr["headRefOid"] == sha:
+            checks += canned_checks(pr)
+    return [{"id": zlib.crc32((c["link"] + c["name"]).encode()), "name": c["name"], "head_sha": sha,
+             "status": c["status"].lower(), "conclusion": (c["conclusion"] or "").lower() or None,
+             "html_url": c["link"], "details_url": c["link"], "started_at": c["startedAt"],
+             "completed_at": c["completedAt"], "app": {"slug": "github-actions", "name": "GitHub Actions"}}
+            for c in checks]
+
+
+def add_thread(pr, path, line, text, review):
+    comment = {"id": new_id(), "author": STATE["user"], "body": text, "createdAt": now(), "review": review}
+    thread = {"id": f"PRRT_kwDO{comment['id']}", "path": path, "line": line, "isResolved": False,
+              "isOutdated": False, "comments": [comment]}
+    pr["threads"].append(thread)
+    return thread, comment
+
+
+def reply(pr, comment_id, text):
+    thread = next((t for t in pr["threads"] if any(c["id"] == comment_id for c in t["comments"])), None)
+    if thread is None:
+        raise HttpError(404, "Not Found")
+    comment = {"id": new_id(), "author": STATE["user"], "body": text, "createdAt": now()}
+    thread["comments"].append(comment)
+    return rest_review_comment(pr, thread, comment)
+
+
+def require_body(body):
+    if "body" not in body:
+        raise HttpError(422, 'Invalid request.\n\n"body" wasn\'t supplied.')
+    return body["body"]
+
+
+REVIEW_EVENTS = {"APPROVE": "APPROVED", "REQUEST_CHANGES": "CHANGES_REQUESTED", "COMMENT": "COMMENTED", None: "PENDING"}
+
+
+def pr_route(method, rest_of, pr, nums, body):
+    if (method, rest_of) == ("GET", ""):
+        return rest_pr(pr)
+    if (method, rest_of) == ("GET", "/reviews"):
+        return [rest_review(pr, r) for r in pr["reviews"]]
+    if (method, rest_of) == ("POST", "/reviews"):
+        event = body.get("event")
+        if event not in REVIEW_EVENTS:
+            raise HttpError(422, "Unprocessable Entity")
+        if event in ("APPROVE", "REQUEST_CHANGES") and pr["author"] == STATE["user"]:
+            verb = "approve" if event == "APPROVE" else "request changes on"
+            raise HttpError(422, f"Can not {verb} your own pull request")
+        review = {"id": new_id(), "author": STATE["user"], "state": REVIEW_EVENTS[event], "body": body.get("body", ""),
+                  "commit": body.get("commit_id") or pr["headRefOid"], "submittedAt": now()}
+        pr["reviews"].append(review)
+        for c in body.get("comments", []):
+            add_thread(pr, c.get("path"), c.get("line"), c.get("body", ""), review["id"])
+        return rest_review(pr, review)
+    if (method, rest_of) == ("GET", "/requested_reviewers"):
+        return {"users": [rest_user(r) for r in pr["reviewRequests"]], "teams": []}
+    if (method, rest_of) == ("GET", "/comments"):
+        return [rest_review_comment(pr, t, c) for t in pr["threads"] for c in t["comments"]]
+    if (method, rest_of) == ("POST", "/comments"):
+        text = require_body(body)
+        if body.get("in_reply_to") is not None:
+            return reply(pr, int(body["in_reply_to"]), text)
+        line = body.get("line") or body.get("position")
+        if not body.get("path") or not line:
+            raise HttpError(422, "pull_request_review_thread.line must be part of the diff")
+        thread, comment = add_thread(pr, body["path"], line, text, None)
+        return rest_review_comment(pr, thread, comment)
+    if (method, rest_of) == ("POST", "/comments/{n}/replies"):
+        return reply(pr, nums[1], require_body(body))
+    raise HttpError(404, "Not Found", True)
+
+
+def rest(method, path, params, body):
+    if (method, path) == ("GET", "user"):
+        return {**rest_user(STATE["user"]), "name": None, "public_repos": 1}
+    match = re.fullmatch(r"repos/([^/]+)/([^/]+)(/.*)?", path)
+    if not match:
+        raise HttpError(404, "Not Found", True)
+    if f"{match.group(1)}/{match.group(2)}".lower() != STATE["repo"].lower():
+        raise HttpError(404, "Not Found")
+    sub = match.group(3) or ""
+    commit = re.fullmatch(r"/commits/(.+)/(check-runs|status)", sub)
+    nums = [int(n) for n in re.findall(r"/(\d+)(?=/|$)", sub)]
+    shape = re.sub(r"/\d+(?=/|$)", "/{n}", sub)
+    if (method, sub) == ("GET", ""):
+        owner, name = STATE["repo"].split("/")
+        return {"id": 700000001, "name": name, "full_name": STATE["repo"], "owner": rest_user(owner),
+                "private": True, "html_url": repo_url(), "default_branch": "main"}
+    if (method, sub) == ("GET", "/pulls"):
+        state = params.get("state", "open")
+        head = str(params.get("head", "")).split(":")[-1]
+        return [rest_pr(pr) for pr in sorted(STATE["prs"], key=lambda p: -p["number"])
+                if (state == "all" or (pr["state"] == "OPEN") == (state == "open"))
+                and head in ("", pr["head"]) and params.get("base") in (None, pr["base"])]
+    if shape.startswith("/pulls/{n}"):
+        pr = next((p for p in STATE["prs"] if p["number"] == nums[0]), None)
+        if pr is None:
+            raise HttpError(404, "Not Found")
+        derive(pr)
+        return pr_route(method, shape[len("/pulls/{n}"):], pr, nums, body)
+    if shape == "/issues/{n}/comments" and method in ("GET", "POST"):
+        item = find_item(nums[0])
+        if item is None:
+            raise HttpError(404, "Not Found")
+        if method == "GET":
+            return [rest_issue_comment(item, c) for c in item["comments"]]
+        comment = {"id": new_id(), "author": STATE["user"], "body": require_body(body), "createdAt": now()}
+        item["comments"].append(comment)
+        return rest_issue_comment(item, comment)
+    branch = re.fullmatch(r"/(rules/branches|branches)/(.+?)(/protection)?", sub)
+    if branch and method == "GET" and branch.group(1) == "rules/branches" and not branch.group(3):
+        rule = {"type": "pull_request", "ruleset_source_type": "Repository", "ruleset_source": STATE["repo"]}
+        return [rule] if branch.group(2) in STATE["protected"] else []
+    if branch and method == "GET" and branch.group(1) == "branches" and branch.group(3):
+        if branch.group(2) not in STATE["protected"]:
+            raise HttpError(404, "Branch not protected")
+        return {"url": f"{api_base()}/branches/{branch.group(2)}/protection",
+                "required_pull_request_reviews": {"required_approving_review_count": 0},
+                "allow_force_pushes": {"enabled": False}, "allow_deletions": {"enabled": False}}
+    if shape == "/actions/runs/{n}" and method == "GET":
+        run = next((r for r in STATE["runs"].values() if r["id"] == nums[0]), None)
+        if run is None:
+            raise HttpError(404, "Not Found")
+        return {"id": run["id"], "head_sha": run["sha"], "head_branch": run["branch"], "run_attempt": run["attempt"],
+                "status": "completed", "conclusion": run["conclusion"].lower(), "name": STATE["ci"]["name"],
+                "html_url": f"{repo_url()}/actions/runs/{run['id']}", "event": "pull_request"}
+    if shape == "/issues/comments/{n}" and method == "PATCH":
+        found = next(((item, c) for item in STATE["prs"] + STATE["issues"] for c in item["comments"] if c["id"] == nums[0]), None)
+        if found is None:
+            raise HttpError(404, "Not Found")
+        found[1]["body"] = require_body(body)
+        return rest_issue_comment(*found)
+    if commit and method == "GET":
+        sha = commit_of(commit.group(1))
+        if sha is None:
+            raise HttpError(422, f"No commit found for SHA: {commit.group(1)}")
+        if commit.group(2) == "check-runs":
+            runs = check_runs(sha)
+            return {"total_count": len(runs), "check_runs": runs}
+        return {"state": "pending", "statuses": [], "sha": sha, "total_count": 0,
+                "repository": {"full_name": STATE["repo"]}}
+    raise HttpError(404, "Not Found", True)
+
+
+def gql_thread(pr, thread):
+    nodes = [{"id": f"PRRC_kwDO{c['id']}", "databaseId": c["id"], "author": gql_author(c["author"]),
+              "body": c["body"], "url": f"{pr_url(pr)}#discussion_r{c['id']}", "createdAt": c["createdAt"],
+              "path": thread["path"]} for c in thread["comments"]]
+    return {"id": thread["id"], "isResolved": thread["isResolved"], "isOutdated": thread["isOutdated"],
+            "isCollapsed": thread["isResolved"], "path": thread["path"], "line": thread.get("line"),
+            "originalLine": thread.get("line"), "diffSide": "RIGHT",
+            "comments": {"totalCount": len(nodes), "nodes": nodes, "pageInfo": page_info()}}
+
+
+def page_info():
+    return {"hasNextPage": False, "hasPreviousPage": False, "endCursor": "Y3Vyc29yOnYyOpHOAAAAAQ==",
+            "startCursor": "Y3Vyc29yOnYyOpHOAAAAAQ=="}
+
+
+class GraphQLError(Exception):
+    def __init__(self, message, data):
+        super().__init__(message)
+        self.message, self.data = message, data
+
+
+GQL_UNAVAILABLE = "gh: this GraphQL operation is not available (HTTP 400)"
+
+
+def graphql(params):
+    query = params.get("query")
+    if not isinstance(query, str):
+        unsupported("gh: A query attribute must be specified and must be a string. (HTTP 400)")
+    variables = {k: v for k, v in params.items() if k != "query"}
+
+    def arg(name):
+        match = re.search(rf"\b{name}\s*:\s*(\$\w+|\"[^\"]*\"|\d+)", query)
+        if not match:
+            return None
+        token = match.group(1)
+        if token.startswith("$"):
+            return variables.get(token[1:])
+        return token.strip('"') if token.startswith('"') else int(token)
+
+    for mutation in ("unresolveReviewThread", "resolveReviewThread"):
+        if re.search(rf"\b{mutation}\b", query):
+            thread_id = arg("threadId")
+            for pr in STATE["prs"]:
+                for thread in pr["threads"]:
+                    if thread["id"] == thread_id:
+                        thread["isResolved"] = mutation == "resolveReviewThread"
+                        return {"data": {mutation: {"thread": {"id": thread_id, "isResolved": thread["isResolved"]}}}}
+            raise GraphQLError(f"Could not resolve to a node with the global id of '{thread_id}'",
+                               {"data": {mutation: None}})
+    owner, name, number = arg("owner"), arg("name"), arg("number")
+    if re.search(r"\bmergeQueue\s*\(", query) and not re.match(r"\s*mutation\b", query):
+        if f"{owner}/{name}".lower() != STATE["repo"].lower():
+            raise GraphQLError(f"Could not resolve to a Repository with the name '{owner}/{name}'.",
+                               {"data": {"repository": None}})
+        return {"data": {"repository": {"mergeQueue": None}}}
+    if (re.match(r"\s*mutation\b", query) or not re.search(r"\b(reviewThreads|statusCheckRollup|comments|reviewRequests)\b", query)
+            or re.search(r"\w+\s*:\s*(repository|pullRequest|reviewThreads|commits)\b", query)
+            or not re.search(r"\bpullRequest\s*\(", query) or None in (owner, name, number)):
+        unsupported(GQL_UNAVAILABLE)
+    if f"{owner}/{name}".lower() != STATE["repo"].lower():
+        raise GraphQLError(f"Could not resolve to a Repository with the name '{owner}/{name}'.",
+                           {"data": {"repository": None}})
+    pr = next((p for p in STATE["prs"] if p["number"] == int(number)), None)
+    if pr is None:
+        raise GraphQLError(f"Could not resolve to a PullRequest with the number of {number}.",
+                           {"data": {"repository": {"pullRequest": None}}})
+    derive(pr)
+    checks = checks_for(pr)
+    buckets = {bucket(c) for c in checks}
+    rollup = None
+    if checks:
+        rollup = {"state": "FAILURE" if "fail" in buckets else "PENDING" if "pending" in buckets else "SUCCESS",
+                  "contexts": {"totalCount": len(checks), "nodes": [gql_check(c) for c in checks],
+                               "pageInfo": page_info()}}
+    threads = [gql_thread(pr, t) for t in pr["threads"]]
+    node = {"id": f"PR_kwDO{pr['number']}", "number": pr["number"], "title": pr["title"], "url": pr_url(pr),
+            "state": pr["state"], "isDraft": pr["draft"], "headRefName": pr["head"], "headRefOid": pr["headRefOid"],
+            "author": gql_author(pr["author"]),
+            "reviewRequests": {"totalCount": len(pr["reviewRequests"]),
+                               "nodes": [{"requestedReviewer": {"login": short_login(r)}} for r in pr["reviewRequests"]]},
+            "reviews": {"totalCount": len(pr["reviews"]), "nodes": [gql_review(pr, r) for r in pr["reviews"]]},
+            "comments": {"totalCount": len(pr["comments"]), "nodes": [
+                {**gql_comment(pr, c), "author": {**gql_author(c["author"]), "__typename": "Bot" if is_bot(c["author"]) else "User"}}
+                for c in pr["comments"]]},
+            "reviewThreads": {"totalCount": len(threads), "nodes": threads, "pageInfo": page_info()},
+            "commits": {"nodes": [{"commit": {"oid": pr["headRefOid"], "statusCheckRollup": rollup}}]}}
+    return {"data": {"repository": {"pullRequest": node}}}
+
+
+def typed(value):
+    if value in ("true", "false"):
+        return value == "true"
+    if value == "null":
+        return None
+    if re.fullmatch(r"-?\d+", value):
+        return int(value)
+    if value.startswith("@"):
+        return read_input(value[1:])
+    return value
+
+
+def cmd_api(args):
+    opts, pos = parse(args, "method|X:str hostname:str paginate:bool raw-field|f:list field|F:list input:str "
+                            "jq|q:str header|H:list silent:bool slurp:bool")
+    if len(pos) != 1:
+        fail(f"accepts 1 arg(s), received {len(pos)}")
+    if opts["hostname"] not in (None, "github.com"):
+        fail(f"gh: Could not resolve host: {opts['hostname']}")
+    params = {}
+    for pair, is_typed in [(f, False) for f in opts["raw-field"]] + [(f, True) for f in opts["field"]]:
+        key, eq, value = pair.partition("=")
+        if not eq:
+            fail(f'field "{pair}" requires a value separated by an \'=\' sign')
+        if "[" in key:
+            unsupported(f"gh: nested parameter keys are not available here: {key}")
+        params[key] = typed(value) if is_typed else value
+    endpoint = re.sub(r"^https://api\.github\.com/", "", pos[0]).lstrip("/")
+    if "{owner}" in endpoint or "{repo}" in endpoint:
+        owner, name = target().split("/")
+        endpoint = endpoint.replace("{owner}", owner).replace("{repo}", name)
+    path, _, query = endpoint.partition("?")
+    body = params
+    if opts["input"]:
+        body = json.loads(read_input(opts["input"]) or "{}")
+        if path == "graphql":
+            params = {"query": body.get("query"), **body.get("variables", {})}
+    method = (opts["method"] or ("POST" if params or opts["input"] else "GET")).upper()
+    if method == "GET":
+        body = {}
+        for pair in filter(None, query.split("&")):
+            k, _, v = pair.partition("=")
+            params.setdefault(k, v)
+    try:
+        result = graphql(params) if path == "graphql" else rest(method, path, params, body)
+    except HttpError as exc:
+        say(dumps({"message": exc.message, "documentation_url": "https://docs.github.com/rest",
+                   "status": str(exc.status)}))
+        raise Exit(1, f"gh: {exc.message} (HTTP {exc.status})", exc.unknown_route)
+    except GraphQLError as exc:
+        error = {"type": "NOT_FOUND", "path": ["repository"], "locations": [{"line": 1, "column": 1}],
+                 "message": exc.message}
+        say(dumps({**exc.data, "errors": [error]}))
+        fail(f"gh: {exc.message}")
+    if opts["slurp"]:
+        if not opts["paginate"]:
+            fail("`--slurp` is only supported in combination with `--paginate`")
+        result = [result]
+    if not opts["silent"]:
+        emit(result, opts["jq"])
+
+
+COMMANDS = {"--version": cmd_version, "version": cmd_version, "auth": cmd_auth, "repo": cmd_repo, "pr": cmd_pr,
+            "issue": cmd_issue, "run": cmd_run, "api": cmd_api, "browse": cmd_browse}
+
+
+def dispatch(argv):
+    if not argv or argv[0] not in COMMANDS:
+        unsupported(f'unknown command "{argv[0] if argv else ""}" for "gh"')
+    COMMANDS[argv[0]](argv[1:])
+
+
+def flag_repo(argv):
+    for i, arg in enumerate(argv):
+        if arg in ("-R", "--repo") and i + 1 < len(argv):
+            return argv[i + 1]
+        if arg.startswith("--repo="):
+            return arg.split("=", 1)[1]
+        if arg.startswith("-R") and len(arg) > 2:
+            return arg[2:]
+    return None
+
+
+def main(argv):
+    lock = open(FORGE / "lock", "a")
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    state_path = FORGE / "state.json"
+    STATE.update(json.loads(state_path.read_text(encoding="utf-8")))
+    code, odd, trace = 0, False, None
+    try:
+        dispatch(argv)
+    except Exit as exc:
+        code, odd = exc.code, exc.unsupported
+        if exc.message:
+            warn(exc.message)
+    except Exception:
+        code, odd, trace = 1, True, traceback.format_exc()
+        warn("gh: unexpected server response (HTTP 500)")
+    sys.stdout.flush()
+    if trace is None:
+        tmp = state_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(STATE, indent=1), encoding="utf-8")
+        tmp.replace(state_path)
+    calls = FORGE / "calls.jsonl"
+    count = sum(1 for _ in open(calls, encoding="utf-8")) if calls.exists() else 0
+    record = {"n": count + 1, "argv": argv, "cwd": os.getcwd(), "exit": code, "repo": flag_repo(argv), "repo_env": os.environ.get("GH_REPO"), "files": FILES,
+              "error": trace or ("".join(ERR) or None), "unsupported": odd}
+    with open(calls, "a", encoding="utf-8") as log:
+        log.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

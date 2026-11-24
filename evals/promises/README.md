@@ -183,6 +183,20 @@ The step-load verdict carries `measures` that never change it: the route, each l
 
 The [2026-11-11 run](results/2026-11-11-floor-lead-plan-route.md) owns the first results, the counting rule, and the limits. The [second run](results/2026-11-11-plan-command-second-run.md) owns the results after the entry's plan command stopped naming an environment variable.
 
+### Screen cases
+
+A screen case compares skill text across arms. Its `case.json` sets `screen` to the group it serves, such as `"S4"` or `"hold"`. [`screens.json`](screens.json) lists the cases each group runs, including existing cases, and names what is not built. Run an arm with `--skills-at <arm commit>`. The cases, fixtures, and graders come from the checkout `live.py` runs in, so they stay fixed across arms.
+
+A screen case binds no guide promise. `ledger.py audit` neither requires it nor counts it as a live case, and `freshness.py` neither plans it nor records its verdicts. Its graders follow the oracle rule above: `FAIL` needs a recorded action that breaks the behavior, `PASS` needs recorded work that shows it, and everything else is `INCONCLUSIVE`, with an excerpt when a reader must decide. Counts a reader scores, such as named learnings or plan parts, go in `measures` and never change the verdict. `test_screen.py` grades synthetic traces for each screen grader, and builds every listed case's project.
+
+`program-design-store-run` grades its route against the installed tree: Orchestrate when `poteto-mode/playbooks/orchestrate.md` is installed, figure-it-out when it is not. The same case therefore serves the port's playbook, upstream's shorter one, and the deletion.
+
+### Local forge
+
+A case with a `forge` object gets an offline GitHub double under `<project>/.git/forge/`. `make_project` creates a bare `remote.git`, sets origin to the GitHub ssh address of `<owner>/<repo>`, with `core.sshCommand` pointing at `forge-ssh`, pushes the listed branches, and loads canned PR state from the case's `forge.json`. Claude Code and Codex put `.git/forge/bin` first on the agent's `PATH`, so `gh` is the double, and `ssh` is the same transport double, so a `GIT_SSH_COMMAND` override still reaches the local remote. Codex runs forge cases with `allow_login_shell=false`, because a macOS login shell runs `path_helper`, which moves `/opt/homebrew/bin` and the host's real `gh` ahead of the double. Other adapters refuse a forge case.
+
+The double logs each `gh` call to `calls.jsonl` and each ref update to `pushes.jsonl`, and keeps PRs, comments, threads, and CI results in `state.json`. CI is real: the configured command runs on each PR head when a call first needs its checks. The hold graders read these files. The double cannot run `watch-pr` or `merge-gate`, which need `bun`, so a Babysit lead falls back to `gh` reads and a Shipping lead may stop before it lands anything.
+
 ## Keep live evidence aligned with changes
 
 A live verdict is evidence about the bytes it ran against. `freshness.py` records those bytes with each verdict and reports the promises a change left without current evidence. It runs no model and authorizes no paid call.

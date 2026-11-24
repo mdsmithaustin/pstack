@@ -1,0 +1,11 @@
+{
+  "fixture": "tally",
+  "steps": [
+    {
+      "dir": "step-1",
+      "branch": "feat/pairs",
+      "delete": [],
+      "message": "feat(tally): count adjacent word pairs with --pairs\n\nSome reports want the most common two-word phrases. --pairs counts adjacent pairs on each line and prints them in the same format as single words."
+    }
+  ]
+}

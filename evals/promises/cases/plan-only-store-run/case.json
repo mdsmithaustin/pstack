@@ -1,0 +1,17 @@
+{
+ "promises": [
+  "plan-only-stops-before-execution"
+ ],
+ "fixture": "kiln",
+ "history": "kiln-store-migration",
+ "entry": "poteto-mode",
+ "turns": [
+  "plan the store migration from the readme as four prs. don't implement."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "screen": "S6",
+ "note": "plan-only fixture: the plan's landing order, graph, files, and verification boxes go to a reader as plan_terms; code changes fail"
+}

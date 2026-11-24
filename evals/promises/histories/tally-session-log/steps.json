@@ -1,0 +1,11 @@
+{
+  "fixture": "tally",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "notes: keep the min-count session log",
+      "commit": false,
+      "delete": []
+    }
+  ]
+}

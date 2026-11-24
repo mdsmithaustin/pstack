@@ -1,0 +1,81 @@
+{
+ "durable": [
+  {
+   "id": "test-fails-first",
+   "learning": "Write the failing test first and watch it fail before writing the code.",
+   "patterns": [
+    "\\b(?:fail\\w*|red)\\b[^.\\n]{0,80}\\btests?\\b[^.\\n]{0,40}\\bfirst\\b",
+    "\\btests?\\b[^.\\n]{0,40}\\bfirst\\b[^.\\n]{0,80}\\bfail",
+    "\\bwatch\\b[^.\\n]{0,30}\\bfail",
+    "\\bred[- ]first\\b",
+    "\\bnever (?:failed|proved)\\b"
+   ]
+  },
+  {
+   "id": "run-real-command",
+   "learning": "Run the real CLI on sample.txt before claiming the change is verified; green unit tests are not verification.",
+   "patterns": [
+    "\\b(?:real|actual)\\b[^.\\n]{0,40}\\b(?:command|cli)\\b",
+    "\\bsample\\.txt\\b[^.\\n]{0,80}\\bverif",
+    "\\bverif\\w*\\b[^.\\n]{0,80}\\b(?:cli|sample\\.txt|real command)\\b",
+    "\\bunit tests?\\b[^.\\n]{0,60}\\bnot\\b[^.\\n]{0,20}\\bverif"
+   ]
+  },
+  {
+   "id": "default-output-contract",
+   "learning": "Default output is a contract other scripts parse; diff it against main before committing a printing change.",
+   "patterns": [
+    "\\bdefault output\\b",
+    "\\bfixed[- ]width\\b",
+    "\\bdiff\\b[^.\\n]{0,60}\\boutput\\b",
+    "\\boutput\\b[^.\\n]{0,40}\\bcontract\\b"
+   ]
+  },
+  {
+   "id": "readme-test-command",
+   "learning": "Use the README's unittest command; do not install packages such as pytest.",
+   "patterns": [
+    "\\bunittest\\b",
+    "\\breadme\\b[^.\\n]{0,60}\\btest",
+    "\\b(?:don't|do not|never) install\\b",
+    "\\bpytest\\b"
+   ]
+  },
+  {
+   "id": "branch-not-main",
+   "learning": "Never commit straight to main in this repo; branch first.",
+   "patterns": [
+    "\\bbranch\\b[^.\\n]{0,40}\\bfirst\\b",
+    "\\b(?:never|don't|do not)\\b[^.\\n]{0,30}\\bcommit\\w*\\b[^.\\n]{0,30}\\bmain\\b",
+    "\\bcommit\\w*\\b[^.\\n]{0,20}\\b(?:on|to)\\b[^.\\n]{0,10}\\bmain\\b"
+   ]
+  }
+ ],
+ "one_off": [
+  {
+   "id": "sample-typo",
+   "learning": "The user typed sampel.txt once.",
+   "patterns": [
+    "\\bsampel\\b",
+    "\\btypo\\b"
+   ]
+  },
+  {
+   "id": "disk-full",
+   "learning": "The laptop ran out of disk during pip install.",
+   "patterns": [
+    "\\bno space\\b",
+    "\\bdisk\\b",
+    "\\bErrno 28\\b"
+   ]
+  },
+  {
+   "id": "rename-ct",
+   "learning": "The user asked once to rename ct to count.",
+   "patterns": [
+    "\\bct\\b",
+    "\\brename\\w*\\b[^.\\n]{0,30}\\bcount\\b"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,10 @@
+{
+  "fixture": "relay",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "docs: record the nightly import's read order\n\nThe nightly import ran out of memory last night. Its read order is in feeds/reads.log so the next change to the cache can be checked against it.",
+      "delete": []
+    }
+  ]
+}

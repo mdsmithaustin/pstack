@@ -23,6 +23,8 @@ def case_paths(case_id, spec, here=HERE):
     paths.append(here / "fixtures" / spec["fixture"])
     if spec.get("history"):
         paths.append(here / "histories" / spec["history"])
+    if spec.get("forge"):
+        paths.append(here / "forge")
     return paths
 
 
