@@ -120,6 +120,15 @@
       "changes_code": true,
       "tiered": true
     },
+    "babysit": {
+      "changes_code": true
+    },
+    "autonomous-run": {
+      "changes_code": true
+    },
+    "opening-a-pr": {
+      "changes_code": true
+    },
     "hillclimb": {
       "changes_code": true
     },
