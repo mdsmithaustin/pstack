@@ -87,6 +87,8 @@ def live_cases():
     bound = {}
     for case in sorted(CASES.glob("*/case.json")):
         spec = json.loads(case.read_text(encoding="utf-8"))
+        if spec.get("screen"):
+            continue
         for pid in spec.get("promises", []):
             bound.setdefault(pid, set()).add(spec.get("kind", "live"))
     return bound
@@ -96,6 +98,8 @@ def deferred_only(ledger):
     runnable, recorded = set(), set()
     for case in CASES.glob("*/case.json"):
         spec = json.loads(case.read_text(encoding="utf-8"))
+        if spec.get("screen"):
+            continue
         (recorded if spec.get("deferred") else runnable).update(spec.get("promises", []))
     return sorted(pid for pid, p in ledger["promises"].items()
                   if p["check"] in {"install", "live"} and pid in recorded - runnable)

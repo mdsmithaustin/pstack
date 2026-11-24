@@ -45,8 +45,9 @@ def runnable(spec):
 
 
 def gives_evidence(spec):
-    """An arm case runs rewritten skill text, so its verdict says nothing about the committed skill."""
-    return runnable(spec) and not spec.get("skill_overlays")
+    """An arm case runs rewritten skill text, so its verdict says nothing about the committed skill. A screen case
+    measures an arm comparison and binds no guide promise."""
+    return runnable(spec) and not spec.get("skill_overlays") and not spec.get("screen")
 
 
 def time_limit(spec, harness):
@@ -107,8 +108,9 @@ def record(out, receipts, promises, cases, *, today, reader_at=commit_reader, re
         run = json.loads(path.read_bytes())
         case_id, harness, commit = run.get("case"), run["harness"], run.get("skills_at")
         spec = cases.get(case_id)
-        if spec is None or not commit or spec.get("skill_overlays"):
-            lines.append(f"skipped {path.parent.name}: {'arm case' if spec and commit else 'no bound case or skills commit'}")
+        if spec is None or not commit or spec.get("skill_overlays") or spec.get("screen"):
+            kind = "screen case" if spec and spec.get("screen") else "arm case"
+            lines.append(f"skipped {path.parent.name}: {kind if spec and commit else 'no bound case or skills commit'}")
             continue
         started = path.parent / "run.json"
         record_bytes = started.read_bytes() if started.is_file() else b"{}"

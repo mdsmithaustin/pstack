@@ -1167,6 +1167,38 @@ def oracle(*pids):
     return wrap
 
 
+# PR 575 X screen graders (screen-only). Helper and promise names carry an x<N> prefix, so they never collide with
+# the S and hold graders at the end of this file. Each slot belongs to one builder until the slots merge.
+
+# x-slot x2 begin
+
+# x-slot x2 end
+
+# x-slot x4x9 begin
+
+# x-slot x4x9 end
+
+# x-slot x13x17x29 begin
+
+# x-slot x13x17x29 end
+
+# x-slot x12x18x23 begin
+
+# x-slot x12x18x23 end
+
+# x-slot x21x22 begin
+
+# x-slot x21x22 end
+
+# x-slot forge begin
+
+# x-slot forge end
+
+# x-slot x3x24 begin
+
+# x-slot x3x24 end
+
+
 def run_never_started(view):
     if view.tool_calls:
         return False
