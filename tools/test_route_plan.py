@@ -535,6 +535,27 @@ class GatesAndEndpoint(unittest.TestCase):
         self.assertIn("A skipped push or PR never skips that step's commits.", routes)
 
 
+class CodePlaybooks(unittest.TestCase):
+    def test_playbooks_that_commit_or_publish_code_get_the_code_gates_and_scrutiny(self):
+        for name in ("babysit", "autonomous-run", "opening-a-pr"):
+            with self.subTest(playbook=name):
+                result = plan(name)
+                gates = [gate["id"] for gate in result["gates"]]
+                for gate in ("cleanup", "comments", "commit-and-pr-prose", "documentation"):
+                    self.assertIn(gate, gates)
+                self.assertTrue(result["scrutiny"])
+                self.assertIn("independent scrutiny: ", run(name).stdout)
+                self.assertNotEqual(result["default_endpoint"], "what this playbook's Reply line names")
+
+    def test_an_endpoint_that_names_the_reply_line_has_one(self):
+        for path in sorted((MODE / "playbooks").glob("*.md")):
+            args = LOW if MANIFEST["playbooks"].get(path.stem, {}).get("tiered") else []
+            result = plan(path.stem, *args)
+            if result["default_endpoint"] == "what this playbook's Reply line names":
+                with self.subTest(playbook=path.stem):
+                    self.assertTrue(result["reply"])
+
+
 class Manifest(unittest.TestCase):
     def test_manifest_lists_only_playbooks_that_exist_and_need_a_flag(self):
         on_disk = {path.stem for path in (MODE / "playbooks").glob("*.md")}
