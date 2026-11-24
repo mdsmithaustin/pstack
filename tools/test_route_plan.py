@@ -828,7 +828,7 @@ class RepositoryEndpoint(unittest.TestCase):
         github = self.repo("https://github.com/o/a.git", "https://ssh.github.com/o/b.git")
         self.assertEqual(self.endpoint(github)[0], "reviewable PR")
         self.assertFalse(calls.exists())
-        enterprise = self.repo("https://forge.example.invalid/o/a.git", "git@forge.example.invalid:o/b.git")
+        enterprise = self.repo("https://forge.example.invalid/o/a.git", "forge.example.invalid:o/b.git")
         self.assertEqual(self.endpoint(enterprise)[0], self.PUSHED)
         self.assertEqual(calls.read_text().splitlines(), ["called"])
 
