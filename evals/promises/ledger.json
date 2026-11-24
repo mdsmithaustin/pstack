@@ -13702,6 +13702,15 @@
    ],
    "text": "```text\n/poteto-mode write a skill for verifying database migrations in this repo\n```"
   },
+  "e70ffe15a02d": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "pr-steps-run-unasked",
+   "sources": [
+    "port"
+   ],
+   "text": "You don't have to ask for the PR when the plan's default endpoint is one."
+  },
   "e71dbf7f9f1c": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
