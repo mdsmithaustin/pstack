@@ -1,13 +1,16 @@
 import importlib.util
 import json
+import ntpath
 import os
 import re
+import runpy
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 MODE = ROOT / "skills/poteto-mode"
@@ -669,17 +672,6 @@ class GatesAndEndpoint(unittest.TestCase):
             self.assertEqual(result["default_endpoint"], "what this playbook's Reply line names", name)
             self.assertNotIn("PR", result["default_endpoint"], name)
 
-    def test_endpoint_follows_the_repository(self):
-        with tempfile.TemporaryDirectory() as directory:
-            bare = plan("feature", *LOW, "--project", directory)
-            self.assertIn("git init", bare["default_endpoint"])
-            subprocess.run(["git", "init", "-q", directory], check=True)
-            local = plan("feature", *LOW, "--project", directory)
-            self.assertIn("local branch", local["default_endpoint"])
-            self.assertIn("No remote", local["scrutiny"])
-            subprocess.run(["git", "-C", directory, "remote", "add", "origin", "https://example.invalid/r.git"], check=True)
-            self.assertIn("PR", plan("feature", *LOW, "--project", directory)["default_endpoint"])
-
     def test_every_code_step_that_runs_opening_a_pr_keeps_its_commits(self):
         line = "   still commit when the push or PR is skipped"
         found = set()
@@ -718,6 +710,167 @@ class GatesAndEndpoint(unittest.TestCase):
     def test_the_router_owns_the_commit_rule_for_a_skipped_pr(self):
         routes = (MODE / "references/routes.md").read_text(encoding="utf-8")
         self.assertIn("A skipped push or PR never skips that step's commits.", routes)
+
+
+class RepositoryEndpoint(unittest.TestCase):
+    PUSHED = "a pushed branch, named in the reply"
+    GIT_ENV = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+
+    def setUp(self):
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name)
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        (self.bin / "git").symlink_to(shutil.which("git"))
+
+    def tool(self, name, script="exit 0"):
+        path = self.bin / name
+        path.write_text(f"#!/bin/sh\n{script}\n", encoding="utf-8")
+        path.chmod(0o755)
+
+    def repo(self, *urls):
+        path = Path(tempfile.mkdtemp(dir=self.root))
+        subprocess.run(["git", "init", "-q", str(path)], check=True, env=self.GIT_ENV)
+        for index, url in enumerate(urls):
+            subprocess.run(["git", "-C", str(path), "remote", "add", f"r{index}", url], check=True, env=self.GIT_ENV)
+        return path
+
+    def run_plan(self, project, *args, **env):
+        env = {"PATH": str(self.bin), "HOME": str(self.root), **env}
+        done = subprocess.run([sys.executable, str(SCRIPT), "feature", *LOW, "--project", str(project), *args],
+                              capture_output=True, text=True, env=env)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done
+
+    def endpoint(self, project, **env):
+        result = json.loads(self.run_plan(project, "--json", **env).stdout)
+        return result["default_endpoint"], result["scrutiny"]
+
+    def assert_no_pr_scrutiny(self, scrutiny):
+        self.assertTrue(scrutiny.startswith("No pull request opens by default"), scrutiny)
+        self.assertIn("Brief one `trail reviewer`", scrutiny)
+        offers = [sentence for sentence in re.split(r"(?<=\.)\s+", scrutiny) if "human PR review" in sentence]
+        self.assertTrue(offers and all(sentence.startswith("If the user asks for a PR") for sentence in offers), scrutiny)
+
+    def test_no_repository_and_no_remote_take_local_commits(self):
+        self.tool("gh")
+        self.assertIn("git init", self.endpoint(Path(tempfile.mkdtemp(dir=self.root)))[0])
+        endpoint, scrutiny = self.endpoint(self.repo())
+        self.assertIn("local branch", endpoint)
+        self.assert_no_pr_scrutiny(scrutiny)
+
+    def test_a_local_path_remote_takes_no_pull_request(self):
+        self.tool("origin")
+        bare = self.root / "bare.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True, env=self.GIT_ENV)
+        for url in (str(bare), bare.as_uri()):
+            with self.subTest(url=url):
+                endpoint, scrutiny = self.endpoint(self.repo(url))
+                self.assertEqual(endpoint, self.PUSHED)
+                self.assert_no_pr_scrutiny(scrutiny)
+
+    def test_windows_drive_paths_have_no_remote_host(self):
+        remote_host = runpy.run_path(str(SCRIPT))["remote_host"]
+        with patch.object(os, "path", ntpath):
+            for url in (r"Z:\repos\bare.git", "Z:/repos/bare.git", "Z:bare.git"):
+                with self.subTest(url=url):
+                    self.assertIsNone(remote_host(url))
+
+    def test_gh_serves_github(self):
+        self.tool("gh")
+        for url in ("https://github.com/o/r.git", "git@github.com:o/r.git", "ssh://git@ssh.github.com:443/o/r.git"):
+            with self.subTest(url=url):
+                endpoint, scrutiny = self.endpoint(self.repo(url))
+                self.assertEqual(endpoint, "reviewable PR")
+                self.assertIn("human PR review", scrutiny)
+        self.assertEqual(self.endpoint(self.repo("https://[broken/o/r.git"))[0], self.PUSHED)
+
+    def test_other_hosts_take_a_pushed_branch_even_with_gh(self):
+        self.tool("gh")
+        for url in ("https://github.example.com/o/r.git", "forge.example.invalid:o/r.git",
+                    "ssh://git@forge.example.invalid/o/r.git"):
+            with self.subTest(url=url):
+                endpoint, scrutiny = self.endpoint(self.repo(url))
+                self.assertEqual(endpoint, self.PUSHED)
+                self.assert_no_pr_scrutiny(scrutiny)
+
+    def test_the_planner_never_runs_gh(self):
+        self.tool("gh", ': > "$HOME/gh-called"')
+        for urls in (("https://github.com/o/r.git",), ("https://forge.example.invalid/o/r.git",),
+                     ("https://forge.example.invalid/o/a.git", "https://github.com/o/b.git")):
+            with self.subTest(urls=urls):
+                (self.root / "gh-called").unlink(missing_ok=True)
+                self.endpoint(self.repo(*urls))
+                self.assertFalse((self.root / "gh-called").exists())
+
+    def test_origin_counts_any_network_remote(self):
+        self.tool("origin")
+        for url in ("https://github.com/o/r.git", "https://forge.example.invalid/o/r.git"):
+            with self.subTest(url=url):
+                endpoint, scrutiny = self.endpoint(self.repo(url))
+                self.assertEqual(endpoint, "reviewable PR")
+                self.assertIn("human PR review", scrutiny)
+
+    def test_one_remote_that_takes_a_pull_request_is_enough(self):
+        self.tool("gh")
+        self.assertEqual(self.endpoint(self.repo(str(self.root / "gate.git"), "https://github.com/o/r.git"))[0], "reviewable PR")
+
+    def test_without_a_forge_cli_only_github_falls_back_to_a_built_in_tool(self):
+        self.assertIn("built-in PR tool", self.endpoint(self.repo("https://github.com/o/r.git"))[0])
+        self.assertEqual(self.endpoint(self.repo("https://git.example.com/o/r.git"))[0], self.PUSHED)
+
+    def test_an_ssh_alias_counts_as_the_host_ssh_resolves(self):
+        self.tool("gh")
+        self.tool("ssh", 'if [ "$1" = -G ] && [ "$2" = work ]; then echo "hostname github.com"; else echo "hostname $2"; fi')
+        for url in ("work:o/r.git", "ssh://git@work/o/r.git"):
+            with self.subTest(url=url):
+                self.assertEqual(self.endpoint(self.repo(url))[0], "reviewable PR")
+
+    def test_a_dash_leading_host_never_reaches_ssh(self):
+        self.tool("gh", "exit 1")
+        self.tool("ssh", ': > "$HOME/ssh-called"')
+        for url in ("ssh://-oProxyCommand=x/o/r.git", "git@-invalid:o/r.git"):
+            with self.subTest(url=url):
+                self.assertEqual(self.endpoint(self.repo(url))[0], self.PUSHED)
+                self.assertFalse((self.root / "ssh-called").exists())
+
+    def test_the_project_decides_under_git_environment_variables(self):
+        self.tool("gh")
+        other = self.repo("https://github.com/o/r.git")
+        mine, plain = self.repo(), Path(tempfile.mkdtemp(dir=self.root))
+        for name, value in (("GIT_DIR", other / ".git"), ("GIT_WORK_TREE", other), ("GIT_COMMON_DIR", other / ".git")):
+            with self.subTest(variable=name):
+                self.assertIn("local branch", self.endpoint(mine, **{name: str(value)})[0])
+        self.assertIn("git init", self.endpoint(plain, GIT_DIR=str(other / ".git"))[0])
+
+    def test_a_project_that_is_not_a_directory_is_a_usage_error(self):
+        regular = self.root / "regular"
+        regular.write_text("", encoding="utf-8")
+        for project in ("", self.root / "missing", regular):
+            with self.subTest(project=project):
+                done = run("feature", *LOW, "--project", str(project))
+                self.assertEqual(done.returncode, 2, done.stdout)
+                self.assertIn("--project", done.stderr)
+
+    def test_a_repeated_project_is_refused(self):
+        done = run("feature", *LOW, "--project", str(self.root), "--project", str(self.root))
+        self.assertEqual(done.returncode, 2, done.stdout)
+        self.assertIn("more than once", done.stderr)
+
+    def test_a_deleted_working_directory_still_prints_a_step(self):
+        def from_deleted(*args):
+            gone = Path(tempfile.mkdtemp(dir=self.root))
+            return subprocess.run(["/bin/sh", "-c", 'cd "$1" && rmdir "$1" && shift && exec "$@"', "sh", str(gone),
+                                   sys.executable, str(SCRIPT), *args], capture_output=True, text=True)
+
+        step = from_deleted("bug-fix", "--step", "2", "--route", "standard")
+        self.assertEqual(step.returncode, 0, step.stderr)
+        self.assertIn("2. **Root-caused.**", step.stdout)
+        self.assertEqual(from_deleted("feature", *LOW, "--project", str(self.root)).returncode, 0)
+        done = from_deleted("feature", *LOW)
+        self.assertEqual(done.returncode, 2, done.stderr)
+        self.assertIn("--project", done.stderr)
 
 
 class CodePlaybooks(unittest.TestCase):

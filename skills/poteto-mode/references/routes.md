@@ -46,12 +46,12 @@ When new evidence changes a fact, rerun the plan script and expand the worklist 
 
 The endpoint is how far the task goes. The user's stated endpoint governs, and so does a host instruction such as "do not open a pull request unless asked". This holds for every playbook, including one whose last step says to run **Opening a PR**. A skipped push or PR never skips that step's commits. An endpoint is one of evidence, local commits, a pushed branch, a reviewable PR, or merge. Merge always needs its own authorization.
 
-With no stated endpoint, use the furthest reviewable state the repository supports. The plan prints it.
+With no stated endpoint, use the plan's default:
 
 | The repository has | Default endpoint |
 |---|---|
-| A remote and a way to open a pull request | A reviewable PR. |
-| A remote and no pull request tool | A pushed branch, named in the reply. |
+| A github.com remote, or a network remote and Origin | A reviewable PR. Without `gh` or Origin, use a built-in PR tool or push a branch. |
+| Another remote, such as GitHub Enterprise | A pushed branch, named in the reply. Open a PR only on request. |
 | No remote | Commits on a local branch. Give the branch and its diff command in the reply. |
 | No Git repository | Run `git init`, then use the row above. |
 

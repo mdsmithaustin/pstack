@@ -127,6 +127,23 @@ class RouteBytes(unittest.TestCase):
                                   env={"PATH": "/usr/bin:/bin"}, cwd=directory)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
 
+    def test_the_fixed_endpoint_is_what_the_plan_prints_for_a_github_remote_with_gh(self):
+        fixed = load(BYTES, "check_route_bytes").FIXED_ENDPOINT
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "bin").mkdir()
+            (root / "bin/git").symlink_to(shutil.which("git"))
+            (root / "bin/gh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            (root / "bin/gh").chmod(0o755)
+            env = {"PATH": str(root / "bin"), "HOME": directory}
+            subprocess.run(["git", "init", "-q", str(root / "repo")], check=True, env=env)
+            subprocess.run(["git", "-C", str(root / "repo"), "remote", "add", "origin", "https://github.com/o/r.git"], check=True, env=env)
+            done = subprocess.run([sys.executable, str(ROOT / "skills/poteto-mode/scripts/plan.py"), "feature",
+                                   "--project", str(root / "repo"), "--json"], capture_output=True, text=True, env=env)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        result = json.loads(done.stdout)
+        self.assertEqual((result["default_endpoint"], result["default_endpoint_reason"]), fixed[:2])
+
     def test_a_budget_below_the_load_fails_and_update_will_not_raise_it(self):
         with tempfile.TemporaryDirectory() as directory:
             budgets = Path(directory) / "budgets.json"
