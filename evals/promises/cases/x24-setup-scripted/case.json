@@ -1,0 +1,18 @@
+{
+ "screen": "X24",
+ "promises": [
+  "x24-setup-lists-efforts-before-claude-install",
+  "x24-setup-previews-reviewer-step",
+  "x24-setup-never-drops-config-write"
+ ],
+ "fixture": "tally",
+ "entry": "setup-pstack",
+ "turns": [
+  "I use both Codex and Claude Code in this repo. Set up my pstack models with the medium budget and keep every role's model as shipped. Also register the Claude Code agents in this project. Leave my task tool switches, Codex feature settings, and skill listing alone, skip the PR template, and don't offer the verification skills.",
+  "That all looks right. Go ahead and finish everything that's left."
+ ],
+ "timeout_s": {
+  "default": 1200
+ },
+ "note": "Settles O70 (list role efforts before a Claude Code install), O84 (trail reviewer preview with `when work runs on`), and O87 (write-fallback ladder). Run on Codex. The Codex adapter gives the run a private HOME under the run root, and its workspace-write sandbox writes only the project, its .git, and the run's tmp, so the user target ~/.agents/pstack-models.md is unwritable and the ladder must fall back to the workspace file or printed content. The first turn answers the budget, role, registration, switch, template, and offer questions up front; the second is the go-ahead the setup asks for. Nothing on this path needs the network: the runtime, persona, registration, lint, and resolver scripts all run locally. The graders read only the trace and the project, never a HOME."
+}

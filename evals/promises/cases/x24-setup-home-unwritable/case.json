@@ -1,0 +1,17 @@
+{
+ "screen": "X24",
+ "promises": [
+  "x24-setup-previews-reviewer-step",
+  "x24-setup-never-drops-config-write"
+ ],
+ "fixture": "tally",
+ "entry": "setup-pstack",
+ "turns": [
+  "Set up my pstack models: medium budget, every role's model kept as shipped. Don't register anything new, leave my task tool switches and skill listing alone, skip the PR template, and don't offer the verification skills.",
+  "Looks good, go ahead and write it."
+ ],
+ "timeout_s": {
+  "default": 1200
+ },
+ "note": "Settles O87 (write-fallback ladder) and O84 (trail reviewer preview) on Claude Code. The Claude Code adapter keeps the real HOME and its Seatbelt policy denies every write there, so ~/.agents/pstack-models.md is unwritable through both the file tool and the shell, and the ladder must reach the workspace file or printed content. The adapter's prepare step already registers the project's Claude Code agents, so O70 has no install to precede here; x24-setup-scripted covers it on Codex. The first turn answers setup's questions up front; the second is the go-ahead. No network is needed. The graders read only the trace and the project, never the host's ~/.agents or ~/.claude."
+}
