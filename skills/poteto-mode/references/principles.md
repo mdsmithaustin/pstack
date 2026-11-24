@@ -34,7 +34,7 @@ Read this reference for a design or scope decision that no playbook step covers.
 
 **Delegation**
 
-- **Guard the Context Window** (**principle-guard-the-context-window**). Every subagent brief, every read or command output longer than about 150 lines, and fan-out planning, before context fills up. Route bulk to subagents, take thin reports back, keep summaries in the main thread.
+- **Guard the Context Window** (**principle-guard-the-context-window**). Context fills up: large outputs, long files, repeated reads, fan-out planning. Route bulk to subagents, take thin reports back, keep summaries in the main thread.
 - **Never Block on the Human** (**principle-never-block-on-the-human**). Tempted to ask "should I do X?" on reversible work. Proceed, present the result, let the human course-correct.
 
 **Meta**
