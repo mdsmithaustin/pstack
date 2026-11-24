@@ -35,6 +35,17 @@ class BriefClauses(unittest.TestCase):
                 self.assertLess(text.index("read-plan.py"), text.index("Read the original task in full"))
                 self.assertIn(shlex.quote(str(SCRIPT.with_name("read-plan.py"))), text)
 
+    def test_every_brief_points_at_worker_rules_before_the_source(self):
+        worker = SCRIPT.parents[2] / "poteto-mode/worker.md"
+        self.assertTrue(worker.is_file())
+        for arguments in (("--source", "t.md"), ("--source", "t.md", "--no-commits")):
+            with self.subTest(arguments=arguments):
+                text = clauses(*arguments)[1]
+                pointer = f"- Read `{worker}` before anything else."
+                self.assertIn(pointer, text)
+                self.assertLess(text.index("read-plan.py"), text.index(pointer))
+                self.assertLess(text.index(pointer), text.index("Read the original task in full"))
+
     def test_cleanup_cadence_follows_the_run(self):
         self.assertIn("before each push, over every commit not yet pushed", clauses("--source", "t.md", "--cleanup", "push")[1])
 
