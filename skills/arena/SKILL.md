@@ -12,7 +12,7 @@ Open a worklist with one entry per phase (Frame, Fan out, Cross-judge, Pick, Gra
 Every candidate gets the same prompt, so the prompt is the contract.
 
 1. State the artifact each candidate is producing.
-2. Derive the rubric, 3-6 concrete gradeable criteria for what success looks like on *this* task. For subjective criteria, use [Eval's criterion and calibration guidance](../poteto-mode/playbooks/eval.md). It is the picker's tool in Phase D. Candidates only see the task.
+2. Derive the rubric, 3-6 concrete gradeable criteria for what success looks like on *this* task. It is the picker's tool in Phase D. Candidates only see the task.
 3. Pick the runners. Use the `arena runners` role, one arm per entry. Its default is one each on `fable`, `opus`, `sonnet`. A rejected entry also follows the required-arm rule below. Spawn more runners when the arena covers multiple design directions. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section. On `"comparison": "skip"`, follow its same-model rule: a design comparison skips Phases B through E, and a review still runs them.
 4. Give each candidate its own output location (a git worktree where possible, otherwise `candidate-<n>/` inside a fresh `mktemp -d "${TMPDIR:-/tmp}/arena-<slug>.XXXXXX"` made for this run). Call the Skill tool with `principle-separate-before-serializing-shared-state`. Never reuse an earlier run's directory.
    - A native isolation option counts only when it makes a git worktree, where `git -C <its path> rev-parse --path-format=absolute --git-common-dir` prints the project's. Grok Build's `isolation: worktree` can make a standalone clone, so spawn there with `isolation: none`. If you omit the field, a Grok role or persona default can still turn isolation on.
