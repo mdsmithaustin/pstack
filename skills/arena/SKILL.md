@@ -13,7 +13,7 @@ Every candidate gets the same prompt, so the prompt is the contract.
 
 1. State the artifact each candidate is producing.
 2. Derive the rubric, 3-6 concrete gradeable criteria for what success looks like on *this* task. For subjective criteria, use [Eval's criterion and calibration guidance](../poteto-mode/playbooks/eval.md). It is the picker's tool in Phase D. Candidates only see the task.
-3. Pick the runners. Use the `arena runners` role, one arm per entry. Its default is one each on `fable`, `opus`, `sonnet`. A rejected entry also follows the required-arm rule below. Spawn more runners when the arena covers multiple design directions. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section. On `"comparison": "skip"`, follow its same-model rule: a design comparison skips Phases B through E, and a review still runs them.
+3. Pick the runners. Use the `arena runners` role, one arm per entry. Its default is one each on `fable`, `opus`, and `inherit-parent`. A rejected entry also follows the required-arm rule below. Spawn more runners when the arena covers multiple design directions. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section. On `"comparison": "skip"`, follow its same-model rule: a design comparison skips Phases B through E, and a review still runs them.
 4. Give each candidate its own output location (a git worktree where possible, otherwise `candidate-<n>/` inside a fresh `mktemp -d "${TMPDIR:-/tmp}/arena-<slug>.XXXXXX"` made for this run). Call the Skill tool with `principle-separate-before-serializing-shared-state`. Never reuse an earlier run's directory.
    - A native isolation option counts only when it makes a git worktree, where `git -C <its path> rev-parse --path-format=absolute --git-common-dir` prints the project's. Grok Build's `isolation: worktree` can make a standalone clone, so spawn there with `isolation: none`. If you omit the field, a Grok role or persona default can still turn isolation on.
    - Make every other candidate worktree yourself, one at a time, with `git worktree add --detach <run dir>/candidate-<n>`, where `<run dir>` is that fresh `mktemp -d`, and name the path in the candidate's brief. If an add fails, remove the worktrees already made and give every candidate a plain directory there instead, so all candidates start alike.
@@ -31,7 +31,7 @@ An arm or exact model requested for this task remains an obligation. If it canno
 
 ## Phase C: Cross-judge
 
-After all Phase B candidates complete, choose one arm of the `arena cross-judge pool` role. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section to resolve it. Its default pool is `fable`, `opus`, `sonnet`.
+After all Phase B candidates complete, choose one arm of the `arena cross-judge pool` role. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section to resolve it. Its default pool is `opus`.
 - Spawn one read-only judge subagent. The judge never runs on the parent's model.
 - Try the pool's entries in pool order, first those from a model family other than the parent's, then those on a different capability tier of the parent's family. An `auto` or `inherit-parent` entry is the parent model, so it never judges. An arm that **Spawn a role** moves onto the session model after a rejection is the parent model too, so move to the next entry.
 - If no entry runs on another model, skip the judge, pick the base alone in Phase D, and say so.

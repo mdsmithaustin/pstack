@@ -127,30 +127,31 @@ Enumerate the model values your session's spawn mechanism accepts, and the reaso
 
 ### 2. Load current state
 
-The default mapping is `examples/pstack-models.md` next to this skill. Read both config layers when they exist, the workspace `.agents/pstack-models.md` and then `~/.agents/pstack-models.md`, including their harness sections, and treat each role's lines and the `# budget` line of the file being configured as the current choices. `--resolve --harness <this CLI>` prints what each role runs as here. Otherwise start from those defaults. Unless the user asked for a per-repo override, the user-level file is the one being configured. Preserve the `trail reviewer step` setting through the budget and mapping steps, per [the models config grammar](references/models-config.md#grammar). Drop a role line whose role is not in `examples/pstack-models.md`, such as `how critics`.
+The default mapping is `examples/pstack-models.md` next to this skill. Read both config layers when they exist, the workspace `.agents/pstack-models.md` and then `~/.agents/pstack-models.md`, including their harness sections, and treat each role's lines and the `# budget` line of the file being configured as the current choices. `--resolve --harness <this CLI>` prints what each role runs as here. Otherwise start from those defaults. Unless the user asked for a per-repo override, the user-level file is the one being configured. Preserve the `trail reviewer step` setting through the budget and mapping steps, per [the models config grammar](references/models-config.md#grammar). Drop a role line whose role is not in `examples/pstack-models.md`, such as `how critics` or `hardest tasks`.
+
+A file without the `# defaults: 3` line comes from an older setup, which wrote a line for every role, so some of its values are old shipped defaults, not choices. Before step 3, give a role its current shipped value in the same section when its line still holds an old default: `sonnet` at any effort on a single role, `fable, opus, sonnet` at any efforts on a panel role or the cross-judge pool, or, under `## codex`, a `gpt-6-luna` entry or an entry at `max`. A `# budget: unlimited` line becomes `large`, because no role runs above `xhigh`. Every other value is the user's choice and stays. Tell the user which values you replaced.
 
 ### 3. Budget, map, and confirm
 
-**(a) Ask for a budget.** Prefer AskQuestion over free text. Offer these five options with these exact labels, and name the current budget when the file records one. With no file, say that `default` keeps the shipped defaults. The first is a port addition, and the other four match upstream.
+**(a) Ask for a budget.** Prefer AskQuestion over free text. Offer these four options with these exact labels, and name the current budget when the file records one. With no file, say that `default` and `large` keep the shipped defaults. The first is a port addition, and the other three match upstream.
 
 - `default — keep as written`
-- `unlimited — max reasoning`
 - `large — xhigh reasoning`
 - `medium — high reasoning`
 - `small — medium reasoning`
 
 On Claude Code, describe `default — keep as written` as "the shipped Claude Code efforts stay: medium, high, or xhigh by role", and say at the ask that a budget's suffix overrides the session effort in both directions when the spawn tool takes `effort` or the effort agents are loaded.
 
-**(b) Apply it.** Build the working table from `examples/pstack-models.md`, and on a re-run keep any role the user changed by model, effort, list, alias (`inherit-parent`, `auto`), or harness section. `default` applies no budget: every written `@effort` suffix stands and unsuffixed entries keep the effort policy in [references/models-config.md](references/models-config.md), which on Claude Code fills `medium` or `high`. `unlimited`, `large`, `medium`, and `small` set the `@effort` of every real entry, panel entries and harness sections included, to `max`, `xhigh`, `high`, or `medium`, adding the suffix where none was written.
+**(b) Apply it.** Build the working table from `examples/pstack-models.md`, and on a re-run keep any role the user changed by model, effort, list, alias (`inherit-parent`, `auto`), or harness section. `default` applies no budget: every written `@effort` suffix stands and unsuffixed entries keep the effort policy in [references/models-config.md](references/models-config.md), which on Claude Code fills `medium` or `high`. `large`, `medium`, and `small` move each real entry's effort from the one `examples/pstack-models.md` writes for that role and entry position in the same section, or in its `## claude-code` section for a flat line or a section that writes none. On the ladder `xhigh` > `high` > `medium` > `low`, `large` keeps it, `medium` lowers it one step, and `small` lowers it two. An effort at `low` stays there, and no budget writes above `xhigh`. Write the result as the entry's `@effort`, panel entries and harness sections included, adding the suffix where none was written.
 - If the lint in step 4 rejects that effort for the model, use the model's highest supported effort at or below the target.
 - An entry whose model the lint cannot classify keeps its written effort, or stays unsuffixed, and step (c) names it as untouched.
 - An alias with a written suffix, such as `auto@max`, gets the same rewrite on its suffix, since Codex honors a suffix on an alias. A bare `inherit-parent` or `auto` does not change.
-- No budget changes a model or a list length. So `small` turns `fable` into `fable@medium` and `gpt-6-sol@max` into `gpt-6-sol@medium`, and `unlimited` turns both back into `fable@max` and `gpt-6-sol@max`.
+- No budget changes a model or a list length. So `medium` turns `opus@xhigh` into `opus@high` and `opus@high` into `opus@medium`, and `small` turns them into `opus@medium` and `opus@low`.
 - On Claude Code, a written suffix applies when the spawn tool takes `effort` or while the effort agents are loaded. With neither carrier, say so. The suffixes still govern Codex and Hermes reading the same file, and the [Claude Code adapter](../pstack-harness/references/claude-code.md) says what level subagents here run at until a carrier exists.
 
 **(c) Show the roles and confirm.** The file is shared across CLIs, so a value this harness cannot validate is not wrong — it is another harness's choice (it reads as `inherit-parent` here). The one exception is a `## claude-code` value that is not an alias: the lint rejects it on every harness, so show it as an error and offer the alias it names, such as `opus` for `claude-opus-5-5`.
 - Show every role with its model and effort for this harness, marking values outside the detected set as "(set for another harness — kept unless you change it)" rather than as needing a choice. On Claude Code, show a role whose model is `inherit-parent` as `session`, and mark a written effort "(inactive until the effort agents load)" when the spawn tool takes no `effort` and the live catalog lacks its agent. Also list each line step 2 dropped.
-- Ask whether to accept as-is or change specific roles, offering the detected models plus `inherit-parent` and `auto` (both mean: this role runs on the parent chat model, which is how Auto users stay on Auto) as the options. Prefer AskQuestion over free text.
+- Ask whether to accept as-is or change specific roles, offering the detected models at `xhigh` or below plus `inherit-parent` and `auto` (both mean: this role runs on the parent chat model, which is how Auto users stay on Auto) as the options. Prefer AskQuestion over free text.
 - For panel roles (arena runners, architect runners, interrogate reviewers) the value is a list, and one subagent runs per entry, alias entries included, so the list length sets the count, except that the lead skips an arena or architect design comparison that the resolver marks `"comparison": "skip"`, per rule 9 of [references/models-config.md](references/models-config.md).
 - `arena cross-judge pool` is also a list, but Arena runs one judge. It tries only values on a model other than the parent's, from another family first and then from another capability tier, in list order, so order it by preference. An `inherit-parent` or `auto` value never judges.
 - `swarm workers` runs every swarm worker that runs something, as the **swarm** skill assigns, unless a race or comparison assigns another model per arm. `trail reviewer` runs the show-me-your-work reviewer and every independent verdict and review, including a swarm's audit lanes.
@@ -166,7 +167,7 @@ On Claude Code, describe `default — keep as written` as "the shipped Claude Co
 
 Run the lint on the file you are about to write, before writing it: `python3 <this skill's directory>/scripts/check-models-config.py <file>`.
 - Any `error:` line (unknown role, bad effort, an effort the model does not support, a duplicate role or section, `none` or `ultra` under `## claude-code`, a `## claude-code` model that is not `fable`, `opus`, `sonnet`, `haiku`, `auto`, or `inherit-parent`) stops the write; fix the line and re-run. `notice:` lines mark `max` and `ultra` pins, a flat-line `none` or `ultra` that falls back to the effort policy on Claude Code, and a `## codex` slug that the readable Codex model list does not carry. Read each one back to the user, so an expensive tier or a Claude Code fallback is a choice.
-- Every *newly chosen* real slug must be in the detected set. `inherit-parent` and `auto` always pass, and preserved values from another harness are exempt. If a chosen real slug is not available, stop and ask again.
+- Every *newly chosen* real slug must be in the detected set, and every newly chosen effort at `xhigh` or below. `inherit-parent` and `auto` always pass, and preserved values from another harness are exempt. If a chosen real slug is not available, stop and ask again.
 - Once the lint passes, show the user what each role will run as here. For the user file, run `python3 <this skill's directory>/scripts/check-models-config.py --resolve --harness <this CLI> --user-file <file>` from the project root, which also applies any workspace file there. For a per-repo override, copy the draft to `<temp>/.agents/pstack-models.md` and pass `--project <temp>` instead, so the real user file stays underneath.
 - Then run it with `"trail reviewer"` once per `--work-model` value that step 3c would pass for this file, one value per run, and show each line as step 3c describes, so the user sees what the line does before the write.
 
@@ -174,15 +175,16 @@ Run the lint on the file you are about to write, before writing it: `python3 <th
 
 The target is `~/.agents/pstack-models.md`, or workspace `.agents/pstack-models.md` when the user asked for a per-repo override (only write roles the user actually wants pinned for this repo. A workspace flat line shadows only the user's flat lines, since a user `## <harness>` section beats any flat line, so write a per-repo override under the `## <harness>` section of the workspace file). A workspace file's `# budget` line covers only the roles written in that file. Roles that still resolve from `~/.agents/pstack-models.md` keep that file's budget. If your file tool cannot write the target (a harness that scopes writes to the workspace), fall back in order: write it through your shell tool; else write the workspace file and say the config is project-local until copied to `~/.agents/`; else print the final content for the user to save. Never silently drop the write.
 
-Write the file with a `# budget` line holding the chosen label and its target effort, and one line per role, using the same labels poteto-mode uses. Start from `examples/pstack-models.md` next to this skill and keep its header comments, replacing the value on its budget line. Rewrite the whole file so re-runs stay idempotent, but carry forward every existing line the user did not change — including sections and values this harness could not validate; overwriting another CLI's choices with `inherit-parent` is the one failure mode to avoid. Leave out the retired-role lines step 2 dropped. Put a harness-specific pick under its `## <harness>` section and leave the flat lines for the other CLIs. Shape (excerpt):
+Write the file with the `# defaults: 3` line, a `# budget` line holding the chosen label and its target effort, and one line per role, using the same labels poteto-mode uses. Start from `examples/pstack-models.md` next to this skill and keep its header comments, replacing the value on its budget line. Rewrite the whole file so re-runs stay idempotent, but carry forward every existing line the user did not change — including sections and values this harness could not validate; overwriting another CLI's choices with `inherit-parent` is the one failure mode to avoid. Leave out the retired-role lines step 2 dropped. Put a harness-specific pick under its `## <harness>` section and leave the flat lines for the other CLIs. Shape (excerpt):
 
 ```
+# defaults: 3
 # budget: default (keep as written)
-feature, refactoring: sonnet
-bug-fix: sonnet
+feature, refactoring: opus
+bug-fix: opus
 
 ## codex
-feature, refactoring: gpt-6-sol@high
+feature, refactoring: gpt-6-sol@xhigh
 bug-fix: gpt-6-sol@xhigh
 ```
 

@@ -14,7 +14,7 @@ from typing import NamedTuple
 
 ROLES = {
     "feature", "refactoring", "bug-fix", "perf-issue", "hillclimb",
-    "judgment and prose", "hardest tasks", "how explorer", "how explainer",
+    "judgment and prose", "how explorer", "how explainer",
     "why investigators", "why synthesizer", "reflect tooling",
     "reflect judgment", "reflect divergent", "reflect synthesizer",
     "arena runners", "arena cross-judge pool", "swarm workers",
@@ -102,7 +102,7 @@ MODEL_EFFORTS: dict[str, frozenset[str]] = {
 }
 
 XHIGH_FLOOR_ROLES = {
-    "hardest tasks", "judgment and prose", "bug-fix", "perf-issue", "hillclimb",
+    "judgment and prose", "bug-fix", "perf-issue", "hillclimb",
     "how explainer", "why synthesizer", "reflect judgment", "reflect divergent",
     "reflect synthesizer", "arena cross-judge pool", "architect runners",
     "trail reviewer",
