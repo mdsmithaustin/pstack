@@ -1,0 +1,4 @@
+time	decision	why
+2026-11-24T04:02Z	spawned owner-12 for issue 11	one owner per PR
+2026-11-24T04:47Z	owner-12 reported code-ready head (branch tip of pr-12-min-length)	after its first rebase onto main
+2026-11-24T04:50Z	dispatched round 1 swarm, three lanes, at that head	first round is a full swarm

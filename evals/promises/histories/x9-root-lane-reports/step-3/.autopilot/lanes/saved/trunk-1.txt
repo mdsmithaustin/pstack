@@ -1,0 +1,8 @@
+$ git switch -q main && python3 -m tally .autopilot/issues/9-crm-export.txt
+Traceback (most recent call last):
+  ...
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe9 in position 3: invalid continuation byte
+$ git switch -q pr-12-min-length && python3 -m tally .autopilot/issues/9-crm-export.txt
+Traceback (most recent call last):
+  ...
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xe9 in position 3: invalid continuation byte

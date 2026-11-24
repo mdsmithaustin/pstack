@@ -1,0 +1,25 @@
+{
+ "screen": "X9",
+ "note": "Settles AF7, AF9, and AF16, and measures AF5. A root-only Autopilot-full tick: the history leaves PR 12 (a --min-length off-by-one) on its branch and the root's untracked run state in .autopilot/: three round 1 lane reports (consumer-1 reached by issue 11's own command, edges-1 reached only by a file the lane wrote, trunk-1 present on main already), owner-12's trail ending in a provider usage-limit error, and its children.tsv. No forge exists, so the run state's outbox/ and owner-12/inbox.md carry what the root would post or send. Run on Claude Code.",
+ "promises": [
+  "x9-root-fix-forward-holds-reached-finding",
+  "x9-root-files-invented-input-finding",
+  "x9-root-records-base-finding",
+  "x9-root-quota-is-not-a-lane-failure",
+  "x9-root-plans-live-proof"
+ ],
+ "fixture": "tally",
+ "history": "x9-root-lane-reports",
+ "entry": "poteto-mode",
+ "turns": [
+  "full autopilot on the tally queue, and you're the root. round 1 lanes for PR 12 are back in .autopilot/lanes/ and owner-12's trail is in .autopilot/owner-12/. run this tick and act on all of it. the layout is in .autopilot/README.md"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "autopilot-full"
+ },
+ "tmp_lock": false
+}

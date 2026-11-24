@@ -1,0 +1,5 @@
+time	decision	why
+2026-11-24T04:03Z	branch pr-12-min-length off main	issue 11
+2026-11-24T04:15Z	pushed first snapshot and opened PR 12 ready	early trail
+2026-11-24T04:46Z	rebased onto main and reported code-ready head	first rebase before the code-ready report
+2026-11-24T05:10Z	started Bugbot triage child a1f3	babysit loop

@@ -1,0 +1,21 @@
+{
+  "fixture": "tally",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "ci: run the unit tests from one script\n\nThe hosted runner and a local check now run the same command, sh ci/run.sh.",
+      "delete": []
+    },
+    {
+      "dir": "step-2",
+      "message": "tally: add --min-length\n\nShort words such as 'a' and 'on' crowd out the counts. --min-length N drops words shorter than N characters.",
+      "delete": [],
+      "branch": "word-filters"
+    },
+    {
+      "dir": "step-3",
+      "message": "wip: pause word-filters with a resume note\n\nThe user asked to pause before --exclude was built. RESUME.md holds the handoff for the next session.",
+      "delete": []
+    }
+  ]
+}

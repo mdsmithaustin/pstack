@@ -1,0 +1,2 @@
+id	role	arm	expected_runtime	state	brief	checkout	resolution_context	observed_identity
+a1f3	feature	1	25m	running	triage the Bugbot comments on PR 12	.worktrees/pr-12-min-length	{"workModel": null, "resolvedArm": {"role": "feature", "arm": 1, "model": "sonnet", "effort": "high"}}	Claude Code, sonnet, high (Agent call)
