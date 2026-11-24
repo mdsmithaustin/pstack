@@ -8974,6 +8974,15 @@
    ],
    "text": "[Understand the code](./03-understand.md). A read-only investigation, then `/how`, `/why`, `/poteto-teach`, and `/recall` before you edit anything."
   },
+  "6ee2d4c769e4": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "pr-steps-run-unasked",
+   "sources": [
+    "port"
+   ],
+   "text": "Playbooks such as Feature and Bug fix run the commit, push, and PR steps that the task's endpoint calls for."
+  },
   "6fabd625dacc": {
    "class": "promise",
    "file": "05-build-and-clean.md",
@@ -13945,15 +13954,6 @@
     "port"
    ],
    "text": "Babysit reports documentation readiness alongside forge status."
-  },
-  "ec61bc1a9190": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "pr-steps-run-unasked",
-   "sources": [
-    "port"
-   ],
-   "text": "A playbook that ends in Opening a PR, such as Feature or Bug fix, commits, pushes, and opens the PR as its last steps."
   },
   "ec7e3a134a35": {
    "class": "context",
