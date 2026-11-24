@@ -29,7 +29,7 @@ optional() {
   fi
 }
 
-optional bun "Stops: the GitHub PR watcher, the merge gate, and the orchestrate store. Babysit can poll with gh, PR recap can run bun through npx, and node can run its attachment helper."
+optional bun "Stops: the GitHub PR watcher, and the merge gate. Babysit can poll with gh, PR recap can run bun through npx, and node can run its attachment helper."
 optional node "Stops: the multi-PR plan check. The statechart launcher also accepts bun or Deno 2.0 or newer."
 optional gh "Stops: opening, watching, and landing GitHub pull requests, unless the Origin CLI can resolve the repository."
 
