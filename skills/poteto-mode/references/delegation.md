@@ -8,7 +8,7 @@ Before each spawn, read [unattended runs](unattended.md) and carry the run's att
 
 **Use the `poteto-agent` persona for any subagent you spawn inside a playbook step**. The main conversation runs the playbook itself.
 - The persona sets the subagent's instructions. The playbook step names a role in the models config, which sets the subagent's model and effort. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section to turn the persona, model, and effort into this CLI's spawn call. This skill and `poteto-agent` preserve the same wrapper instructions.
-- Routed skills (`how`, `why`, `interrogate`, `reflect`, `swarm`) choose their own persona. Respect it.
+- Routed skills (`interrogate`, `swarm`) choose their own persona. Respect it.
 - A `poteto-agent` reads this skill's entry before work. It skips that read only when its brief names a narrow role whose output cannot land in the project, such as a judge, a reviewer, or a design runner. In the brief for such a role, name the role and the files it reads, such as its runner prompt or rubric. Put in the brief every rule from this suite that it needs.
 
 On Codex, a configured `trail reviewer` uses the [native review assignment](../../pstack-harness/references/codex.md#codex-adapter) in place of `poteto-agent` when the exact type is live. Give it the same review brief and rubric.
