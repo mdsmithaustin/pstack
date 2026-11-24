@@ -1,0 +1,28 @@
+{
+ "screen": "X2",
+ "promises": [
+  "x2-why-names-unread-prs"
+ ],
+ "fixture": "relay",
+ "history": "x2-relay-retry-prs",
+ "entry": "why",
+ "turns": [
+  "why do malformed feeds stop retrying now while timeouts get five tries?"
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "unread_prs": [
+   38,
+   52
+  ],
+  "absent_tools": {
+   "claude-code": [
+    "gh"
+   ]
+  }
+ },
+ "note": "Settles L40 for why (why step 2: if gh is missing, unauthenticated, or the query fails, mark those PRs unread in the code anchor and name the gap in Sources Consulted). The history is relay-retry-limit with (#38) and (#52) on the two commit subjects, so the anchor step reaches for those PR bodies. Run it on Claude Code, whose adapter PATH has no gh (expect.absent_tools), and the repository has no remote. The grader is INCONCLUSIVE when a gh call succeeded. The eval and show-me-your-work halves of L40 are not built."
+}

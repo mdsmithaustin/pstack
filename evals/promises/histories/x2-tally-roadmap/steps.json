@@ -1,0 +1,10 @@
+{
+  "fixture": "tally",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "add tests and a roadmap\n\nThe tests pin today's text output so later work can change the internals safely. The roadmap lists the three changes people have asked for most.",
+      "delete": []
+    }
+  ]
+}

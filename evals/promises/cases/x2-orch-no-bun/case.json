@@ -1,0 +1,25 @@
+{
+ "screen": "X2",
+ "promises": [
+  "x2-orch-failure-stops-dispatch"
+ ],
+ "fixture": "kiln",
+ "entry": "poteto-mode",
+ "turns": [
+  "orchestrate moving all four kiln packages off NamedTuple onto frozen dataclasses, one PR per package. you coordinate, workers write the code. i'll check in morning and evening."
+ ],
+ "timeout_s": {
+  "default": 1500,
+  "codex": 2100
+ },
+ "expect": {
+  "playbook": "orchestrate",
+  "absent_tools": {
+   "claude-code": [
+    "bun"
+   ]
+  }
+ },
+ "tmp_lock": false,
+ "note": "Settles O8 (orchestrate store layout: if orch cannot run, for example without bun, report the failure and dispatch nothing new until it runs). Run it on Claude Code, whose adapter PATH holds python, node, rg, and git only, so `bun scripts/orch/orch.ts` fails; expect.absent_tools records that per harness, so a bun call chained before a succeeding command still counts as failed there. Nothing is planted in the fixture. The grader is INCONCLUSIVE when an orch call succeeded or the lead never ran orch, and sends writers dispatched after a reported failure to a reader, since a lead can leave Orchestrate for a narrower playbook."
+}

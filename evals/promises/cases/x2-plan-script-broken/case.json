@@ -1,0 +1,36 @@
+{
+ "screen": "X2",
+ "promises": [
+  "x2-failed-plan-worklist-from-playbook",
+  "x2-failed-plan-cleanup-and-review",
+  "worklist-opens-with-playbook-steps",
+  "default-endpoint-local-branch-without-remote"
+ ],
+ "fixture": "tally",
+ "entry": "poteto-mode",
+ "turns": [
+  "add a --json flag to this command. text output stays byte-identical. verify both."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "feature",
+  "plan_script_broken": true,
+  "implementation_paths": [
+   "tally/*.py"
+  ]
+ },
+ "env": {
+  "todo_tools": true
+ },
+ "skill_overlays": [
+  {
+   "file": "poteto-mode/scripts/plan.py",
+   "old": "import argparse\n",
+   "new": "import pstack_route_tables\nimport argparse\n"
+  }
+ ],
+ "note": "Settles M10 (SKILL.md: if the plan script cannot run, copy the playbook's opening prose and steps as the worklist and use the standard route) and M46 (task-triggers: with no plan, run cleanup before every commit, take the endpoint from routes, and get independent scrutiny before reporting a code change complete). Same fixture, turn, and expect as feature-plan-route-run; the overlay makes plan.py import a module that does not exist, so every plan call exits with ModuleNotFoundError; expect.plan_script_broken tells the graders that a returned plan call with no route line failed, since a call chained after other output can hide the traceback past the recorded head. The fixture has no remote, so the default endpoint is a local branch, which default-endpoint-local-branch-without-remote grades."
+}

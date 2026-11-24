@@ -1,0 +1,20 @@
+{
+ "screen": "X2",
+ "promises": [
+  "x2-verifier-drives-or-notes-surface"
+ ],
+ "fixture": "tally",
+ "history": "x2-tally-json-branch",
+ "entry": "poteto-mode",
+ "turns": [
+  "land the json-output branch on main. there's no remote here, so merge it locally once it checks out."
+ ],
+ "timeout_s": {
+  "default": 1800,
+  "codex": 2400
+ },
+ "expect": {
+  "playbook": "shipping"
+ },
+ "note": "Settles SH4 (shipping step 1: with no verify-<app> skill the verifier drives the changed surface by hand and names it; a verifier that ran only tests returns at most PASS+NOTES and names the undriven surface). The history puts tests on main and checks out a json-output branch whose --json path reads args.limit, which argparse never sets: the branch's unit tests pass, and `python3 -m tally sample.txt --json` raises AttributeError. No forge and no verify-<app> skill exist. A delegate's commands are not in the trace, so FAIL needs a plain PASS that names no run of the CLI and no lead command that ran it."
+}
