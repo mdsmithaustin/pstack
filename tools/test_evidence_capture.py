@@ -259,7 +259,8 @@ os._exit(0)
                      for name in ("stdout", "stderr")}
             for name, unit in (("stdout", b"out"), ("stderr", b"err")):
                 self.assertTrue(saved[name])
-                self.assertEqual(saved[name], unit * (len(saved[name]) // len(unit)))
+                whole, remainder = divmod(len(saved[name]), len(unit))
+                self.assertEqual(saved[name], unit * whole + unit[:remainder])
             lengths = [(manifest.parent / f".{name}-staging").stat().st_size
                        for name in ("stdout", "stderr")]
             deadline = time.monotonic() + 5

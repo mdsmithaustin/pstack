@@ -4997,7 +4997,7 @@ def feature_recovery_obligations(view):
 
 PLAN_ROUTE = re.compile(r"^route: (pending|lightweight|standard|intensive)\b", re.M)
 PLAN_LOAD = re.compile(r"call the Skill tool with `([a-z0-9-]+)`", re.I)
-PLAN_CONDITION = re.compile(r"^\W*(If|When|Where|For|On the|Once|Unless|Otherwise|Only)\b")
+PLAN_CONDITION = re.compile(r"^\W*(If|When|Where|For|In|On the|Once|Unless|Otherwise|Only)\b")
 PLAN_BARE_FLAGS = {"--json", "-h", "--help"}
 TRUNK_BRANCHES = {"main", "master"}
 REPLY_DIFF_COMMAND = re.compile(r"\bgit\s+(?:diff|log|show|range-diff)\b")
