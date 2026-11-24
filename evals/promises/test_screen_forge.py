@@ -114,6 +114,12 @@ class X6BodyTrueAtMergeReady(unittest.TestCase):
         self.assertEqual(result["verdict"], INCONCLUSIVE, result)
         self.assertEqual(result["measures"]["stale_claims"], 3)
 
+    def test_a_reply_the_reader_cannot_classify_goes_to_a_reader(self):
+        result = self.run_case(self.NEW_BODY, "PR 1 is mergeable as far as GitHub can tell. To merge, tell me to land it.", edits=[self.NEW_BODY])
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        self.assertTrue(result.get("needs_judge"))
+        self.assertIsNone(result["measures"]["merge_ready_report"])
+
     def test_a_claim_that_affirms_the_readme_is_not_stale(self):
         claims = oracles._x6_claims("## Scope\n- The README documents --min-length and other docs come later.\n")
         self.assertEqual(oracles._x6_stale(claims, True, True), [])

@@ -1413,8 +1413,8 @@ def x6_body_true_at_merge_ready(view):
     if report is True:
         return inconclusive("merge-ready report, but no body ever carried a claim the final diff contradicts, so the rewrite went untested",
                             needs_judge=True, excerpt=excerpt_of(str(prs[-1].get("body") or "")), measures=measures)
-    if report is None and stale and reply:
-        return inconclusive("stale body claims; a reader decides whether the last reply reports merge-ready", needs_judge=True,
+    if report is None and reply:
+        return inconclusive(f"{len(stale)} stale body claim(s); a reader decides whether the last reply reports merge-ready", needs_judge=True,
                             excerpt=excerpt_of(reply), measures=measures)
     return inconclusive("the last turn made no merge-ready report", measures=measures)
 
