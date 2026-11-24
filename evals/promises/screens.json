@@ -45,6 +45,186 @@
     "hold-babysit-run",
     "hold-shipping-run"
    ]
+  },
+  "X1": {
+   "cases": [],
+   "not_built": "folds into S4"
+  },
+  "X2": {
+   "cases": [
+    "x2-plan-script-broken",
+    "x2-plan-check-no-node",
+    "x2-orch-no-bun",
+    "x2-verify-no-app-skill",
+    "x2-why-no-gh",
+    "feature-plan-route-run",
+    "route-orchestrate"
+   ],
+   "not_built": "H68 (corrupted persona payload: the runner records no persona flag to grade a generic spawn against) and O42 (needs a ticking program)"
+  },
+  "X3": {
+   "cases": [
+    "x3-feature-declared-threat"
+   ],
+   "not_built": "the S6 plan-only half belongs to S6"
+  },
+  "X4": {
+   "cases": [
+    "x4-pickup-handoff"
+   ],
+   "not_built": "H14 (needs an orch store; S6 decides whether Orchestrate stays) and a real second-harness session"
+  },
+  "X5": {
+   "cases": [],
+   "not_built": "folds into S6"
+  },
+  "X6": {
+   "cases": [
+    "x6-pr-body-after-push"
+   ]
+  },
+  "X7": {
+   "cases": [
+    "doc-impact-run",
+    "x7-babysit-undocumented-rename"
+   ]
+  },
+  "X8": {
+   "cases": [
+    "x8-babysit-red-untouched"
+   ]
+  },
+  "X9": {
+   "cases": [
+    "x9-root-lane-reports"
+   ]
+  },
+  "X10": {
+   "cases": [],
+   "not_built": "open-pr-gated-run needs a no-mistakes stub on the forge PATH and the real gate reviews over the network"
+  },
+  "X11": {
+   "cases": [
+    "interrogate-run",
+    "architect-run"
+   ],
+   "not_built": "the issue-542 matrix rows run through evals/issue-542-v2-matrix/run_row.py, not live.py"
+  },
+  "X12": {
+   "cases": [
+    "delegate-fresh-context-run",
+    "feature-run",
+    "how-wide-run",
+    "x12-codex-stalled-child"
+   ]
+  },
+  "X13": {
+   "cases": [
+    "x13-bugfix-keeps-accepted-input",
+    "x13-refactor-keeps-accepted-input",
+    "feature-edges-implied-run"
+   ],
+   "not_built": "the spec-probes corpus cases run through evals/spec-probes, not live.py"
+  },
+  "X14": {
+   "cases": [
+    "feature-boundary-run",
+    "feature-run",
+    "bug-fix-run"
+   ],
+   "not_built": "the seeded review joins S2"
+  },
+  "X15": {
+   "cases": [
+    "overnight-run",
+    "route-going-to-bed",
+    "feature-run"
+   ],
+   "not_built": "the trigger corpus tools/skill-trigger-cases.json runs outside live.py"
+  },
+  "X16": {
+   "cases": [],
+   "not_built": "folds into S5"
+  },
+  "X17": {
+   "cases": [
+    "x17-subjective-criterion"
+   ]
+  },
+  "X18": {
+   "cases": [
+    "how-wide-run"
+   ],
+   "not_built": "the indexed variant: no gitnexus binary runs in the sandbox, and a planted .gitnexus/ directory does not measure the nudges"
+  },
+  "X19": {
+   "cases": [],
+   "not_built": "the fork case needs a gh double that serves two repositories; the forge double serves one"
+  },
+  "X20": {
+   "cases": [
+    "feature-one-module-run",
+    "bug-fix-run"
+   ]
+  },
+  "X21": {
+   "cases": [
+    "x21-zsh-spaced-paths",
+    "x21-review-large-diff",
+    "x21-running-processes"
+   ]
+  },
+  "X22": {
+   "cases": [
+    "x22-dirty-checkout-review"
+   ],
+   "not_built": "the staged edit: live.py history steps never stage"
+  },
+  "X23": {
+   "cases": [
+    "x23-writer-delegate-cleanup",
+    "arena-run"
+   ]
+  },
+  "X24": {
+   "cases": [
+    "x24-setup-scripted",
+    "x24-setup-home-unwritable"
+   ]
+  },
+  "X25": {
+   "cases": [
+    "sticky-followup"
+   ]
+  },
+  "X26": {
+   "cases": [
+    "route-autopilot-full",
+    "route-autopilot-stack",
+    "route-session-pickup",
+    "route-worktree-cleanup",
+    "route-research",
+    "route-authoring",
+    "route-eval",
+    "principle-load-run"
+   ]
+  },
+  "X27": {
+   "cases": [
+    "name-only-unnamed-request"
+   ]
+  },
+  "X28": {
+   "cases": [
+    "feature-run-no-todo"
+   ]
+  },
+  "X29": {
+   "cases": [
+    "deslop-run",
+    "x29-delegate-omits-evidence",
+    "x29-review-stale-cleanup"
+   ]
   }
  }
 }

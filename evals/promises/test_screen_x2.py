@@ -301,5 +301,21 @@ class Projects(unittest.TestCase):
             self.assertIn("No module named 'pstack_route_tables'", done.stderr)
 
 
+class GuideAliases(unittest.TestCase):
+    """A screen case reaches a guide oracle through an x id; the alias must grade exactly as the guide id does."""
+
+    def test_each_alias_grades_like_its_guide_oracle(self):
+        pairs = {"x-routes-to-expected-playbook": ("bug-prompt-routes-to-bug-fix", "x13-bugfix-keeps-accepted-input"),
+                 "x2-failed-plan-worklist-opens-with-steps": ("worklist-opens-with-playbook-steps", "x2-plan-script-broken"),
+                 "x2-failed-plan-local-branch-endpoint": ("default-endpoint-local-branch-without-remote", "x2-plan-script-broken")}
+        traces = (minimal(events=bash(0, "git status") + [text(2, "Done.")], final_reply="Done."),
+                  minimal(events=bash(0, PLAN, ok=False, head=PLAN_BROKE) + [text(2, "Fixed it.")], final_reply="Fixed it."))
+        for alias, (guide, case_id) in pairs.items():
+            case = load_case(case_id)
+            for n, trace in enumerate(traces):
+                with self.subTest(alias=alias, trace=n):
+                    self.assertEqual(grade(alias, trace, case), grade(guide, trace, case))
+
+
 if __name__ == "__main__":
     unittest.main()

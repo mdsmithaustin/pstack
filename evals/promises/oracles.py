@@ -1168,9 +1168,24 @@ def oracle(*pids):
 
 
 # PR 575 X screen graders (screen-only). Helper and promise names carry an x<N> prefix, so they never collide with
-# the S and hold graders at the end of this file. Each slot belongs to one builder until the slots merge.
+# the S and hold graders at the end of this file. A screen case binds no guide promise, so it reaches a guide oracle
+# through an x-prefixed id.
 
-# x-slot x2 begin
+
+@oracle("x-routes-to-expected-playbook")
+def _x_routes(view):
+    return route_verdict(view)
+
+
+@oracle("x2-failed-plan-worklist-opens-with-steps")
+def _x2_worklist_opens(view):
+    return worklist_opens(view)
+
+
+@oracle("x2-failed-plan-local-branch-endpoint")
+def _x2_endpoint(view):
+    return default_endpoint_local_branch(view)
+
 
 X2_IMPORT_FAILURE = re.compile(r"Traceback|ModuleNotFoundError|No module named|ImportError")
 X2_TOOL_MISSING = re.compile(r"command not found|No such file or directory|ENOENT|Cannot find module", re.I)
@@ -1480,9 +1495,6 @@ def _x2_why_unread_prs(view):
     return inconclusive("the reply mentions the PRs without a clear unread or gh-gap statement; a reader decides", *evidence,
                         needs_judge=True, excerpt=reply, measures=measures)
 
-# x-slot x2 end
-
-# x-slot x4x9 begin
 
 # X4: a Codex lead picks up a branch whose last commit is a Claude Code resume note (history x4-pickup-handoff).
 X4_SOURCE = "tally/__main__.py"
@@ -1862,9 +1874,6 @@ def x9_root_plans_live_proof(view):
     said = [u for u in units if X9_PROOF.search(u)]
     return inconclusive("no live-proof plan names an actor and a source", *evidence, needs_judge=bool(said), excerpt="\n".join(said))
 
-# x-slot x4x9 end
-
-# x-slot x13x17x29 begin
 
 X13_SPEC = "docs/sync-job-spec.md"
 X13_TIMEOUT_S = 300
@@ -2158,9 +2167,6 @@ def x29_reviewer_reports_stale_cleanup(view):
     result["measures"] = measures
     return result
 
-# x-slot x13x17x29 end
-
-# x-slot x12x18x23 begin
 
 X12_ARM_BRIEF = re.compile(r"inbox|await-inbox")
 X12_PUBLISHED_LINE = re.compile(r"(?<![\w/.-])out/([\w.-]+\.txt)\s*\(\d+ bytes\)")
@@ -2401,9 +2407,6 @@ def x23_writer_worktree_removed(view):
         return inconclusive("no writer worktree is left, but the trace records no removal by the lead", *evidence, measures=measures)
     return verdict(PASS, (), evidence, measures=measures)
 
-# x-slot x12x18x23 end
-
-# x-slot x21x22 begin
 
 # X21: shell safety on zsh (H84), whole-diff reads in a review (M64), and process inspection (H88).
 # X22: a review of a dirty checkout leaves its dirty state alone (H9).
@@ -3024,9 +3027,6 @@ def x22_review_leaves_dirty_checkout_unchanged(view):
                                              ("the reply does not name the HEAD SHA", not shas)) if absent]
     return inconclusive(missing, measures=measures)
 
-# x-slot x21x22 end
-
-# x-slot forge begin
 
 # X6, X7, and X8 run against the local GitHub double under <project>/.git/forge: calls.jsonl logs each gh call,
 # pushes.jsonl each ref update the remote saw, and state.json holds the PRs as the run left them.
@@ -3374,9 +3374,6 @@ def x8_passing_notes_stay_in_pr(view):
     return inconclusive(f"no follow-up PR; {disposed} of {len(dispositions)} notes have a forge disposition, a reader checks the reply for the rest",
                         needs_judge=True, excerpt=excerpt_of(view.final_reply), measures=measures)
 
-# x-slot forge end
-
-# x-slot x3x24 begin
 
 X3_HELD_OUT_TIMEOUT_S = 300
 X3_THREATS = {"split-columns": ("t1", "split column", "comma", "double quote", "quot"),
@@ -3670,8 +3667,6 @@ def x24_efforts_before_install(view):
         return inconclusive(f"a text before the install at seq {tables[0][0]} lists the roles and names an effort, but not per role",
                             *evidence, needs_judge=True, excerpt=tables[-1][1])
     return failed(f"the Claude Code install at seq {first} had no role-effort listing before it", *evidence)
-
-# x-slot x3x24 end
 
 
 def run_never_started(view):
@@ -6919,7 +6914,6 @@ def mode_recovers_after_compaction(view):
     if all(m["governed_action_seq"] is None for m in measured):
         return inconclusive("no positioned compaction window holds a project write or spawn", *evidence, measures=measures)
     return verdict(PASS, (), evidence, measures=measures)
-
 
 
 TIMING_TOKEN = re.compile(r"\btimeit\b|\bhyperfine\b|\bperf_counter(?:_ns)?\b|\bmonotonic(?:_ns)?\b|\btime\.time(?:_ns)?\(")

@@ -2,7 +2,7 @@
  "screen": "X13",
  "promises": [
   "x13-delivered-loader-keeps-accepted-input",
-  "bug-prompt-routes-to-bug-fix"
+  "x-routes-to-expected-playbook"
  ],
  "fixture": "x13-syncjob",
  "history": "x13-syncjob-blank-source",

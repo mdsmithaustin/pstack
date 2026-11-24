@@ -2,7 +2,7 @@
  "screen": "X29",
  "promises": [
   "x29-reviewer-reports-stale-cleanup",
-  "review-prompt-routes-to-code-review"
+  "x-routes-to-expected-playbook"
  ],
  "fixture": "roster",
  "history": "x29-roster-sort-review",

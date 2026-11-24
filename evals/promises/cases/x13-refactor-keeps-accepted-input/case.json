@@ -2,7 +2,7 @@
  "screen": "X13",
  "promises": [
   "x13-delivered-loader-keeps-accepted-input",
-  "refactoring-prompt-routes-to-refactoring"
+  "x-routes-to-expected-playbook"
  ],
  "fixture": "x13-syncjob",
  "references": "x13-bugfix-keeps-accepted-input",

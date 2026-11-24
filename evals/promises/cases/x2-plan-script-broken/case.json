@@ -3,8 +3,8 @@
  "promises": [
   "x2-failed-plan-worklist-from-playbook",
   "x2-failed-plan-cleanup-and-review",
-  "worklist-opens-with-playbook-steps",
-  "default-endpoint-local-branch-without-remote"
+  "x2-failed-plan-worklist-opens-with-steps",
+  "x2-failed-plan-local-branch-endpoint"
  ],
  "fixture": "tally",
  "entry": "poteto-mode",

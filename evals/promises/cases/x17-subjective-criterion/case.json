@@ -2,7 +2,7 @@
  "screen": "X17",
  "promises": [
   "x17-subjective-criterion-calibrated",
-  "eval-prompt-routes-to-eval-playbook"
+  "x-routes-to-expected-playbook"
  ],
  "fixture": "x17-helpdesk",
  "history": "x17-helpdesk-warmer-replies",
