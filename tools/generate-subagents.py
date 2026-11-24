@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import sys
 
@@ -15,6 +16,7 @@ ROLE_SKILLS = {
 }
 ROLE_SIGNATURES = {"comment-sicko": "Yes... Ha ha ha... Yes!"}
 LEGACY_ALIASES = {"comment-sicko": ["Comment Sicko"]}
+MODEL = re.compile(r"(fable|opus|sonnet|haiku)(@(low|medium|high|xhigh|max))?")
 
 
 def generate(root: Path) -> str:
@@ -30,7 +32,7 @@ def generate(root: Path) -> str:
         metadata = {}
         for line in parts[1].splitlines():
             key, separator, value = line.partition(": ")
-            if not separator or key not in {"name", "description", "is_background"}:
+            if not separator or key not in {"name", "description", "is_background", "model"}:
                 raise ValueError(f"{path.name}: unsupported frontmatter line {line!r}")
             if key in metadata:
                 raise ValueError(f"{path.name}: duplicate field {key}")
@@ -41,6 +43,8 @@ def generate(root: Path) -> str:
             raise ValueError(f"{path.name}: name and description are required")
         if metadata.get("is_background", "false") not in {"true", "false"}:
             raise ValueError(f"{path.name}: is_background must be true or false")
+        if "model" in metadata and not MODEL.fullmatch(metadata["model"]):
+            raise ValueError(f"{path.name}: model must be a Claude alias with an optional @effort")
         roles.append({
             "id": path.stem,
             "aliases": list(dict.fromkeys([path.stem, metadata["name"], *LEGACY_ALIASES.get(path.stem, [])])),
@@ -49,6 +53,7 @@ def generate(root: Path) -> str:
             "background": metadata.get("is_background") == "true",
             "skills": ROLE_SKILLS[path.stem],
             "signature": ROLE_SIGNATURES.get(path.stem),
+            "model": metadata.get("model"),
             "source_sha256": hashlib.sha256(source).hexdigest(),
         })
     return json.dumps({"schema_version": 1, "roles": roles}, ensure_ascii=False, indent=2) + "\n"

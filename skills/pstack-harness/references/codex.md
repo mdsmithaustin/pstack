@@ -30,7 +30,7 @@ Pass `model` and `reasoning_effort` on `spawn_agent`, and whenever you pass eith
 
 ## Invocation and effort hints
 
-`spawn_agent` (the multi-agent feature, stable in 0.152) takes a model and a reasoning effort per spawn, with the [`fork_turns` rule above](#codex-adapter); custom agents use TOML in `~/.codex/agents/` or `.codex/agents/` with `name`, `description`, and `developer_instructions`; generated pstack personas leave model and effort unset; `codex exec` is the subprocess route
+`spawn_agent` (the multi-agent feature, stable in 0.152) takes a model and a reasoning effort per spawn, with the [`fork_turns` rule above](#codex-adapter); custom agents use TOML in `~/.codex/agents/` or `.codex/agents/` with `name`, `description`, and `developer_instructions`; generated pstack personas leave model and effort unset, except that `poteto-agent` pins `model = "gpt-6-sol"` and `model_reasoning_effort = "xhigh"`, translated from its `model: opus@xhigh` line per models config rule 4; `codex exec` is the subprocess route
 
 the reasoning-effort field on `spawn_agent`; `-c model_reasoning_effort=<value>` on `codex exec`. A model set without an effort gets that model's default effort (low on `gpt-6.2-sol`, `gpt-6.2-astra`, `gpt-6.1-sol`, and `gpt-6.1-terra`, medium on `gpt-6-astra`, `gpt-6-sol`, and `gpt-6-luna`, per Codex's model catalog on 2026-11-12), not the parent's, so always pass one
 

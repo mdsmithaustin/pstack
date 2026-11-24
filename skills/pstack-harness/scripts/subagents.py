@@ -23,6 +23,7 @@ class Role:
     skills: tuple[str, ...]
     signature: str | None
     native_name: str | None = None
+    model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,7 @@ def load_roles(skill_directory: Path) -> tuple[Role, ...]:
         raise ValueError("role bundle must contain roles")
     roles = []
     aliases = set()
-    fields = {"id", "aliases", "description", "body", "background", "skills", "signature", "source_sha256"}
+    fields = {"id", "aliases", "description", "body", "background", "skills", "signature", "model", "source_sha256"}
     for item in payload["roles"]:
         if not isinstance(item, dict) or set(item) != fields:
             raise ValueError("invalid role fields")
@@ -79,12 +80,18 @@ def load_roles(skill_directory: Path) -> tuple[Role, ...]:
             raise ValueError("missing canonical alias or duplicate role alias")
         if any(not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", skill) for skill in item["skills"]):
             raise ValueError(f"{item['id']}: invalid sibling skill name")
+        model = item["model"]
+        if model is not None and (not isinstance(model, str) or model.partition("@")[0] not in CODEX_MODELS):
+            raise ValueError(f"{item['id']}: model must be null or a Claude alias")
         aliases.update(item["aliases"])
-        roles.append(Role(item["id"], tuple(item["aliases"]), item["description"], item["body"], item["background"], tuple(item["skills"]), signature))
+        roles.append(Role(item["id"], tuple(item["aliases"]), item["description"], item["body"], item["background"], tuple(item["skills"]), signature, model=model))
     if not {"poteto-agent", "Comment Sicko", "comment-sicko"}.issubset(aliases):
         raise ValueError("role bundle lacks required pstack aliases")
     return tuple(roles)
 
+
+# Models config rule 4: a Claude alias on Codex, with the effort used when the pin writes none.
+CODEX_MODELS = {"fable": ("gpt-6-sol", "max"), "opus": ("gpt-6-sol", "xhigh"), "sonnet": ("gpt-6-sol", "high"), "haiku": ("gpt-6-luna", "high")}
 
 ROOT_GUIDANCE = "Resolve other named sibling skills under this installed skills root: "
 CODEX_BRIEF = "developer_instructions = "
@@ -140,10 +147,18 @@ def render_native(role: Role, destination: Destination, brief: str) -> bytes:
         content = f"---\nname: {role.id}\ndescription: {quote(role.description)}\n"
         if role.background:
             content += "background: true\n"
+        if role.model:
+            alias, _, effort = role.model.partition("@")
+            content += f"model: {alias}\n" + (f"effort: {effort}\n" if effort else "")
         content += "---\n\n" + brief
         marker = "<!-- pstack-generated:v1:{role}:{digest} -->\n"
     else:
-        content = f"name = {quote(role.native_name or role.id)}\ndescription = {quote(role.description)}\ndeveloper_instructions = {quote(brief)}\n"
+        content = f"name = {quote(role.native_name or role.id)}\ndescription = {quote(role.description)}\n"
+        if role.model:
+            alias, _, effort = role.model.partition("@")
+            model, translated = CODEX_MODELS[alias]
+            content += f"model = {quote(model)}\nmodel_reasoning_effort = {quote(effort or translated)}\n"
+        content += f"developer_instructions = {quote(brief)}\n"
         marker = "# pstack-generated:v1:{role}:{digest}\n"
     encoded = (content + "\n").encode("utf-8")
     return encoded + marker.format(role=role.id, digest=hashlib.sha256(encoded).hexdigest()).encode("ascii")

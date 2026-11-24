@@ -15,6 +15,7 @@
         "why"
       ],
       "signature": "Yes... Ha ha ha... Yes!",
+      "model": null,
       "source_sha256": "0fb37221ab2a9159714d38f1528898e82b9758b5750f244bbe2e575bb593a1de"
     },
     {
@@ -30,7 +31,8 @@
         "deslop"
       ],
       "signature": null,
-      "source_sha256": "0cd58208434b195743714daaeae5262163cc5ad2ab062f4353d161641a694e78"
+      "model": "opus@xhigh",
+      "source_sha256": "ef0be53ab6c0c3eba635793da6dc64d1c2562eaf6d2dd3f9a9b129c29e3b6c04"
     }
   ]
 }
