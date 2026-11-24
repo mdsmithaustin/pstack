@@ -272,7 +272,7 @@ def default_endpoint(project):
 
 
 def remote_host(url):
-    """Return the network host of a Git push URL, or None for a local path."""
+    """Return the normalized network host, or None for a local or unparseable push URL."""
     if os.path.splitdrive(url)[0]:
         return None
     if "://" in url:
