@@ -354,7 +354,8 @@ class ConditionalLoads(unittest.TestCase):
     maxDiff = None
     LOAD = re.compile(r"Skill tool with `([a-z0-9-]+)`")
     SENTENCE = re.compile(r"(?<=[.!?])\s+")
-    CONDITION = re.compile(r"^\W*(?:In|For)\b|\b(?:if|when|whenever|unless|once|where|otherwise)\b|\bonly (?:when|if|for|on|in)\b"
+    CONDITION = re.compile(r"^\W*(?:In|For)\b|\b(?:if|when|whenever|unless|once|where|otherwise)\b"
+                           r"|\bonly (?:when|if|for|on|in)\b|\s+only[.!?]?$"
                            r"|\bon the (?:lightweight|standard|intensive) route\b|\bor call the Skill tool\b", re.I)
 
     def test_no_playbook_prints_a_load_whose_sentence_names_a_condition_as_binding(self):
