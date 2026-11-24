@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 """Print the route, worklist, skill loads, and gates for one poteto-mode playbook.
 
-The lead supplies the playbook and five risk facts. This script applies the
-routing policy, so the answer is the same on every model and harness. Steps and
-their outcome sentences come from the playbook file, which owns them. Gates, panels,
+Only routed playbooks accept risk facts. With no facts or override, their route
+is pending. With all five facts, the script applies the routing policy in
+references/routes.md. The same facts give the same route on every harness.
+Steps and their outcome sentences come from the playbook file, which owns them. Gates, panels,
 and the flags of code-changing playbooks come from routes.json beside the mode entry.
 
-With --step N it prints the full text of one step and the route's gates instead, for the moment that step starts.
+Use --step N to print one step and its gates. For a routed playbook, include
+--route with the route the plan printed. For other playbooks, --route is
+optional with --step. A full plan rejects --route. A step rejects risk facts,
+--user-route, --raise-to, --reason, and --json.
 
-Exit 2 means a usage error, such as an unknown playbook, a missing step, or a lowered route.
+Use --reason only with --raise-to. On a routed playbook, --raise-to requires
+a nonblank reason.
+Supply each risk fact, --user-route, --raise-to, --reason, --step, --route,
+and --harness at most once. Arguments must be valid UTF-8.
+On a usage error, the script writes one line to stderr and exits with status 2.
 """
 import argparse
 import json
