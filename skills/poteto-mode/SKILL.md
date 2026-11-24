@@ -33,25 +33,14 @@ The plan is not the worklist. Call the Skill tool with `pstack-harness` to choos
 
 The endpoint the user or host states governs. Without one, the plan prints the default.
 - Up to that endpoint, run the commit, push, and PR steps without being asked. In an existing repository, commit on a branch off trunk. Never commit credential files such as `.env`, or the user's own notes and data they did not ask to version.
-- Skip a step only where its own text allows it, the user says no, it lies past the endpoint, or the project lacks what it needs, such as a git remote, and keep it in the list with a one-line `skipped: <reason>`. The reason says why the outcome does not apply, never what the route costs. A skip waives only the actions its reason rules out.
+- Skip a step only where its own text allows it, the user says no, it lies past the endpoint, or the project lacks what it needs, such as a git remote. A skip waives only the actions its reason rules out.
 - When the budget trips, change the approach.
 - Another review pass needs a named unresolved concern.
 - Principles and Autonomy govern design and scope.
 
-For a large or cross-cutting effort (a migration across many call sites, an ambitious multi-part change), or work the user steps away from to trust later, call the Skill tool with `figure-it-out` even when a narrower playbook like Feature fits. Call the Skill tool with `figure-it-out` whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task. A standing project-scale program (multi-day, many stacked PRs, a fleet of subagents under one coordinator) routes to **Orchestrate** instead.
+For large, cross-cutting, or unattended work, such as work the user steps away from, or a task no playbook fits, call the Skill tool with `figure-it-out`, even when a narrower playbook fits.
 
-- **Investigation.** Read-only question about current code or its history: how does X work, why was Y built this way, are we sure about Z, should we do X or Y. A pull request review starts in Code review, which calls `how` for the investigation it needs. `playbooks/investigation.md`.
-- **Code review.** Reviewing someone else's pull request, branch, or diff before it merges ("review this PR", "code review", "look over this diff"). `playbooks/code-review.md`.
-- **Bug fix.** A reported defect to reproduce, root-cause, and fix with runtime evidence. `playbooks/bug-fix.md`.
-- **Perf issue.** A measured slowness to trace and improve against a baseline. `playbooks/perf-issue.md`.
-- **Feature.** New or changed behavior, built from a named data shape. `playbooks/feature.md`.
-- **Refactoring.** A behavior-preserving change to structure or shape (rename, extract, inline, dedupe, move). `playbooks/refactoring.md`.
-- **Prototype.** A throwaway sketch to make a design or behavioral decision cheaply, or to settle an empirical fork by observing it instead of asking the human ("prototype", "mock it up", "try this layout", "sketch it to decide"). `playbooks/prototype.md`.
-- **Babysit.** PR-status requests ("babysit this", "get it green", "check on PR X", "anything outstanding on X", "address the bugbot comments"), review-comment requests, and driving a PR or stack to merge-ready: conflicts, review threads, CI. `playbooks/babysit.md`.
-- **Shipping.** Asked to land or ship a green stack. The half after Babysit. Independently verifying a green stack, then landing the contiguous verified run bottom-up through `gh` by default or Origin when its CLI is available. `playbooks/shipping.md`.
-- **Opening a PR.** Use when the matched playbook produces a PR. `playbooks/opening-a-pr.md`.
-
-For any of these, or when none above fits, read [more playbooks](references/playbooks.md) and match there: Research, Hillclimb, Runtime forensics, Trace forensics, Visual parity, Authoring or modifying a skill, Eval, Autonomous run, Orchestrate, Autopilot-full, Autopilot-stack, Session pickup, Pause safely, Multi-phase or multi-PR plan, Worktree and simulator cleanup.
+Investigation `playbooks/investigation.md`, Code review `playbooks/code-review.md`, Research `playbooks/research.md`, Bug fix `playbooks/bug-fix.md`, Perf issue `playbooks/perf-issue.md`, Hillclimb `playbooks/hillclimb.md`, Runtime forensics `playbooks/runtime-forensics.md`, Trace forensics `playbooks/trace-forensics.md`, Feature `playbooks/feature.md`, Refactoring `playbooks/refactoring.md`, Prototype `playbooks/prototype.md`, Visual parity `playbooks/visual-parity.md`, Authoring a skill `playbooks/authoring-a-skill.md`, Eval `playbooks/eval.md`, Babysit `playbooks/babysit.md`, Shipping `playbooks/shipping.md`, Autonomous run `playbooks/autonomous-run.md`, Orchestrate `playbooks/orchestrate.md`, Autopilot-full `playbooks/autopilot-full.md`, Autopilot-stack `playbooks/autopilot-stack.md`, Session pickup `playbooks/session-pickup.md`, Pause safely `playbooks/pause-safely.md`, Multi-phase plan `playbooks/multi-phase-plan.md`, Worktree cleanup `playbooks/worktree-cleanup.md`, Opening a PR `playbooks/opening-a-pr.md`.
 
 ## Apply the mode
 
