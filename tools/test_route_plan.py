@@ -748,9 +748,10 @@ class RepositoryEndpoint(unittest.TestCase):
         return result["default_endpoint"], result["scrutiny"]
 
     def assert_no_pr_scrutiny(self, scrutiny):
-        self.assertTrue(scrutiny.startswith("No pull request will open"), scrutiny)
+        self.assertTrue(scrutiny.startswith("No pull request opens by default"), scrutiny)
         self.assertIn("Brief one `trail reviewer`", scrutiny)
-        self.assertNotIn("human PR review", scrutiny)
+        offers = [sentence for sentence in re.split(r"(?<=\.)\s+", scrutiny) if "human PR review" in sentence]
+        self.assertTrue(offers and all(sentence.startswith("If the user asks for a PR") for sentence in offers), scrutiny)
 
     def test_no_repository_and_no_remote_take_local_commits(self):
         self.tool("gh")
