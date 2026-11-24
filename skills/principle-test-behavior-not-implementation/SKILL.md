@@ -18,6 +18,4 @@ The contract decides, not the shape of the assertion. When "an empty cart never 
 
 A test can pin an invariant instead of a call, such as a key that must exist in two tables or a compile-time type check. The invariant is the behavior.
 
-**Production prerequisites.** An acceptance test must not pass because its setup establishes state or ordering that production never establishes. Exercise the real initialization path or prove that the caller supplies the prerequisite. Ordinary fixture inputs that real callers can supply are valid.
-
 **Notation, not a runtime.** Write Given, When, Then or Gherkin-style tests in the project's existing framework. Do not add Cucumber, a Gherkin runner, or `.feature` files unless the project already runs one or the user explicitly asks for Cucumber, a runner, or `.feature` files. A request for Gherkin-style tests is not such a request.
