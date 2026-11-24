@@ -28,7 +28,7 @@ python3 "<this skill's base directory>/scripts/plan.py" <file-stem> --harness <c
 Bug fix, Feature, Refactoring, and Perf issue also need the five risk facts in [routes](references/routes.md). Read it before their first plan.
 
 The plan is not the worklist. Call the Skill tool with `pstack-harness` to choose the carrier, then create the worklist from the plan's items, in its order. The opening item records the playbook path, the start commit (`git rev-parse HEAD`, or `no commits` in a new project), the route, the endpoint, and the budget. The in-progress item is the current step. The plan's gates at their stated times and its loads before a step's first edit bind. So does every prohibition, authorization limit, and confidentiality rule in a step.
-- Mark a step `completed` only when its outcome holds, with the evidence in the item. If the script cannot run, copy the playbook's opening prose and then its steps as the worklist items, and use the standard route.
+- Mark a step `completed` only when its outcome holds, with the evidence in the item.
 
 The endpoint the user or host states governs. Without one, the plan prints the default.
 - Up to that endpoint, run the commit, push, and PR steps without being asked. In an existing repository, commit on a branch off trunk. Never commit credential files such as `.env`, or the user's own notes and data they did not ask to version.
