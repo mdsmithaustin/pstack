@@ -7,10 +7,14 @@ references/routes.md. The same facts give the same route on every harness.
 Steps and their outcome sentences come from the playbook file, which owns them. Gates, panels,
 and the flags of code-changing playbooks come from routes.json beside the mode entry.
 
-Use --step N to print one step and its gates. For a routed playbook, include
---route with the route the plan printed. For other playbooks, --route is
+Use --step N to print the step's full text and the route's gates. For a routed
+playbook, include --route with the route the plan printed. For other playbooks, --route is
 optional with --step. A full plan rejects --route. A step rejects risk facts,
 --user-route, --raise-to, --reason, and --json.
+
+On the lightweight route, the step lists the skills it keeps and labels conditional
+loads separately. For a code-changing playbook, a step that runs Opening a PR
+includes the reminder to commit even when the push or PR is skipped.
 
 Use --reason only with --raise-to. On a routed playbook, --raise-to requires
 a nonblank reason.
@@ -45,6 +49,7 @@ SCRUTINY_LOCAL = ("No remote, so no PR review exists to credit. Brief one `trail
 RUN_PR = re.compile(r"\bRun \*\*Opening a PR\*\*")
 KEEP_COMMITS = "   still commit when the push or PR is skipped"
 SURROGATE = re.compile("[\udc80-\udcff]")
+WHEN_HOLDS = "   load only when the step's own condition holds: "
 NO_CHANGE_ENDPOINT = ("what this playbook's Reply line names", "this playbook does not produce a code change")
 
 
@@ -135,18 +140,26 @@ def render_step(args, manifest):
     text = step_text(path, args.step)
     if text is None:
         raise SystemExit(f"plan.py: {args.playbook} has no step {args.step}.")
-    tiered = manifest["playbooks"].get(args.playbook, {}).get("tiered", False)
+    entry = manifest["playbooks"].get(args.playbook, {})
+    tiered = entry.get("tiered", False)
     if tiered and args.route is None:
         raise SystemExit(f"plan.py: {args.playbook} is routed, so --step needs --route with the route the plan printed.")
+    joined = dict(read_playbook(path)[1])[args.step]
     out = [f"{args.playbook} step {args.step}, from {display_path(path)}", ""]
     if tiered and args.route == "lightweight":
-        out += ["Lightweight route: do this step's work yourself. Skip its sentences that delegate the work or spawn a design panel, or load a skill the plan did not list. Keep its outcome, its checks, its commands, and the independent scrutiny the plan lists.", ""]
+        out += ["Lightweight route: do this step's work yourself. Skip its sentences that delegate the work or spawn a design panel, or load a skill the plan did not list. Keep its outcome, its checks, its commands, and the independent scrutiny the plan lists."]
+        if LOAD.search(joined):
+            loads, conditional, _ = route_loads(joined, "lightweight", tiered, manifest)
+            out.append("Loads this route keeps from this step: " + (", ".join(f"`{s}`" for s in loads) or "none") + ".")
+            if conditional:
+                out.append(WHEN_HOLDS + ", ".join(conditional))
+        out.append("")
     elif tiered and args.route == "standard":
         panels = ", ".join(f"`{name}`" for name in manifest["panels"])
         out += [f"Standard route: the panels ({panels}) stay unloaded. Where this step names one, compare the options yourself and record them.", ""]
-    out += [text, ""]
+    out += [text, *([KEEP_COMMITS] if entry.get("changes_code") and RUN_PR.search(joined) else []), ""]
     if args.harness != "claude-code":
-        out += [f"On this harness, \"Call the Skill tool with `<name>`\" means: {load_phrase('<name>', args.harness)}.", ""]
+        out += [harness_note(args.harness), ""]
     gates = route_gates(manifest, args.playbook, args.route if tiered else "standard")
     out += ["gates, which still bind:", *render_gates(gates, args.harness), ""]
     out += [regime(args.playbook, manifest), "Mark the item completed only with its evidence."]
@@ -246,6 +259,14 @@ def load_phrase(skill, harness):
     return f'read "${{PSTACK_SKILLS_ROOT:?}}/{skill}/SKILL.md" in full'
 
 
+def harness_note(harness):
+    return f"On this harness, \"Call the Skill tool with `<name>`\" means: {load_phrase('<name>', harness)}."
+
+
+def raise_the_route(source):
+    return "ask the user to raise the route" if source == "user" else "raise the route"
+
+
 def pending(args, manifest, path, prose, endpoint):
     """No facts yet: the worklist opens first, and the facts are its first item. The gates of the lightest route bind already."""
     return {
@@ -255,6 +276,17 @@ def pending(args, manifest, path, prose, endpoint):
         "scrutiny": None, "reply": "", "reply_loads": [],
         "default_endpoint": endpoint[0], "default_endpoint_reason": endpoint[1],
     }
+
+
+def route_loads(text, route, tiered, manifest):
+    panels, keeps = set(manifest["panels"]), set(manifest["lightweight_keeps"])
+    always, conditional = step_loads(text)
+    held = [s for s in always + conditional if tiered and s in panels and route != "intensive"]
+
+    def allowed(skills):
+        return [s for s in skills if not (tiered and s in panels and route != "intensive") and not (route == "lightweight" and s not in keeps)]
+
+    return allowed(always), allowed(conditional), held
 
 
 def build(args, manifest, endpoint=None):
@@ -300,17 +332,10 @@ def build(args, manifest, endpoint=None):
         if args.user_route or args.raise_to:
             warning = "This playbook has one procedure, so the requested route does not apply."
 
-    panels, keeps = set(manifest["panels"]), set(manifest["lightweight_keeps"])
     skips = entry.get("lightweight_skips", {}) if route == "lightweight" else {}
-
-    def allowed(skills):
-        return [s for s in skills if not (tiered and s in panels and route != "intensive") and not (route == "lightweight" and s not in keeps)]
-
     planned = []
     for number, text in steps:
-        always, conditional = step_loads(text)
-        held = [s for s in always + conditional if tiered and s in panels and route != "intensive"]
-        loads, conditional = allowed(always), allowed(conditional)
+        loads, conditional, held = route_loads(text, route, tiered, manifest)
         named = [a or b for a, b in NAMED.findall(text)]
         uses = [] if route == "lightweight" else [s for s in dict.fromkeys(named)
                                                  if s not in loads + conditional + held and (MODE.parent / s / "SKILL.md").is_file()]
@@ -354,7 +379,9 @@ def render(plan, harness):
         return "\n".join(out)
     if plan["full_read"] and not plan["steps"]:
         out.append(f"Then: Read {plan['file']} in full. It has no numbered steps.")
-    elif plan["lightweight_worklist"]:
+    elif plan["opening"]:
+        out.append("   opening prose, kept with the first item: " + " ".join(plan["opening"]))
+    if plan["lightweight_worklist"]:
         by_name = {step["name"]: step for step in plan["steps"]}
         out.append("Then these tracked outcomes:")
         for index, item in enumerate(plan["lightweight_worklist"], 1):
@@ -366,15 +393,13 @@ def render(plan, harness):
                 out.append("   load: " + "; ".join(load_phrase(skill, harness) for skill in loads))
             maybe = [skill for step in covered for skill in step["conditional"]]
             if maybe:
-                out.append("   load only when the step's own condition holds: " + ", ".join(maybe))
+                out.append(WHEN_HOLDS + ", ".join(maybe))
             if any(step["runs_pr"] for step in covered):
                 out.append(KEEP_COMMITS)
         for step in plan["steps"]:
             if step["skipped"]:
-                out.append(f"   {step['name']}: `skipped: {step['skipped']}` only when that is true. Otherwise raise the route.")
-    else:
-        if plan["opening"]:
-            out.append("   opening prose, kept with the first item: " + " ".join(plan["opening"]))
+                out.append(f"   {step['name']}: `skipped: {step['skipped']}` only when that is true. Otherwise {raise_the_route(plan['route_source'])}.")
+    elif plan["steps"]:
         if plan["full_read"]:
             out.append(f"Then: Read {plan['file']} in full. Its steps index the sections after them.")
         out.append("Then one item per step:")
@@ -385,12 +410,12 @@ def render(plan, harness):
             if step["loads"]:
                 out.append("   load: " + "; ".join(load_phrase(skill, harness) for skill in step["loads"]))
             if step["conditional"]:
-                out.append("   load only when the step's own condition holds: " + ", ".join(step["conditional"]))
+                out.append(WHEN_HOLDS + ", ".join(step["conditional"]))
             if step["uses"]:
                 out.append("   also uses, as the step's text says: " + ", ".join(step["uses"]))
             if step["held_for_intensive"]:
                 out.append("   intensive only: " + ", ".join(step["held_for_intensive"])
-                           + ". Compare the options yourself and record them. Raise the route when you cannot choose.")
+                           + f". Compare the options yourself and record them. {raise_the_route(plan['route_source']).capitalize()} when you cannot choose.")
     if plan["route"] == "lightweight":
         out.append("Lightweight means direct work by the lead, no panel, and no investigation or implementation delegate.")
         out.append("If new evidence makes a fact material or unknown, rerun this script and expand the worklist before further edits.")
@@ -405,6 +430,8 @@ def render(plan, harness):
         out.append("Last item, the reply. " + plan["reply"])
         if plan["reply_loads"]:
             out.append("   load: " + "; ".join(load_phrase(skill, harness) for skill in plan["reply_loads"]))
+    if harness != "claude-code" and "call the skill tool" in "\n".join(out).lower():
+        out += ["", harness_note(harness)]
     out.append("")
     if plan["regime"]:
         out.append(plan["regime"])
