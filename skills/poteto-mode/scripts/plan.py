@@ -7,10 +7,14 @@ references/routes.md. The same facts give the same route on every harness.
 Steps and their outcome sentences come from the playbook file, which owns them. Gates, panels,
 and the flags of code-changing playbooks come from routes.json beside the mode entry.
 
-Use --step N to print one step and its gates. For a routed playbook, include
---route with the route the plan printed. For other playbooks, --route is
+Use --step N to print the step's full text and the route's gates. For a routed
+playbook, include --route with the route the plan printed. For other playbooks, --route is
 optional with --step. A full plan rejects --route. A step rejects risk facts,
 --user-route, --raise-to, --reason, and --json.
+
+On the lightweight route, the step lists the skills it keeps and labels conditional
+loads separately. For a code-changing playbook, a step that runs Opening a PR
+includes the reminder to commit even when the push or PR is skipped.
 
 Use --reason only with --raise-to. On a routed playbook, --raise-to requires
 a nonblank reason.
