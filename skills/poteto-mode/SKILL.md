@@ -1,10 +1,8 @@
 ---
 name: poteto-mode
 description: poteto's agent style for concise, detailed responses, deliberate subagents, unslopped prose, simple code, and verified work. Use for poteto, /poteto-mode, or requests to work in this style.
-mode: true
 icon: crown
 color: yellow
-reminder: New task? Playbook match or rigor needed -> apply /poteto-mode. Casual turn or user opts out -> don't.
 ---
 
 # Poteto mode
@@ -52,7 +50,7 @@ For any of these, or when none above fits, read [more playbooks](references/play
 
 ## Apply the mode
 
-Start every task a playbook matches with that worklist, before you read the code. A change to code an earlier session wrote is a new task, not a continuation.
+Start every task a playbook matches with that worklist, before you read the code.
 
 The Principles section below grounds every trigger. Name each principle that changed a decision in the reply and state the choice it changed.
 
