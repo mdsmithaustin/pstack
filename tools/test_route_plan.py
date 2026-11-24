@@ -103,6 +103,44 @@ class Evidence(unittest.TestCase):
         self.assertEqual(run("feature", *LOW, "--raise", "standard", "--reason", "new module").returncode, 2)
 
 
+class EvidenceWords(unittest.TestCase):
+    def test_evidence_made_only_of_filler_negation_or_counts_counts_as_unknown(self):
+        for thin in ("not checked", "no evidence", "did not check", "ok ok ok", "ok, fine", "trust me", "nothing to check",
+                     "not applicable", "unknown, tbd", "none, n/a", "n/a n/a n/a", "- - - - -", "one file, 3 lines"):
+            with self.subTest(evidence=thin):
+                result = plan("bug-fix", *facts(consequence=f"low:{thin}"))
+                self.assertEqual(result["facts"]["consequence"]["level"], "unknown")
+                self.assertEqual(result["route"], "standard")
+
+    def test_evidence_that_says_nothing_was_checked_counts_as_unknown(self):
+        for thin in ("not checked yet", "haven't checked", "not checked callers by grep", "not yet checked", "did not look",
+                     "never looked", "not verified yet", "didn't test", "not tested", "skipped review", "didn’t check"):
+            with self.subTest(evidence=thin):
+                self.assertEqual(plan("bug-fix", *facts(consequence=f"low:{thin}"))["route"], "standard")
+
+    def test_change_counts_alone_count_as_unknown(self):
+        for thin in ("1 file changed, 3 insertions(+), 1 deletion(-)", "3 lines changed", "two files touched", "one change",
+                     "two changes", "one insertion", "two deletions", "120 loc changed", "1 file / 3 lines", "1 file and 3 lines"):
+            with self.subTest(evidence=thin):
+                result = plan("bug-fix", *facts(consequence=f"low:{thin}"))
+                self.assertEqual(result["facts"]["consequence"]["level"], "unknown")
+                self.assertEqual(result["route"], "standard")
+
+    def test_each_filler_word_alone_with_other_filler_counts_as_unknown(self):
+        for thin in ("okay, na", "yes, low", "same files", "it is trivial", "no, didn't", "no, never", "unchecked, unknown",
+                     "verified ok", "unverified, tbd", "one line", "two lines", "three files", "four lines", "five files",
+                     "six lines", "seven files", "eight lines", "nine files", "ten lines", "checked it", "did nothing"):
+            with self.subTest(evidence=thin):
+                self.assertEqual(plan("bug-fix", *facts(consequence=f"low:{thin}"))["route"], "standard")
+
+    def test_evidence_that_names_what_was_checked_stays_low(self):
+        for evidence in (*EVIDENCE.values(), "one caller in cli.py, found by grep", "fixed evidence text",
+                         "text path untouched, read __main__.py", "git log shows one commit on the file",
+                         "checked callers by grep", "reviewed the diff of cli.py", "tests pass on main"):
+            with self.subTest(evidence=evidence):
+                self.assertEqual(plan("bug-fix", *facts(consequence=f"low:{evidence}"))["route"], "lightweight")
+
+
 class EvidenceUsageErrors(unittest.TestCase):
     def test_every_value_flag_is_refused_when_repeated(self):
         cases = {
