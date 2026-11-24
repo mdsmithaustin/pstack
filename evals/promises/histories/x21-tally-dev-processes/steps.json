@@ -1,0 +1,10 @@
+{
+  "fixture": "tally",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "dev: add a local preview server and the reindex worker\n\ndevserver.py serves site/ on a free local port. tools/reindex.py rebuilds the word index in the background and detaches from the shell that starts it, so it keeps going after that shell exits.",
+      "delete": []
+    }
+  ]
+}

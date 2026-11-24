@@ -1,0 +1,17 @@
+{
+  "fixture": "tally",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "formats: print the report as text, csv, markdown, or html\n\nPeople paste the top words into chat, wikis, and status pages. --format picks the output shape; text stays the default so existing scripts see no change.",
+      "delete": [],
+      "branch": "export-formats"
+    },
+    {
+      "dir": "step-2",
+      "message": "tests: cover every format against a fixed corpus\n\nThe corpus is long enough that ties and the --top cutoff both show up. corpus-top20.json holds the expected top twenty words.",
+      "delete": [],
+      "branch": "export-formats"
+    }
+  ]
+}

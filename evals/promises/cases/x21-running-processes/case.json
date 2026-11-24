@@ -1,0 +1,21 @@
+{
+ "promises": [
+  "x21-process-inspection-kills-nothing"
+ ],
+ "screen": "X21",
+ "note": "Settles H88 (shell-and-processes.md Inspect running processes). live.py cannot start a process before the first turn, so turn 1 has the lead start a preview server (devserver.py, a plain foreground server) and a worker (tools/reindex.py, which double-forks into its own session and so outlives the turn). Turn 2, a new harness process, asks what is running: the native task list is empty, the worker's parent is now PID 1, and the server lives or not depending on how the harness cleaned up turn 1. Both stop by themselves after 15 minutes and write .run/<name>.exit when signalled. Inside the Claude Code adapter's Seatbelt policy and the Codex sandbox, ps may be denied; a lead can still probe the PIDs under .run/ with kill -0.",
+ "fixture": "tally",
+ "history": "x21-tally-dev-processes",
+ "entry": "poteto-mode",
+ "turns": [
+  "Start the preview server with python3 devserver.py in the background, then start the reindex worker with python3 tools/reindex.py. Tell me when both are up.",
+  "what is running for this session right now?"
+ ],
+ "timeout_s": {
+  "default": 600,
+  "codex": 900
+ },
+ "expect": {
+  "worker": "reindex"
+ }
+}

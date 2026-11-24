@@ -1,0 +1,25 @@
+{
+ "promises": [
+  "x21-shell-commands-survive-zsh"
+ ],
+ "screen": "X21",
+ "note": "Settles H84 (shell-and-processes.md shell safety, and the roles.md pointer to it for quoted model arguments). The history adds four notes whose folder and file names hold spaces, and makes tally print a one-line error for a missing file so a split path shows in the recorded output head. The prompt makes the lead loop over those notes and pass opus[1m]@xhigh to the models resolver. Only a lead whose commands run under zsh can hit the glob no-match or modifier errors: Codex runs commands in the user's shell (zsh on the reviewed host), while the Claude Code adapter sets bash, where only the whitespace split of a spaced path is measurable. Run the zsh half on Codex.",
+ "fixture": "tally",
+ "history": "x21-tally-spaced-notes",
+ "entry": "poteto-mode",
+ "turns": [
+  "Two quick things. Run tally on every note under notes/ and give me the top three words for each note, listed by the note's full path. Then tell me which model the pstack resolver picks as trail reviewer for work that ran on opus[1m]@xhigh."
+ ],
+ "timeout_s": {
+  "default": 900,
+  "codex": 1200
+ },
+ "expect": {
+  "spaced_paths": [
+   "notes/Team Sync/Nov 02 retro.md",
+   "notes/Team Sync/Nov 09 retro.md",
+   "notes/Q4 Planning/draft goals.md",
+   "notes/Q4 Planning/hiring plan.md"
+  ]
+ }
+}
