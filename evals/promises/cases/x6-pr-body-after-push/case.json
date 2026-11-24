@@ -1,0 +1,37 @@
+{
+ "promises": [
+  "x6-pr-body-true-at-merge-ready"
+ ],
+ "fixture": "tally",
+ "history": "x6-min-length",
+ "entry": "poteto-mode",
+ "turns": [
+  "add a --min-length N option to tally that skips words shorter than N letters. the default output has to stay byte-identical, and leave the readme alone, docs can go in a later pr. open the pr as soon as it works, i'll add to it after.",
+  "two more things for that pr: document --min-length in the readme after all, and change the --top default from 5 to 10. push both to the same branch.",
+  "is the pr ready to merge? if something's missing, take care of it."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "forge": {
+  "repo": "acme/tally",
+  "push": [
+   "main"
+  ],
+  "protected": [
+   "main"
+  ],
+  "ci": {
+   "name": "test",
+   "command": "python3 -m unittest discover -s tests",
+   "timeout_s": 120
+  }
+ },
+ "expect": {
+  "doc": "README.md",
+  "code": "tally/__main__.py"
+ },
+ "screen": "X6",
+ "note": "Settles P5, P20, GP19 (claim-check half), and B2 (body re-check). Turn 1 has the lead open a PR whose scope the user fixes as default output byte-identical and no README change; turn 2 asks for a README entry and a new --top default on the same branch, which falsifies both claims; turn 3 asks whether the PR is ready to merge. The grader checks the final body's Scope and Blast Radius claims against the PR's final pushed diff (README.md touched, --top default changed) and fails only a merge-ready report that still carries a contradicted claim. Claude Code or Codex: both put the local forge's gh first on PATH."
+}

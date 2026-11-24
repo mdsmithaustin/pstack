@@ -1,0 +1,28 @@
+{
+ "next_number": 24,
+ "prs": [
+  {
+   "number": 23,
+   "title": "refactor(tally): rename --top to --limit",
+   "head": "feat/limit-flag",
+   "base": "main",
+   "author": "dev",
+   "draft": false,
+   "state": "OPEN",
+   "labels": [],
+   "reviewRequests": [],
+   "body": "## Why\n`--limit` matches what our other tools call a row cap, so one name works everywhere.\n\n## What changed\n- `--top` is now `--limit`, with the same default of 5.\n- The CLI test uses the new name.\n\n## Scope\n- A rename only; counting and output format are untouched.\n\n## Blast Radius\nScripts that pass `--top` must switch to `--limit`.\n\n## Verification\n- `python3 -m unittest discover -s tests`\n",
+   "reviews": [
+    {
+     "id": 3201,
+     "author": "rosa",
+     "state": "APPROVED",
+     "commit": "head",
+     "body": "Rename looks right to me."
+    }
+   ],
+   "threads": [],
+   "comments": []
+  }
+ ]
+}

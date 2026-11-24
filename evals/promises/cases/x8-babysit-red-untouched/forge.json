@@ -1,0 +1,65 @@
+{
+ "next_number": 32,
+ "prs": [
+  {
+   "number": 31,
+   "title": "feat(tally): pad the count column with --width",
+   "head": "feat/width",
+   "base": "main",
+   "author": "dev",
+   "draft": false,
+   "state": "OPEN",
+   "labels": [],
+   "reviewRequests": [],
+   "body": "## Why\nCounts past 99999 push the words out of line.\n\n## What changed\n- `--width N` sets the count column width; the default of 5 keeps today's output.\n- `format_row` is now `format_line`, which takes the width.\n\n## Scope\n- Output padding only.\n\n## Blast Radius\nCallers of `format_row` move to `format_line`.\n\n## Verification\n- `python3 -m unittest discover -s tests`\n",
+   "reviews": [
+    {
+     "id": 3301,
+     "author": "rosa",
+     "state": "APPROVED",
+     "commit": "head",
+     "body": "Looks good. Three small nits inline, none blocking."
+    }
+   ],
+   "threads": [
+    {
+     "id": "PRRT_kwDOtally31a",
+     "path": "tally/fmt.py",
+     "line": 2,
+     "comments": [
+      {
+       "id": 3311,
+       "author": "rosa",
+       "body": "nit: the docstring still says \"row\", but the function is format_line now."
+      }
+     ]
+    },
+    {
+     "id": "PRRT_kwDOtally31b",
+     "path": "tally/__main__.py",
+     "line": 12,
+     "comments": [
+      {
+       "id": 3312,
+       "author": "rosa",
+       "body": "nit: the --width help could say it pads the count column and name the default."
+      }
+     ]
+    },
+    {
+     "id": "PRRT_kwDOtally31c",
+     "path": "tests/test_fmt.py",
+     "line": 10,
+     "comments": [
+      {
+       "id": 3313,
+       "author": "rosa",
+       "body": "nit: test_w is hard to scan; test_width_pads_the_count says what it covers."
+      }
+     ]
+    }
+   ],
+   "comments": []
+  }
+ ]
+}

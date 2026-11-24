@@ -1,0 +1,16 @@
+{
+  "fixture": "tally",
+  "steps": [
+    {
+      "dir": "step-1",
+      "delete": [],
+      "message": "refactor(tally): split counting, row formatting, and the plain report into modules"
+    },
+    {
+      "dir": "step-2",
+      "branch": "feat/width",
+      "delete": [],
+      "message": "feat(tally): pad the count column with --width\n\nformat_row becomes format_line, which takes the column width."
+    }
+  ]
+}
