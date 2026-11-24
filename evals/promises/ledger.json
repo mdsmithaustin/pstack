@@ -1323,11 +1323,15 @@
   },
   "endpoint-follows-user-then-repository": {
    "check": "static",
-   "claim": "A task runs to the endpoint the user states. Without one it stops at the furthest reviewable state the repository supports, including a local branch when there is no remote.",
+   "claim": "A task runs to the endpoint the user states. Without one it stops at the plan's default: a PR for a github.com remote, a pushed branch for other remotes such as GitHub Enterprise, or a local branch when there is no remote.",
    "evidence": [
     {
      "file": "skills/poteto-mode/references/routes.md",
-     "quote": "With no stated endpoint, use the furthest reviewable state the repository supports."
+     "quote": "With no stated endpoint, use the plan's default:"
+    },
+    {
+     "file": "skills/poteto-mode/references/routes.md",
+     "quote": "| Another remote, such as GitHub Enterprise | A pushed branch, named in the reply. Open a PR only when the user asks. |"
     },
     {
      "file": "skills/poteto-mode/references/routes.md",
@@ -4683,6 +4687,18 @@
     "port"
    ],
    "text": "Don't memorize the list."
+  },
+  "005706341a82": {
+   "also": [
+    "default-endpoint-local-branch-without-remote"
+   ],
+   "class": "promise",
+   "file": "02-poteto-mode.md",
+   "promise": "endpoint-follows-user-then-repository",
+   "sources": [
+    "port"
+   ],
+   "text": "The task runs to the endpoint you state, and without one it stops at the plan's default, such as a pull request for a github.com remote, a pushed branch for GitHub Enterprise, or a local branch when there is no remote."
   },
   "00b0aedd9675": {
    "class": "context",
@@ -11789,18 +11805,6 @@
    ],
    "text": "Two things are worth leaving out:"
   },
-  "b6e73c54e0fc": {
-   "also": [
-    "default-endpoint-local-branch-without-remote"
-   ],
-   "class": "promise",
-   "file": "02-poteto-mode.md",
-   "promise": "endpoint-follows-user-then-repository",
-   "sources": [
-    "port"
-   ],
-   "text": "The task runs to the endpoint you state, and without one it stops at the furthest reviewable state the repository supports, such as a pull request, or a local branch when there is no remote."
-  },
   "b708946e82da": {
    "class": "context",
    "file": "02-poteto-mode.md",
@@ -12555,15 +12559,6 @@
    ],
    "text": "If you skipped ahead, go back to [setup](./01-setup.md) and run one real task."
   },
-  "c91d1bf83742": {
-   "class": "promise",
-   "file": "01-setup.md",
-   "promise": "pr-steps-run-unasked",
-   "sources": [
-    "port"
-   ],
-   "text": "When the repository has a remote and a tool that can open a pull request on it, the run ends by pushing a branch and opening a PR."
-  },
   "c9a74a7d503e": {
    "class": "promise",
    "file": "02-poteto-mode.md",
@@ -13309,6 +13304,15 @@
     "port"
    ],
    "text": "One weird session is an anecdote, not a rule."
+  },
+  "de5d86fa0629": {
+   "class": "promise",
+   "file": "01-setup.md",
+   "promise": "pr-steps-run-unasked",
+   "sources": [
+    "port"
+   ],
+   "text": "When the repository has a github.com remote, the run ends by pushing a branch and opening a PR, and on other hosts it stops at a pushed branch unless you ask for a PR."
   },
   "decaadc93e36": {
    "class": "context",
