@@ -5,7 +5,7 @@
 For sustained improvement against a metric rather than a one-off fix, use the Hillclimb playbook (`playbooks/hillclimb.md`). The mode entry's plan script chooses the route from the five risk facts in [routes](../references/routes.md). On the lightweight route, make the fix yourself.
 
 1. **Baselined.** A trace from the matching surface records the slowness as a number you trust. Capture a baseline trace via the matching control skill. Call the Skill tool with `benchmark-checklist` to vet the baseline and each later number.
-2. **Hypothesized.** Each candidate fix names the mantra it applies and the trace signal that supports it. Call the Skill tool with `how` to ground hypotheses. Don't claim a perf ceiling without running it first.
+2. **Hypothesized.** Each candidate fix names the mantra it applies and the trace signal that supports it. Trace the code to ground hypotheses. Don't claim a perf ceiling without running it first.
    Treat the mantras as hypothesis generators. Admit an attempt only when the trace shows its supporting signal.
    Try the performance mantras in order, cheapest first:
    1. Don't do it. Stop work whose result nothing uses rather than cheapening it. Call the Skill tool with `how` to prove the work is deletable. A trace shows cost, not whether the work is needed.
