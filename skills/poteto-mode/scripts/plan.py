@@ -7,9 +7,13 @@ references/routes.md. The same facts give the same route on every harness.
 Steps and their outcome sentences come from the playbook file, which owns them. Gates, panels,
 and the flags of code-changing playbooks come from routes.json beside the mode entry.
 
-Use --step N to print the step's full text and the route's gates. For a routed
-playbook, include --route with the route the plan printed. For other playbooks, --route is
-optional with --step. A full plan rejects --route. A step rejects risk facts,
+A plan uses the current directory by default. To plan for another directory, pass
+--project DIR once. DIR must already exist and can be outside a Git repository.
+
+Use --step N to print the step's full text and the route's gates without inspecting
+a repository. For a routed playbook, include --route with the route the plan
+printed. For other playbooks, --route is optional with --step.
+A full plan rejects --route. A step rejects risk facts,
 --user-route, --raise-to, --reason, and --json.
 
 On the lightweight route, the step lists the skills it keeps and labels conditional
