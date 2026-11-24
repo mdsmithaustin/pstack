@@ -103,6 +103,22 @@ class Evidence(unittest.TestCase):
         self.assertEqual(run("feature", *LOW, "--raise", "standard", "--reason", "new module").returncode, 2)
 
 
+class EvidenceWords(unittest.TestCase):
+    def test_evidence_made_only_of_filler_negation_or_counts_counts_as_unknown(self):
+        for thin in ("not checked", "no evidence", "did not check", "ok ok ok", "ok, fine", "trust me", "nothing to check",
+                     "not applicable", "unknown, tbd", "none, n/a", "n/a n/a n/a", "- - - - -", "one file, 3 lines"):
+            with self.subTest(evidence=thin):
+                result = plan("bug-fix", *facts(consequence=f"low:{thin}"))
+                self.assertEqual(result["facts"]["consequence"]["level"], "unknown")
+                self.assertEqual(result["route"], "standard")
+
+    def test_evidence_that_names_what_was_checked_stays_low(self):
+        for evidence in (*EVIDENCE.values(), "one caller in cli.py, found by grep", "fixed evidence text",
+                         "text path untouched, read __main__.py", "git log shows one commit on the file"):
+            with self.subTest(evidence=evidence):
+                self.assertEqual(plan("bug-fix", *facts(consequence=f"low:{evidence}"))["route"], "lightweight")
+
+
 class EvidenceUsageErrors(unittest.TestCase):
     def test_every_value_flag_is_refused_when_repeated(self):
         cases = {
