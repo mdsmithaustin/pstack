@@ -1,0 +1,10 @@
+{
+  "fixture": "kiln",
+  "steps": [
+    {
+      "dir": "step-1",
+      "message": "bin: add await-inbox\n\nThe nightly exporter writes inbox/notes.txt on its own schedule. await-inbox blocks until that file exists, so a job can start kiln the moment the drop lands.",
+      "delete": []
+    }
+  ]
+}

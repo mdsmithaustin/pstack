@@ -1,0 +1,20 @@
+{
+ "screen": "X23",
+ "promises": [
+  "x23-writer-worktree-removed"
+ ],
+ "fixture": "tally",
+ "turns": [
+  "make me a second checkout of main at .worktrees/docs-review on a new branch named docs-review. that's all for now.",
+  "/poteto-mode new task. add a --min-length N option to tally that drops words shorter than N letters, with a test. hand the change to one helper working in its own git worktree, then merge its branch into main once you've checked it."
+ ],
+ "timeout_s": {
+  "default": 2400,
+  "codex": 3000
+ },
+ "expect": {
+  "trunk": "main",
+  "planted_worktree": ".worktrees/docs-review"
+ },
+ "note": "Settles O16 and M93 (the pointers to Remove a writer's worktree). make_project cannot create a worktree, so the first turn plants one the user owns: .worktrees/docs-review, made for no writer run. The second turn is a Feature whose change goes to one writer in its own worktree and is merged into main. The grader reads git worktree list and the branches under w/ after the run: a leftover writer worktree whose work main holds, or a removed docs-review, fails; a leftover the rule keeps (dirty, or unmerged) goes to a reader; no writer worktree is inconclusive. Run on Claude Code."
+}

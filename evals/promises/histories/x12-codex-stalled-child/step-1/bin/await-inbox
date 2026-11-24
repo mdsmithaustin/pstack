@@ -1,0 +1,7 @@
+#!/bin/sh
+# Blocks until the nightly exporter's drop lands, then prints its path.
+target="${1:-inbox/notes.txt}"
+while [ ! -f "$target" ]; do
+    sleep 5
+done
+echo "$target"
