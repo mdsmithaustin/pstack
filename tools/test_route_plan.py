@@ -922,6 +922,25 @@ class RepositoryEndpoint(unittest.TestCase):
                 planner.wait(timeout=10)
                 self.assert_all_stopped(pid_file)
 
+    def test_ctrl_c_stops_a_worker_after_the_lookup_exits(self):
+        self.tool("ssh", f"""exec "{sys.executable}" - <<'PY'
+import os, signal, time
+from pathlib import Path
+
+planner, lookup = os.getppid(), os.getpid()
+if os.fork():
+    os._exit(0)
+while os.getppid() == lookup:
+    time.sleep(0.01)
+Path(os.environ["HOME"], "ssh-pids").write_text(str(os.getpid()))
+os.kill(planner, signal.SIGINT)
+time.sleep(30)
+PY""")
+        self.addCleanup(self.assert_all_stopped, self.root / "ssh-pids")
+        done = subprocess.run([sys.executable, str(SCRIPT), "feature", *LOW, "--project", str(self.repo("work:o/r.git"))],
+                              capture_output=True, timeout=10, env={"PATH": str(self.bin), "HOME": str(self.root)})
+        self.assertNotEqual(done.returncode, 0)
+
     def test_the_project_decides_under_git_environment_variables(self):
         self.tool("gh")
         other = self.repo("https://github.com/o/r.git")

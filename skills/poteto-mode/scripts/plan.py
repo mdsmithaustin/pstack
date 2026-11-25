@@ -290,15 +290,15 @@ def bounded(argv, seconds, env=None):
     with child:
         try:
             out = child.communicate(timeout=seconds)[0]
-        except subprocess.TimeoutExpired:
-            return subprocess.CompletedProcess(argv, None, "")
-        finally:
-            if child.returncode is None:
-                with contextlib.suppress(ProcessLookupError, PermissionError):
-                    if hasattr(os, "killpg"):
-                        os.killpg(child.pid, signal.SIGKILL)
-                    else:
-                        child.kill()
+        except BaseException as error:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                if hasattr(os, "killpg"):
+                    os.killpg(child.pid, signal.SIGKILL)
+                else:
+                    child.kill()
+            if isinstance(error, subprocess.TimeoutExpired):
+                return subprocess.CompletedProcess(argv, None, "")
+            raise
     return subprocess.CompletedProcess(argv, child.returncode, out)
 
 
