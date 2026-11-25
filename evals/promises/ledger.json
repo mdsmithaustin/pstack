@@ -3434,7 +3434,7 @@
   },
   "same-model-design-comparison-skipped": {
    "check": "script",
-   "claim": "When the resolver marks an arena or architect design comparison `skip`, the lead spawns no runner and no judge, produces the artifact itself, and says so. The resolver marks it when every runner arm and every cross-judge arm inherits the lead's model or resolves to the model passed as `--lead-model`, at any effort. A panel whose arms name models is resolved without `--lead-model`, so it is not marked and runs as configured. An arena run that reviews finished work still runs every arm on a marked row, labeled `same-model`, and delegation that protects the lead's context and required reviews are unaffected.",
+   "claim": "On a resolver row marked `skip`, Arena's lead writes and verifies a new design alone. For a review or second opinion, it runs every configured reviewer with the `same-model` label, skips the cross-judge, and verifies the combined findings.",
    "harness_sensitive": true,
    "owners": [
     "skills/setup-pstack/scripts/check-models-config.py",
@@ -4906,6 +4906,15 @@
    ],
    "text": "For a live symptom, such as a leak, an idle CPU spin, or a visual glitch, the [Runtime forensics playbook](../../skills/poteto-mode/playbooks/runtime-forensics.md) instruments the running process."
   },
+  "0bcb5f832d98": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "The coordinator skips the cross-judge, picks a base review, combines the findings, and verifies the result."
+  },
   "0be36a8b35de": {
    "class": "promise",
    "file": "05-build-and-clean.md",
@@ -5415,15 +5424,6 @@
     "port"
    ],
    "text": "The PM or designer who owns the behavior needs to see it in their terms."
-  },
-  "18f5168bd28d": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "same-model-design-comparison-skipped",
-   "sources": [
-    "port"
-   ],
-   "text": "A review that runs through `/arena`, such as `/blast-radius` on a wide change, always runs its arms, and is labeled `same-model` when the resolver marks them as the coordinator's own model."
   },
   "19069e6c9e15": {
    "class": "context",
@@ -6374,15 +6374,6 @@
    ],
    "text": "It writes a project-local skill that tells the next agent whether a change touches the verified code, how to run the check with one command, and how to tell a real bug from a modeling error."
   },
-  "31b0450d6a5c": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "same-model-design-comparison-skipped",
-   "sources": [
-    "port"
-   ],
-   "text": "The resolver marks a panel whose every arm inherits the chat model without being told that model."
-  },
   "31ba7ca1d7f0": {
    "class": "promise",
    "file": "09-make-it-yours.md",
@@ -7168,6 +7159,15 @@
     "port"
    ],
    "text": "Read the pages in order the first time."
+  },
+  "4402ebf366a0": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "When the [model resolver](../../skills/setup-pstack/references/models-config.md#resolution) marks a comparison `skip`, the coordinator writes and verifies a new design itself, even if you ask for candidates."
   },
   "44819d121894": {
    "class": "context",
@@ -9198,15 +9198,6 @@
    ],
    "text": "Until then, including after an update from a version that gated those skills in their frontmatter, Claude Code shows their descriptions and can load them on its own."
   },
-  "79911ecddb8d": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "same-model-design-comparison-skipped",
-   "sources": [
-    "port"
-   ],
-   "text": "A panel whose arms name models runs as configured."
-  },
   "79ade876d091": {
    "also": [
     "slash-skills-invocable"
@@ -10386,15 +10377,6 @@
    ],
    "text": "`/poteto-mode` routes large or cross-cutting work to [`/figure-it-out`](../../skills/figure-it-out/SKILL.md), which designs one rigorous run for it:"
   },
-  "9ab8ecdf6eea": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "same-model-design-comparison-skipped",
-   "sources": [
-    "port"
-   ],
-   "text": "When a playbook or `/architect` calls for a design comparison and the model resolver marks every runner and judge as the coordinator's own model, at any reasoning effort, the coordinator skips the comparison, produces the design itself, and says so."
-  },
   "9acd67f502da": {
    "class": "context",
    "file": "06-verify-and-ship.md",
@@ -11138,6 +11120,15 @@
     "port"
    ],
    "text": "```text\n/poteto-mode open the pr. small ordered commits, evidence in the description.\n```"
+  },
+  "adb6445934b8": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "For a review or second opinion with that marker, every configured reviewer runs with the `same-model` label."
   },
   "ade9c8f77734": {
    "class": "promise",
