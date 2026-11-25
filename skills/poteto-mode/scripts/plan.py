@@ -27,12 +27,15 @@ Supply each risk fact, --user-route, --raise-to, --reason, --step, --route,
 On a usage error, the script writes one line to stderr and exits with status 2.
 """
 import argparse
+import contextlib
 import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -64,6 +67,7 @@ KEEP_COMMITS = "   still commit when the push or PR is skipped"
 SURROGATE = re.compile("[\udc80-\udcff]")
 WHEN_HOLDS = "   load only when the step's own condition holds: "
 NO_CHANGE_ENDPOINT = ("what this playbook's Reply line names", "this playbook does not produce a code change")
+LOOKUP_SECONDS = 5
 
 
 class PlanParser(argparse.ArgumentParser):
@@ -247,21 +251,21 @@ def table_route(facts):
 
 def default_endpoint(project):
     """The default endpoint that references/routes.md's Endpoint table gives `project`."""
-    try:
-        local = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True).stdout.split()
-    except OSError:
-        return "commits on a local branch once Git is available", "Git is not on PATH", False
-    env = {name: value for name, value in os.environ.items() if name not in local}
+    local = bounded(["git", "rev-parse", "--local-env-vars"], LOOKUP_SECONDS)
+    if local.returncode is None:
+        return "commits on a local branch once Git is available", "Git is not on PATH or did not answer", False
+    env = {name: value for name, value in os.environ.items() if name not in local.stdout.split()}
 
     def git(*args):
-        return subprocess.run(["git", "-C", str(project), *args], capture_output=True, text=True, env=env)
+        return bounded(["git", "-C", str(project), *args], LOOKUP_SECONDS, env)
 
     if git("rev-parse", "--git-dir").returncode != 0:
         return "commits on a first local branch after `git init`", "no Git repository", False
     urls = [line.split("\t", 1)[1].rsplit(" (", 1)[0] for line in git("remote", "-v").stdout.splitlines() if line.endswith(" (push)")]
     if not urls:
         return "commits on a local branch, with the branch and its diff command in the reply", "no remote", False
-    hosts = {remote_host(url) for url in urls} - {None}
+    deadline = time.monotonic() + LOOKUP_SECONDS
+    hosts = {remote_host(url, deadline) for url in urls} - {None}
     if not hosts:
         return "a pushed branch, named in the reply", "no remote names a network host, so none takes a PR", False
     if shutil.which("origin"):
@@ -273,8 +277,23 @@ def default_endpoint(project):
     return "reviewable PR through a built-in PR tool, else a pushed branch named in the reply", "GitHub remote, no forge CLI on PATH", True
 
 
-def remote_host(url):
-    """Return the push URL's network host, with ssh aliases resolved and *.github.com folded to github.com, or None for a local or unparseable URL."""
+def bounded(argv, seconds, env=None):
+    try:
+        child = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                 text=True, env=env, start_new_session=True)
+    except OSError:
+        return subprocess.CompletedProcess(argv, None, "")
+    with child:
+        try:
+            out = child.communicate(timeout=seconds)[0]
+        except subprocess.TimeoutExpired:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.killpg(child.pid, signal.SIGKILL)
+            return subprocess.CompletedProcess(argv, None, "")
+    return subprocess.CompletedProcess(argv, child.returncode, out)
+
+
+def remote_host(url, deadline=None):
     if os.path.splitdrive(url)[0]:
         return None
     if "://" in url:
@@ -288,19 +307,16 @@ def remote_host(url):
         match = SCP_REMOTE.match(url)
         host, ssh = (match.group(1).lower() if match else None), True
     if host and ssh:
-        host = ssh_hostname(host)
+        host = ssh_hostname(host, time.monotonic() + LOOKUP_SECONDS if deadline is None else deadline)
     return "github.com" if host and (host == "github.com" or host.endswith(".github.com")) else host
 
 
-def ssh_hostname(alias):
+def ssh_hostname(alias, deadline):
     """Resolve an ssh alias as gh does, with `ssh -G`, which prints the evaluated config and connects to nothing."""
-    if alias.startswith("-"):
+    remaining = deadline - time.monotonic()
+    if alias.startswith("-") or remaining <= 0:
         return alias
-    try:
-        done = subprocess.run(["ssh", "-G", alias], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=5)
-    except (OSError, subprocess.TimeoutExpired):
-        return alias
-    found = re.search(r"^hostname (\S+)$", done.stdout, re.M)
+    found = re.search(r"^hostname (\S+)$", bounded(["ssh", "-G", "--", alias], remaining).stdout, re.M)
     return found.group(1).lower() if found else alias
 
 

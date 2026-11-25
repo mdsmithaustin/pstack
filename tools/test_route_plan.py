@@ -837,7 +837,7 @@ class RepositoryEndpoint(unittest.TestCase):
 
     def test_an_ssh_alias_counts_as_the_host_ssh_resolves(self):
         self.tool("gh")
-        self.tool("ssh", 'if [ "$1" = -G ] && [ "$2" = work ]; then echo "hostname github.com"; else echo "hostname $2"; fi')
+        self.tool("ssh", 'if [ "$1" = -G ] && [ "$3" = work ]; then echo "hostname github.com"; else echo "hostname $3"; fi')
         for url in ("work:o/r.git", "ssh://git@work/o/r.git"):
             with self.subTest(url=url):
                 self.assertEqual(self.endpoint(self.repo(url))[0], "reviewable PR")
