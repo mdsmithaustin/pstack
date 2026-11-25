@@ -1281,7 +1281,7 @@ ROUTING_PROMISES = (
     "refactoring-prompt-routes-to-refactoring", "research-prompt-routes-to-research-playbook",
     "review-prompt-routes-to-code-review", "babysit-prompt-routes-to-babysit-drive", "land-prompt-routes-to-shipping",
     "autopilot-prompt-routes-to-autopilot-full", "stack-prompt-routes-to-autopilot-stack",
-    "orchestrate-prompt-routes-to-orchestrate", "takeover-prompt-routes-to-session-pickup",
+    "takeover-prompt-routes-to-session-pickup",
     "disk-prompt-routes-to-worktree-cleanup", "skill-prompt-routes-to-authoring-playbook",
     "eval-prompt-routes-to-eval-playbook", "open-pr-prompt-routes-to-opening-a-pr",
 )
@@ -3713,19 +3713,6 @@ def runner_spawns(view):
     if view.skill_read("arena") or view.skill_read("architect"):
         needles.append("candidate")
     return [s for s in view.spawns_where(*needles, reply=False) if not view.supports(s)]
-
-
-@oracle("architect-grounds-with-how-and-why")
-def architect_grounds(view):
-    how, why = how_evidence(view), why_evidence(view)
-    runners = runner_spawns(view)
-    first_runner = min((s.get("seq", 0) for s in runners), default=None)
-    evidence = [f"how evidence at seq {how}", f"why evidence at seq {why}", f"first runner at seq {first_runner}"]
-    if how is None:
-        return inconclusive("run killed before grounding", *evidence) if view.killed and not runners else failed("architect did not run how first", *evidence)
-    if first_runner is not None and how > first_runner:
-        return failed("runners spawned before how", *evidence)
-    return passed(*evidence)
 
 
 COMPARISON_SKIP = re.compile(r'"comparison": "skip"|so skip the comparison per Spawn a role step 2')

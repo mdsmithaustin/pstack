@@ -6,13 +6,7 @@ Unnamed actions, operator-reserved decisions, and tool-enforced approvals still 
 
 If a real blocker needs the operator, retain the pending agent action and diagnostic evidence. In an unattended run, continue independent authorized work first. Preserve the blocked action and required decision when nothing else can proceed. Never report blocked work as complete. Already-authorized work and scheduled waiting with an actual wake owner need no operator question or helper invocation. Preserve the [usage-limit recovery procedure](usage-limit-recovery.md).
 
-Judge what the operator must supply before constructing the reply. Choose one necessary operator action, new approval for an agent action outside the grant, or confirmation of an evidenced fact. Preserve actor reservations and retain the assigned work.
-
-Request new approval for an agent action only when evidence establishes its necessity and an executable route the agent can use after approval. An approval-required refusal establishes a gate, not an agent operation for clearing it. If the clearing route is unknown, retain that uncertainty and request one necessary operator action or named information artifact. Never invent agent capability.
-
-A connection refusal alone does not establish a clearing action. If a required fact has no evidenced candidate, request one named information artifact through a faithful provide action. Never invent a value to make a confirmation fit. The helper checks representation, not necessity, authority, factual truth, or a single real-world operation.
-
-For that operator dependency, invoke the installed [whole-reply helper](../scripts/operator-request.py). Resolve `PSTACK_SKILLS_ROOT` through the [portable resource contract](../../pstack-harness/references/portable-paths.md). Obtain the authoritative fields, outcomes, statuses, and examples needed for the request. A direct help call is available and reads no stdin.
+For an operator dependency, invoke the installed [whole-reply helper](../scripts/operator-request.py). Resolve `PSTACK_SKILLS_ROOT` through the [portable resource contract](../../pstack-harness/references/portable-paths.md). Obtain the authoritative fields, outcomes, statuses, and examples needed for the request. A direct help call is available and reads no stdin.
 
 ```sh
 exec python3 "${PSTACK_SKILLS_ROOT:?}/poteto-mode/scripts/operator-request.py" --help

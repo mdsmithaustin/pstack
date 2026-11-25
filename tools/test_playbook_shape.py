@@ -18,7 +18,7 @@ AWK_PROGRAM = (
 )
 
 SENTINEL = "Read this playbook in full."
-INDEX_SHAPED = frozenset({"multi-phase-plan.md", "opening-a-pr.md", "orchestrate.md"})
+INDEX_SHAPED = frozenset({"multi-phase-plan.md", "opening-a-pr.md"})
 REPLY = "**Reply:**"
 STEP = re.compile(r"[0-9]+\. ")
 HEADING = re.compile(r"#")
@@ -196,7 +196,7 @@ class FirstShapeViolation(unittest.TestCase):
 
     def test_sentinel_in_a_listed_playbook_passes(self):
         self.assertIsNone(
-            first_shape_violation("orchestrate.md", "Read this playbook in full.\n")
+            first_shape_violation("opening-a-pr.md", "Read this playbook in full.\n")
         )
 
 

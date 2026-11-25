@@ -481,7 +481,7 @@ def render(plan, harness):
                 out.append(f"   {step['name']}: `skipped: {step['skipped']}` only when that is true. Otherwise {raise_the_route(plan['route_source'])}.")
     elif plan["steps"]:
         if plan["full_read"]:
-            out.append(f"Then: Read {plan['file']} in full. Its steps index the sections after them.")
+            out.append(f"Then: Read {plan['file']} in full.")
         out.append("Then one item per step:")
         for step in plan["steps"]:
             out.append(f"{step['number']}. {step['outcome']}")

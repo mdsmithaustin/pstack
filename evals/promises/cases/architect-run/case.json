@@ -1,13 +1,12 @@
 {
  "promises": [
-  "architect-grounds-with-how-and-why",
   "architect-runs-arena-for-sketches",
   "architect-sketches-before-implementation"
  ],
  "fixture": "relay",
  "entry": "architect",
  "turns": [
-  "design the import pipeline before writing any code. i care most about how callers use it."
+  "design the import pipeline before writing any code. it is a large change, the team disagrees on its shape, and i care most about how callers use it."
  ],
  "timeout_s": {
   "default": 2400,

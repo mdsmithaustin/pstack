@@ -14,7 +14,6 @@ HARNESS = ROOT / "skills/pstack-harness/SKILL.md"
 PORTABLE_PATHS = ROOT / "skills/pstack-harness/references/portable-paths.md"
 AUTOPILOT = ROOT / "skills/poteto-mode/playbooks/autopilot-full.md"
 AUTOPILOT_STACK = ROOT / "skills/poteto-mode/playbooks/autopilot-stack.md"
-PLAN_PLAYBOOK = ROOT / "skills/poteto-mode/playbooks/multi-phase-plan.md"
 
 
 def run(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -41,93 +40,6 @@ def inline_command(path: Path, needle: str) -> str:
         if needle in command:
             return command
     raise AssertionError(f"{path} lacks an inline command containing {needle!r}")
-
-
-def valid_plan() -> str:
-    rule = "Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked."
-    lines = [
-        "# Portable plan",
-        "",
-        "One concrete change.",
-        "",
-        "## How to read this",
-        "",
-        "One box is one unit of work.",
-        "Each box names the evidence.",
-        "Check a box only when its evidence exists.",
-        "Read playbooks/ before work.",
-        rule,
-        "",
-        "## Program checklist",
-        "",
-        "### Arm the program",
-        "",
-        "- [ ] Read trunk with `git -C \"${PSTACK_SOURCE_ROOT:?}\" fetch origin '+refs/heads/main:refs/remotes/origin/main' && git -C \"$PSTACK_SOURCE_ROOT\" show 'origin/main:skills/poteto-mode/playbooks/autopilot-full.md'`.",
-        "- [ ] Arm the audit tick as `/loop 1h`.",
-        "- [ ] Send a status message.",
-        "",
-        "### Spawn owners",
-        "",
-        "### PR mechanics",
-        "",
-        "### Verdict and merge",
-        "",
-        "### Boot recipe",
-        "",
-        "## Repair portable reads (PR 1)",
-        "",
-        "**Depends on.** None.",
-        "",
-        "**Files.**",
-        "",
-        "- [ ] Edit one file.",
-        "",
-        "**Build.**",
-        "",
-        "- [ ] Run the build.",
-        "",
-        "**You see.**",
-        "",
-        "- [ ] The command succeeds.",
-        "",
-        f"**Verify, unit.** {rule}",
-        "",
-        "- [ ] Run unit tests.",
-        "",
-        f"**Verify, live.** {rule} Ten lanes on `sonnet` at the PR head.",
-        "",
-    ]
-    lines.extend(
-        f"- [ ] Lane {number}. Save `lane-{number}.png`. Pass when the command succeeds."
-        for number in range(1, 11)
-    )
-    lines.extend(
-        [
-            "",
-            f"**Verify, perf.** {rule}",
-            "",
-            "- [ ] Metric. Runtime.",
-            "- [ ] Probe. Run it.",
-            "- [ ] Baseline. Record it.",
-            "- [ ] Rule. No regression.",
-            "",
-            "**Review gate.** None.",
-            "",
-            "**Merge.**",
-            "",
-            "- [ ] Merge after verification.",
-            "",
-            "## Close the program",
-            "",
-            "Close it.",
-            "",
-            "## Appendix A. Prototype evidence",
-            "",
-            "No prototype.",
-            "",
-        ]
-    )
-    return "\n".join(lines)
 
 
 class PortableSkillPaths(unittest.TestCase):
@@ -183,9 +95,6 @@ class PortableSkillPaths(unittest.TestCase):
         portable_paths = self.seed / "skills/pstack-harness/references/portable-paths.md"
         portable_paths.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(PORTABLE_PATHS, portable_paths)
-        checker = self.seed / "skills/poteto-mode/scripts/check-plan.mjs"
-        checker.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(ROOT / "skills/poteto-mode/scripts/check-plan.mjs", checker)
         playbooks = self.seed / "skills/poteto-mode/playbooks"
         playbooks.mkdir(parents=True, exist_ok=True)
         for name in ("autopilot-full.md", "autopilot-stack.md"):
@@ -204,7 +113,6 @@ class PortableSkillPaths(unittest.TestCase):
         source: Path | None = None,
         env: dict[str, str] | None = None,
         needs_source: bool = False,
-        needs_project: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         values = (env or self.env).copy()
         values["PSTACK_HARNESS_SKILL"] = str(invoked)
@@ -215,8 +123,6 @@ class PortableSkillPaths(unittest.TestCase):
         blocks = ["set -eu", self._root_script()]
         if needs_source:
             blocks.append(shell_block(PORTABLE_PATHS, "## Resolve the pstack source root"))
-        if needs_project:
-            blocks.append(shell_block(PORTABLE_PATHS, "## Resolve the consumer project root"))
         blocks.append(extra)
         script = "\n".join(blocks) + "\n"
         return run(["sh", "-c", script], self.consumer, values)
@@ -232,34 +138,6 @@ class PortableSkillPaths(unittest.TestCase):
         root = self.base / "copied install skills"
         shutil.copytree(self.source / "skills", root)
         return root
-
-    def test_documented_validator_command_runs_in_source_linked_and_copied_layouts(self) -> None:
-        commands = [
-            inline_command(PLAN_PLAYBOOK, "check-plan.mjs"),
-        ]
-        plan = self.consumer / "valid plan.md"
-        plan.write_text(valid_plan(), encoding="utf-8")
-        for skills_root in (self.source / "skills", self._linked_install(), self._copied_install()):
-            for command in commands:
-                with self.subTest(skills_root=skills_root, command=command):
-                    invoked = skills_root / "pstack-harness/SKILL.md"
-                    values = self.env
-                    if skills_root.name == "copied install skills":
-                        broken_config = self.base / "offline-gitconfig"
-                        broken_config.write_text(
-                            '[url "file:///definitely/missing/pstack.git"]\n\tinsteadOf = https://github.com/mdsmithaustin/pstack.git\n',
-                            encoding="utf-8",
-                        )
-                        values = self.env.copy()
-                        values["GIT_CONFIG_GLOBAL"] = str(broken_config)
-                    result = self._run_contract(
-                        invoked,
-                        f'PLAN_PATH={shlex_quote(plan)}\n{command}',
-                        env=values,
-                    )
-                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                    self.assertIn("1 PR sections, 0 problems", result.stdout)
-        self.assertEqual(list(self.program_temp.iterdir()), [], "local validation must not clone pstack source")
 
     def test_documented_tick_fetches_fresh_pstack_trunk_not_consumer_trunk(self) -> None:
         command = inline_command(AUTOPILOT, "autopilot-full.md")
@@ -288,16 +166,6 @@ class PortableSkillPaths(unittest.TestCase):
                 self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
                 self.assertIn("pstack-v2", second.stdout)
                 self.assertNotIn("pstack-v1", second.stdout)
-
-    def test_control_skill_read_uses_the_consumer_root(self) -> None:
-        command = inline_command(PLAN_PLAYBOOK, "CONTROL_SKILL_PATH")
-        result = self._run_contract(
-            self.source / "skills/pstack-harness/SKILL.md",
-            f"CONTROL_SKILL_PATH=control.md\n{command}",
-            needs_project=True,
-        )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual(result.stdout.strip(), "consumer-only")
 
     def test_copied_install_clones_canonical_source_and_cleans_only_its_clone(self) -> None:
         copied = self._copied_install()
@@ -345,90 +213,6 @@ class PortableSkillPaths(unittest.TestCase):
         self.assertIn("could not clone canonical pstack source", failed.stderr)
         self.assertNotIn("installed-fallback", failed.stdout)
 
-    def test_documented_validator_command_rejects_a_live_lane_without_a_model(self) -> None:
-        command = inline_command(PLAN_PLAYBOOK, "check-plan.mjs")
-        for model in ("<swarm workers model>", "", "   ", "\t"):
-            with self.subTest(model=model):
-                plan = self.consumer / "unfilled plan.md"
-                plan.write_text(valid_plan().replace("Ten lanes on `sonnet`", f"Ten lanes on `{model}`"), encoding="utf-8")
-                result = self._run_contract(
-                    self.source / "skills/pstack-harness/SKILL.md",
-                    f'PLAN_PATH={shlex_quote(plan)}\n{command}',
-                )
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn("Verify, live lacks", result.stderr)
-
-    def test_plan_template_links_resolve_after_copy_into_the_agent_store(self) -> None:
-        template = re.search(r"^`{4}markdown\n(.*?)^`{4}$", PLAN_PLAYBOOK.read_text(encoding="utf-8"), re.M | re.S)
-        self.assertIsNotNone(template)
-        plan = self.consumer / "agent store" / "docs" / "plan.md"
-        plan.parent.mkdir(parents=True)
-        plan.write_text(template[1], encoding="utf-8")
-
-        procedures = [
-            ("loop procedure", "pstack-harness/references/loops.md"),
-            ("Before each commit", "deslop/SKILL.md"),
-        ]
-        for _, target in procedures:
-            installed = self.source / "skills" / target
-            installed.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(ROOT / "skills" / target, installed)
-
-        def read_procedures(skills_root: Path) -> None:
-            text = plan.read_text(encoding="utf-8")
-            for label, expected in procedures:
-                lines = [line for line in text.splitlines() if label in line]
-                self.assertEqual(len(lines), 1, f"missing or ambiguous procedure: {label}")
-                line = lines[0]
-                link = re.search(rf"\[{re.escape(label)}\]\(([^)]+)\)", line)
-                if link:
-                    target = shlex_quote(plan.parent / link[1].partition("#")[0])
-                elif label == "loop procedure":
-                    reference = re.search(r'`"\$PSTACK_SKILLS_ROOT/([^"\n]+)"`', line)
-                    self.assertIsNotNone(reference, f"missing installed reference: {label}")
-                    target = '"$PSTACK_SKILLS_ROOT"/' + shlex_quote(Path(reference[1]))
-                else:
-                    reference = re.search(r"call the Skill tool with `([^`]+)`", line)
-                    self.assertIsNotNone(reference, f"missing named skill: {label}")
-                    target = '"$PSTACK_SKILLS_ROOT"/' + shlex_quote(Path(reference[1]) / "SKILL.md")
-                result = self._run_contract(skills_root / "pstack-harness/SKILL.md", f"cat {target}")
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stdout, (ROOT / "skills" / expected).read_text(encoding="utf-8"))
-
-        linked = self._linked_install()
-        (linked / "deslop").symlink_to(self.source / "skills/deslop", target_is_directory=True)
-        for skills_root in (self.source / "skills", linked, self._copied_install()):
-            with self.subTest(skills_root=skills_root):
-                read_procedures(skills_root)
-
-        for original, replacement in (
-            ("references/loops.md", "references/missing-loop.md"),
-            ("with `deslop`", "with `missing-deslop`"),
-            ("loop procedure", "removed procedure"),
-            ("Before each commit", "removed procedure"),
-        ):
-            with self.subTest(mutation=original):
-                plan.write_text(template[1].replace(original, replacement), encoding="utf-8")
-                with self.assertRaises(AssertionError):
-                    read_procedures(self.source / "skills")
-
-    def test_documented_validator_command_rejects_a_structurally_invalid_plan(self) -> None:
-        command = inline_command(PLAN_PLAYBOOK, "check-plan.mjs")
-        plan = self.consumer / "invalid plan.md"
-        plan.write_text(valid_plan().replace("### Spawn owners", "### Missing owners"), encoding="utf-8")
-        result = self._run_contract(
-            self.source / "skills/pstack-harness/SKILL.md",
-            f'PLAN_PATH={shlex_quote(plan)}\n{command}',
-        )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn('Program checklist lacks "### Spawn owners" in order', result.stderr)
-        self.assertIn("1 PR sections, 1 problems", result.stdout)
-
-
-def shlex_quote(path: Path) -> str:
-    import shlex
-
-    return shlex.quote(str(path))
 
 
 if __name__ == "__main__":

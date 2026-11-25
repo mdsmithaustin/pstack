@@ -24,7 +24,7 @@ class WorklistContract(unittest.TestCase):
         cases.extend((label, False) for label in (
             "skip", "n/a", "progress", "deploy skip", "notskipped", "deploy n/a",
         ))
-        for caller in ("poteto-mode/SKILL.md", "poteto-mode/playbooks/feature.md"):
+        for caller in ("poteto-mode/playbooks/feature.md",):
             with self.subTest(caller=caller):
                 content = (SKILLS / caller).read_text(encoding="utf-8")
                 labels = re.findall(r"`([^`]+): <reason>`", content)

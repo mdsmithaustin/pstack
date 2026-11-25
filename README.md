@@ -43,7 +43,7 @@ pick the targets you use at the prompt, including `hermes-agent` for hermes. `-g
 a full `/setup-pstack` run checks these commands on your `PATH`. only `python3` is required to continue past this check.
 
 - **python3, 3.9 or newer.** runs the plan script, the model resolver, and the preserve gate.
-- **bun.** runs the GitHub PR watcher, the merge gate, and the orchestrate store. without bun on your `PATH`, babysit can poll with `gh`, PR recap can [run bun through npx](./skills/pr-recap/references/sketch.md#setup) to draw sketches, and node can run the attachment helper.
+- **bun.** runs the GitHub PR watcher, and the merge gate. without bun on your `PATH`, babysit can poll with `gh`, PR recap can [run bun through npx](./skills/pr-recap/references/sketch.md#setup) to draw sketches, and node can run the attachment helper.
 - **node.** runs the multi-PR plan check. the [statechart launcher](./skills/statechart/scripts/statechart) accepts a node version with built-in TypeScript support, a supported bun version, or deno 2.0 or newer.
 - **gh.** the default CLI for opening, watching, and landing GitHub pull requests. the playbooks use the Origin CLI when it can resolve the repository.
 
@@ -69,7 +69,7 @@ use [`/poteto-mode`](./skills/poteto-mode/SKILL.md) at the start of a task. it r
 
 ### just use [`/poteto-mode`](./skills/poteto-mode/SKILL.md)
 
-this skill is the main shortcut. i use it whenever i need the agent to do rigorous engineering work. it comes with twenty-five playbooks:
+this skill is the main shortcut. i use it whenever i need the agent to do rigorous engineering work. it comes with twenty-four playbooks:
 
 ```
 /poteto-mode this pr has a subtle bug where the scroll drifts every 750ms even when idle. repro
@@ -82,7 +82,7 @@ morning.
 ```
 
 <details>
-<summary>the twenty-five playbooks</summary>
+<summary>the twenty-four playbooks</summary>
 
 | playbook | for |
 |---|---|
@@ -103,7 +103,6 @@ morning.
 | [babysit](./skills/poteto-mode/playbooks/babysit.md) | drive a pr or a stack to merge-ready: conflicts, review threads, ci. |
 | [shipping](./skills/poteto-mode/playbooks/shipping.md) | independently verify a green stack, then land the contiguous verified run bottom-up through github by default or origin when available. |
 | [autonomous run](./skills/poteto-mode/playbooks/autonomous-run.md) | drive a long task to completion without stopping. |
-| [orchestrate](./skills/poteto-mode/playbooks/orchestrate.md) | a standing project handed to one coordinator chat: multi-day, many stacked prs, fleets of subagents. |
 | [autopilot-full](./skills/poteto-mode/playbooks/autopilot-full.md) | run independent prs to merged with one owner per pr. a swarm verifies each code-ready head, and every later change to the patch gets a fresh check. |
 | [autopilot-stack](./skills/poteto-mode/playbooks/autopilot-stack.md) | autopilot-full without the merge. build and verify prs for the operator to review and land, stacking a pr only on a pr it builds on. |
 | [session pickup](./skills/poteto-mode/playbooks/session-pickup.md) | resume or take over a prior agent's in-flight work. |

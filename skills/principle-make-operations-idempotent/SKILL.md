@@ -11,6 +11,4 @@ Derive each step from the state that exists, not from what the previous run mean
 
 Anything a run leaves behind (a lock, a temporary file, a half-written record, a claimed job) must be recognizable as stale by the next run, by evidence that holds wherever the previous run could have stopped. Write to a temporary path and rename it into place.
 
-Rebuild generated reports, indexes, and calibration files from attributed source records, and replace the output. Preserve source facts, append-only history, and human annotations. Report missing inputs instead of inventing samples or carrying stale derived values forward.
-
 The test: what happens if this runs twice? What if the previous run crashed at every possible point? If the answer depends on what was left behind, add a reconciliation step.

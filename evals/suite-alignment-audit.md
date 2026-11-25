@@ -180,7 +180,6 @@ their own corpora.
 | `pstack-harness/scripts/save-diff.py` | Which files a range changed, with one saved patch for each |
 | `pstack-harness/scripts/loading-path.py` | Files and bytes one harness action loads |
 | `poteto-mode/scripts/check-plan.mjs` | Whether a multi-phase plan has the required structure |
-| `poteto-mode/scripts/orch` | Durable unit, ledger, and inbox state for Orchestrate |
 | `poteto-mode/scripts/watch-pr` | PR state, merge gate verdict, failed check evidence |
 | `tools/check-mode-entry-size.py` | The entry's byte budget |
 
@@ -509,8 +508,8 @@ the candidates visible and cheap to remove.
 - The [port value comparison](port-value/results/2026-10-19.md) recorded the
   current port at about 2.6 times the input tokens of native and upstream arms
   with equal acceptance, under the limits the framework states.
-- `preserve.py`, `check-models-config.py --resolve`, and `orch` already show
-  the pattern recommended here. A script holds the policy and prints the next
+- `preserve.py` and `check-models-config.py --resolve` already show the
+  pattern recommended here. A script holds the policy and prints the next
   action.
 
 ### Not recommended

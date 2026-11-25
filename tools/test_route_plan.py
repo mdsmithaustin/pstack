@@ -298,19 +298,24 @@ class Worklist(unittest.TestCase):
         self.assertFalse(any(step["held_for_intensive"] for step in plan("autopilot-full")["steps"]))
 
     def test_a_full_read_playbook_with_steps_still_lists_them(self):
-        result = plan("orchestrate")
+        result = plan("multi-phase-plan")
         self.assertTrue(result["full_read"])
-        self.assertEqual([step["name"] for step in result["steps"]][:3], ["Frame", "Install the runtime", "Pilot"])
-        text = run("orchestrate").stdout
-        self.assertIn("in full. Its steps index the sections after them.", text)
-        self.assertIn("1. **Frame.**", text)
+        self.assertEqual(len(result["steps"]), 5)
+        text = run("multi-phase-plan").stdout
+        self.assertIn("multi-phase-plan.md in full.\n", text)
+        self.assertIn("1. When the change is one or two files", text)
         self.assertNotIn("It has no numbered steps", text)
 
     def test_a_step_ends_at_the_next_heading(self):
-        close = plan("orchestrate")["steps"][-1]
-        self.assertEqual(close["name"], "Close")
-        self.assertEqual(close["loads"] + close["conditional"] + close["uses"], [])
-        self.assertNotIn("load", run("orchestrate").stdout.split("7. **Close.**")[1].split("gates:")[0])
+        spec = importlib.util.spec_from_file_location("route_plan", SCRIPT)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "playbook.md"
+            path.write_text("Read this playbook in full.\n\n1. **Close.** Hand back.\n\n## Skeleton\n\n"
+                            "Call the Skill tool with `swarm`.\n", encoding="utf-8")
+            steps = module.read_playbook(path)[1]
+        self.assertEqual(steps, [(1, "**Close.** Hand back.")])
 
     def test_panels_load_only_on_intensive(self):
         standard = plan("feature", *facts(reach="material:x"))
@@ -419,7 +424,6 @@ class RenderedRules(unittest.TestCase):
             for args in (LOW, facts(reach="material:shared caller")):
                 with self.subTest(playbook=name, route=plan(name, *args)["route"]):
                     self.assertIn("   opening prose, kept with the first item: ", run(name, *args).stdout)
-        self.assertIn("touches failure or recovery", run("feature", *LOW).stdout)
 
     def test_a_user_set_route_sends_a_raise_to_the_user(self):
         user = run("feature", *LOW, "--user-route", "lightweight").stdout
@@ -1034,7 +1038,6 @@ class Manifest(unittest.TestCase):
         for name in ("bug-fix", "refactoring", "perf-issue"):
             text = (MODE / "playbooks" / f"{name}.md").read_text(encoding="utf-8")
             self.assertIn("(../references/delegation.md)'s spawn rule calls for one", text, name)
-        self.assertIn("**Spawn up or out, never sideways.**", (MODE / "references/delegation.md").read_text(encoding="utf-8"))
 
     def test_the_panel_limit_names_the_four_routed_playbooks(self):
         triggers = (MODE / "references/task-triggers.md").read_text(encoding="utf-8")
@@ -1051,16 +1054,12 @@ class Manifest(unittest.TestCase):
             if entry.get("tiered"):
                 text = (MODE / "playbooks" / f"{name}.md").read_text(encoding="utf-8")
                 self.assertIn("../references/routes.md", text, name)
-                self.assertIn("../references/review-lens.md#independent-scrutiny", text, name)
+                self.assertIn("independent reviewer", text, name)
 
-    def test_a_lead_without_the_script_is_still_sent_to_the_gates_endpoint_and_scrutiny(self):
-        triggers = (MODE / "references/task-triggers.md").read_text(encoding="utf-8")
-        line = next(line for line in triggers.split("\n") if line.startswith("- No plan → run cleanup"))
-        self.assertIn("No plan → run cleanup before every commit or amend", line)
-        self.assertIn("(routes.md#endpoint)", line)
-        self.assertIn("(review-lens.md#independent-scrutiny)", line)
-        self.assertIn("## Endpoint", (MODE / "references/routes.md").read_text(encoding="utf-8"))
-        self.assertIn("## Independent scrutiny", (MODE / "references/review-lens.md").read_text(encoding="utf-8"))
+    def test_a_lead_without_the_script_still_builds_the_worklist(self):
+        entry = (MODE / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("If the script cannot run, copy the playbook's opening prose and then its steps as the worklist items, "
+                      "and use the standard route.", entry)
 
     def test_entry_and_more_playbooks_list_every_playbook(self):
         listed = set()

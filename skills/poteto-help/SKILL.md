@@ -103,17 +103,16 @@ Close calls:
 
 - `/how` explains what the code does. `/why` explains the reasons. `/poteto-teach` runs one or both and explains the result plainly.
 - `/arena` gives every worker the same brief and merges the best parts. `/swarm` splits work into slices or a race and returns one report.
-- `/architect` implements right after it settles the design. Add "with checkpoint" to review the design before it writes code.
 - `/interrogate` reviews the diff. `/blast-radius` looks for breakage outside the diff and proves the one fact that makes the change safe.
 - `/deslop` cleans code. `/unslop` cleans prose.
 - `/recall` rebuilds context across recent chats. `/ketchup` covers only this chat since the user's last message. Resuming one specific chat or branch is the Session pickup playbook.
-- `/figure-it-out` designs one rigorous run. The Orchestrate playbook runs a program that spans days and many PRs. The Autonomous run playbook drives one task to a finish condition.
+- `/figure-it-out` designs one rigorous run. The Autonomous run playbook drives one task to a finish condition.
 
 Not in pstack:
 
 - `control-cli` and `control-ui` belong to a Cursor plugin. pstack drives the app through the project's own `verify-<app>` skill, which `/create-verification-skill` writes.
 - `/loop` is the CLI's wake mechanism, not a pstack skill. Claude Code has one built in. In a CLI without one, re-prompt on an interval or run a watcher subagent.
-- pstack has no `/orchestrate` skill. Orchestrate is a `/poteto-mode` playbook. If the slash menu shows `/orchestrate`, another skill set provides it.
+- pstack has no `/orchestrate` skill. If the slash menu shows `/orchestrate`, another skill set provides it.
 
 ## Playbooks and principles
 

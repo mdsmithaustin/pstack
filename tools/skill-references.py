@@ -19,7 +19,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 USER_FACING_SKILLS = frozenset({"poteto-help"})
 USER_FACING = {
-    "skills/architect/SKILL.md": ['"/architect with checkpoint,"'],
     "skills/create-formal-verification-skill/SKILL.md": ["Point the user at `/maintain-formal-verification-skill`"],
     "skills/create-verification-skill/SKILL.md": ["Point the user at `/maintain-verification-skill`"],
     "skills/deslop/SKILL.md": ["and on `/deslop`,"],
@@ -28,15 +27,10 @@ USER_FACING = {
     "skills/maintain-formal-verification-skill/SKILL.md": ["point at `/create-formal-verification-skill`"],
     "skills/maintain-verification-skill/SKILL.md": ["point at `/create-verification-skill`"],
     "skills/pstack-harness/references/roles.md": ["Run `/setup-pstack` to register it.\""],
-    "skills/reflect/SKILL.md": ['the user says "reflect" or "/reflect"'],
     "skills/setup-pstack/SKILL.md": ["4 of 4 `/poteto-mode` runs",
                                      "I can generate one with /create-verification-skill.\"",
                                      "I can generate one with /create-formal-verification-skill.\""],
 }
-MODE_REMINDERS = {
-    "skills/poteto-mode/SKILL.md": ["apply /poteto-mode."],
-}
-EXEMPT = {rel: USER_FACING.get(rel, []) + MODE_REMINDERS.get(rel, []) for rel in USER_FACING | MODE_REMINDERS}
 
 
 class Sigil(NamedTuple):
@@ -99,7 +93,7 @@ def exempt(hit: Sigil) -> bool:
         return True
     if hit.file == f"skills/{skill}/SKILL.md" and hit.spelling == f"/{skill}" and hit.in_description:
         return True
-    return any(hit.spelling in passage and passage in hit.text for passage in EXEMPT.get(hit.file, ()))
+    return any(hit.spelling in passage and passage in hit.text for passage in USER_FACING.get(hit.file, ()))
 
 
 def violations(root: Path = ROOT) -> list[str]:
@@ -108,7 +102,7 @@ def violations(root: Path = ROOT) -> list[str]:
 
 def stale_exemptions(root: Path = ROOT) -> list[str]:
     hits = sigils(root)
-    stale = [f"{rel}: {passage}" for rel, passages in EXEMPT.items() for passage in passages
+    stale = [f"{rel}: {passage}" for rel, passages in USER_FACING.items() for passage in passages
              if not any(hit.file == rel and hit.spelling in passage and passage in hit.text for hit in hits)]
     return stale + [f"{rel}: {passage}" for rel, passages in NOT_LOADS.items() for passage in passages
                     if not (root / rel).is_file() or passage not in (root / rel).read_text(encoding="utf-8")]

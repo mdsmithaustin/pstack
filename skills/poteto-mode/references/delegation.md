@@ -1,22 +1,21 @@
 # Delegate a playbook unit
 
-**Spawn up or out, never sideways.** Spawn a subagent for one of four reasons: independent streams that run in parallel, bulk reading that would fill your context, independent scrutiny, or a named hard problem that goes to a stronger model on the `hardest tasks` role. A single stream on your own model tier stays with you. The lightweight route spawns no investigation or implementation delegate. Record the reason for each spawn. Keep a reviewer on a model at or above your own tier.
+The lightweight route spawns no investigation or implementation delegate. Record the reason for each spawn. Keep a reviewer on a model at or above your own tier.
 
 Before each spawn, read [unattended runs](unattended.md) and carry the run's attended or unattended state into the brief. The delegate takes that state from its brief, not its own tools.
 
 **Use the `poteto-agent` persona for any subagent you spawn inside a playbook step**. The main conversation runs the playbook itself.
 - The persona sets the subagent's instructions. The playbook step names a role in the models config, which sets the subagent's model and effort. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section to turn the persona, model, and effort into this CLI's spawn call. This skill and `poteto-agent` preserve the same wrapper instructions.
-- Routed skills (`how`, `why`, `interrogate`, `reflect`, `swarm`) choose their own persona. Respect it.
+- Routed skills (`how`, `why`, `interrogate`, `swarm`) choose their own persona. Respect it.
 - For a narrow role whose output cannot land in the project, such as a judge, a reviewer, or a design runner, name the role and the files it reads in the brief, and put in it every rule from this suite it needs. That delegate skips this skill's entry.
 
-**Defaults for every spawn.** Run it in the background, because a foreground call holds your turn while other reports wait. That holds for a steer or resume of a running agent too. Give the child full tool access, because a read-only mode can remove its MCP tools. Pass file pointers, not inlined context. Call the Skill tool with `principle-guard-the-context-window`.
+**Defaults for every spawn.** Pass file pointers, not inlined context. Call the Skill tool with `principle-guard-the-context-window`.
 - Each spawn names one role from the models config. Code delegates tier by difficulty. They take the playbook's role (`feature`, `refactoring`, `bug-fix`, `perf-issue`, or `hillclimb`), and the hardest changes (cross-cutting design, gnarly concurrency, subtle algorithms) take `hardest tasks`, whether the task needs judgment on vague intent or is a precisely specified sequence of steps to execute to the letter. Prose and judgment take `judgment and prose`. Independent verdicts and reviews take `trail reviewer`, except a swarm worker that runs something, which the **swarm** skill puts on `swarm workers`. A read-only scan, parse, or watcher that returns a reduced finding takes `routine`. Any other spawn takes `default`.
 
 **Pass the source, not a summary.** Write text that exists only in the conversation verbatim to a file, and pass it as `--source`. Put your notes after the source, each rule or test marked `quoted` with its sentence, `current behavior` with its file or test, or `inferred`.
 
 Start each brief from `python3 "${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/subagents.py" clauses`, which prints the required clauses below from its arguments. Pass `--failing-test-first` for a Bug fix delegate that lands the reproducer before the repair. Add the scope and your judgment after them.
 - Every brief that authorizes commits requires deslop's [Before each commit](../../deslop/SKILL.md#before-each-commit) check at the run's cleanup cadence, with one evidence reference per checked scope, and the preserve check: `python3 "${PSTACK_SKILLS_ROOT:?}/pstack-harness/scripts/preserve.py" --since <start commit>` with the start commit named in the brief, its last output returned per commit, and each failure fixed or, where the playbook allows an automatic-mode waiver, covered through `--reasons <file>` with the file returned. Follow [preservation modes](#preservation-modes) when a repository command is required. It names the branch off trunk to commit on, and it forbids committing credential files such as `.env` or the user's own notes and data they did not ask to version. A project with no repository yet has no trunk, so its brief names no branch.
-- Before accepting a delegate's committed work, inspect those references against the actual commits and cleanup diffs. Missing, truncated, stale, or unsupported evidence leaves the commit check pending. Repair the gap before accepting the work. A later pass does not establish that an earlier commit was checked before it happened.
 
 You own every subagent's work. Review the diff and write your own summary. A second opinion is the same prompt against a different model. After you merge or abandon a delegate's work, follow **Remove a writer's worktree** in [Delegation and isolation](../../pstack-harness/references/delegation.md).
 

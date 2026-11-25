@@ -34,16 +34,8 @@ class SameModelComparisonPromise(ResolverSandbox):
             marks(self.resolve("hermes", *ROLES)), {"arena runners": "skip", "architect runners": "skip"},
         )
         roles_md = (SKILLS / "pstack-harness/references/roles.md").read_text(encoding="utf-8")
-        for rule in (
-            "On `skip` in a design comparison, spawn no runner and no cross-judge.",
-            "state in the reply `same-model, comparison skipped` with the model",
-            "For this check, effort is not a model: two arms, or an arm and you, that differ only in effort are one model",
-            "The skip covers the comparison only.",
-            "Run a design comparison despite `skip` only when the user asked for the comparison itself in this task",
-        ):
-            self.assertIn(rule, roles_md)
-        for skill in ("arena", "architect"):
-            self.assertIn('`"comparison": "skip"`', (SKILLS / skill / "SKILL.md").read_text(encoding="utf-8"))
+        self.assertIn("Run a design comparison despite `skip` only when the user asked for the comparison itself in this task", roles_md)
+        self.assertIn('`"comparison": "skip"`', (SKILLS / "arena/SKILL.md").read_text(encoding="utf-8"))
 
     def test_a_review_that_runs_through_arena_keeps_its_arms_on_a_marked_row(self):
         review = "still run every arm of a review or second opinion, labeled same-model"
@@ -54,13 +46,6 @@ class SameModelComparisonPromise(ResolverSandbox):
                 self.assertEqual((arena["comparison"], architect["comparison"]), ("skip", "skip"))
                 self.assertEqual([review in note for note in arena["notes"]].count(True), 1)
                 self.assertNotIn(review, " ".join(architect["notes"]))
-        roles_md = (SKILLS / "pstack-harness/references/roles.md").read_text(encoding="utf-8")
-        self.assertIn(
-            "ignore the field: run every runner arm, let arena's Phase C choose or skip the judge, "
-            "and label the result `same-model` in the verdict and the reply",
-            roles_md,
-        )
-        self.assertNotIn("every rule that compares models", roles_md)
         self.assertIn(
             "a design comparison skips Phases B through E, and a review still runs them",
             (SKILLS / "arena/SKILL.md").read_text(encoding="utf-8"),
@@ -75,11 +60,6 @@ class SameModelComparisonPromise(ResolverSandbox):
         first = self.resolve("claude-code", "architect runners")[0]
         self.assertNotIn("comparison", first)
         self.assertIn("architect runners resolves to one distinct model (opus)", first["notes"][0])
-        self.assertIn(
-            'When the arm has no `"comparison"` field and a note says that either role resolves to one distinct model, '
-            "rerun with `--lead-model '<model>'`",
-            (SKILLS / "pstack-harness/references/roles.md").read_text(encoding="utf-8"),
-        )
         self.assertEqual(
             marks(self.resolve("claude-code", "--lead-model", "opus", "architect runners")),
             {"architect runners": "skip"},

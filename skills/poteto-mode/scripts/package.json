@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "bun test ../../../tests/skills/poteto-mode/scripts",
-    "typecheck": "tsc --project watch-pr/tsconfig.json --noEmit --strict && tsc --project orch/tsconfig.json --noEmit --strict && tsc --project ../../../tests/skills/poteto-mode/scripts/tsconfig.json --noEmit --strict"
+    "typecheck": "tsc --project watch-pr/tsconfig.json --noEmit --strict && tsc --project ../../../tests/skills/poteto-mode/scripts/tsconfig.json --noEmit --strict"
   },
   "dependencies": {
     "commander": "15.1.0"

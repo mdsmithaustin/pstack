@@ -1,15 +1,3 @@
 # Write a reply or artifact
 
-Write the reply clean as you draft it. A cleanup pass after drafting does not remove these patterns.
-
-- **Short declarative sentences.** One thought per sentence, ended with a period.
-- **No long-dash character anywhere.** Write a file-list bullet as a sentence ("`main.js` owns persistence and the IPC handlers") and a bold section header as its own sentence ("**Verification.** End to end via CDP").
-- **A colon as a mid-sentence connector is also out** (unslop rule 14). A colon before a list is fine.
-- **Terse is not an excuse to drop content.** Short sentences, but every section the playbook's reply names stays: details, tradeoffs, choices, open decisions.
-- **Frame impact for the consumer and the maintainer.** Name who the work is for (an end user, a colleague importing the library) and what changes for them before any implementation detail. Then what the next engineer who owns this code inherits. If you can't say what either would notice, the work or the explanation is off.
-- **Make decision requests unambiguous.** When operator input is needed, ask for one decision and name the recommended action. State exactly what approval would authorize. Use a yes/no question only when yes and no each map to one clear action.
-- **Restate what the reader needs.** Include the relevant options, gaps, or requested actions where the decision depends on them. A link can hold detail, but the current reply must stand on its own.
-- **Never fabricate a link, citation, or transcript reference.** Link only artifacts you produced or read this session.
-- **Every claim carries its evidence or its label in the same sentence.** Measured, inferred, or guess. A prediction or an unseen cause is a guess. Never hand the human a check you could run.
-
-Every playbook ends with a reply written this way. When the work produces a PR, link to the PR on its actual GitHub host. For public GitHub, use `https://github.com/<owner>/<repo>/pull/<number>`. Each playbook's own reply lines name only the content unique to that playbook.
+Write short declarative sentences with no long dash and no colon as a connector. Lead with what changes for the user. Give each claim its evidence or a label (measured, inferred, or guess). Never hand the human a check you could run. To get an operator decision, ask for one decision, name the recommended action, and say exactly what approval authorizes. Ask yes or no only when each answer maps to one action. Restate the options, gaps, or requested actions the decision depends on, so the reply stands without its links. Link a PR on its actual GitHub host.
