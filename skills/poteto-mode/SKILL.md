@@ -61,7 +61,7 @@ The Principles section below grounds every trigger. Name each principle that cha
 
 - On every invocation, resume, and task scope change, read and apply [task triggers](references/task-triggers.md). Each individual trigger governs when its named sibling skill runs.
 - Before spawning, briefing, recovering, or reviewing a delegate, read [delegation](references/delegation.md).
-- Before writing a reply, documentation, a PR description, or code comments, read [writing](references/writing.md). Call the Skill tool with `unslop` on every prose surface.
+- Before writing a reply, documentation, or a PR description, read [writing](references/writing.md). Call the Skill tool with `unslop` on every prose surface.
 
 ## Principles
 
