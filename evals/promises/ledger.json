@@ -7925,6 +7925,15 @@
    ],
    "text": "An approval you type clears a block only when it names the action and its specifics, such as the branch of a force push, and it covers that one action."
   },
+  "5b1025259412": {
+   "class": "promise",
+   "file": "06-verify-and-ship.md",
+   "promise": "opening-a-pr-selected-body-format",
+   "sources": [
+    "port"
+   ],
+   "text": "Unless you or a repository template sets the format, Poteto uses the default sections in [Opening a PR](../../skills/poteto-mode/playbooks/opening-a-pr.md)."
+  },
   "5b1ba247b639": {
    "class": "promise",
    "file": "09-make-it-yours.md",
@@ -8420,15 +8429,6 @@
     "port"
    ],
    "text": "Babysit reports a conflict instead of resolving it, and pushes nothing to that PR until its owner rebases."
-  },
-  "668f09989d76": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "opening-a-pr-selected-body-format",
-   "sources": [
-    "port"
-   ],
-   "text": "Poteto uses the repository's selected PR template or documented format."
   },
   "670984349ecf": {
    "class": "context",
@@ -10326,15 +10326,6 @@
     "port"
    ],
    "text": "\"don't ask me before committing\" pre-answers commit permission for the loop's per-iteration commits. A playbook that ends in a PR commits without asking anyway, as [Open the PR](./06-verify-and-ship.md#open-the-pr) explains."
-  },
-  "98be6a0a22ac": {
-   "class": "promise",
-   "file": "06-verify-and-ship.md",
-   "promise": "opening-a-pr-selected-body-format",
-   "sources": [
-    "port"
-   ],
-   "text": "Without one, it keeps Why, What changed, Scope, Blast Radius, and Verification, with Tradeoffs when needed."
   },
   "991be44a8207": {
    "class": "context",
