@@ -1,6 +1,6 @@
 # More playbooks
 
-Read this reference when the mode entry sends a task here. Match the task to one playbook, then print its plan as the entry says. The playbook id is the file name without `.md`.
+The playbook id is the file name without `.md`.
 
 - **Research.** External, domain, or dependency evidence for a decision: check current support, compare documented approaches, or investigate an unfamiliar domain. `playbooks/research.md`.
 - **Hillclimb.** Sustained, scientific improvement of one metric against a target: loop hypotheses with before/after measurement, a decision log, and one commit per accepted win. Distinct from Perf issue, which is a one-off fix. `playbooks/hillclimb.md`.

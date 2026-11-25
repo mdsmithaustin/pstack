@@ -1055,8 +1055,8 @@ class Manifest(unittest.TestCase):
 
     def test_a_lead_without_the_script_is_still_sent_to_the_gates_endpoint_and_scrutiny(self):
         triggers = (MODE / "references/task-triggers.md").read_text(encoding="utf-8")
-        line = next(line for line in triggers.split("\n") if line.startswith("- A gate the plan prints"))
-        self.assertIn("With no plan, run cleanup before every commit or amend", line)
+        line = next(line for line in triggers.split("\n") if line.startswith("- No plan → run cleanup"))
+        self.assertIn("No plan → run cleanup before every commit or amend", line)
         self.assertIn("(routes.md#endpoint)", line)
         self.assertIn("(review-lens.md#independent-scrutiny)", line)
         self.assertIn("## Endpoint", (MODE / "references/routes.md").read_text(encoding="utf-8"))

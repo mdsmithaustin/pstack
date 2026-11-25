@@ -10,7 +10,6 @@
    - A replacement resolves that role and arm per the same section, like any other spawn. Replace a slot only with its current predecessor id, and record the harness, model, and effort that will run it before dispatch. Preserve existing retries and permissions.
    - Resist the bias to re-derive completed work.
 
-   After a known compaction or truncation, follow the mode entry's [recovery rule](../SKILL.md#recover-after-compaction-or-truncation).
 3. Diff done vs pending. Compare what shipped against what was planned, name the resume point, do not re-run the prior repro or redo completed work. A "let me verify from scratch" pass means you're treating the trail as untrustworthy when it's authoritative.
 4. Verify the inherited claims against the original goal on the real artifact. Call the Skill tool with `principle-prove-it-works`. A passing prior self-report is not the proof.
 5. Route the remaining work to the matching playbook and pick the verdict: continue the execution, ship a finished recommendation, ratify or override a prior conclusion, or postmortem a failed run. The pickup playbook ends here. The routed playbook owns the rest.

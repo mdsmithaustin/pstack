@@ -479,13 +479,14 @@
   },
   "babysit-body-only-finding-acknowledged-in-pr-comment": {
    "check": "script",
-   "claim": "The watcher stops with the review-findings blocker (exit 8) on a bot review of the current head whose body proves a finding that no thread carries, under the evidence rules in `skills/poteto-mode/playbooks/babysit.md` step 6, until the PR author or an OWNER, MEMBER, or COLLABORATOR, never a bot, posts a PR comment that links that review's URL and does not start with the literal `<!-- pstack-recap:start -->` once leading whitespace is dropped. A marker later in the comment does not disqualify it. A body without that proof blocks nothing, whatever its format. A push that moves the head clears the blocker without a comment, and the watcher sees only the latest 100 reviews and the latest 100 PR comments.",
+   "claim": "The watcher stops with the review-findings blocker (exit 8) on a bot review of the current head whose body proves a finding that no thread carries, under the evidence rules in `skills/poteto-mode/scripts/watch-pr/README.md`, until the PR author or an OWNER, MEMBER, or COLLABORATOR, never a bot, posts a PR comment that links that review's URL and does not start with the literal `<!-- pstack-recap:start -->` once leading whitespace is dropped. A marker later in the comment does not disqualify it. A body without that proof blocks nothing, whatever its format. A push that moves the head clears the blocker without a comment, and the watcher sees only the latest 100 reviews and the latest 100 PR comments.",
    "harness_sensitive": false,
    "owners": [
     "skills/poteto-mode/scripts/watch-pr/policy.ts",
     "skills/poteto-mode/scripts/watch-pr/review-bodies.ts",
     "skills/poteto-mode/scripts/watch-pr/watch-pr",
-    "skills/poteto-mode/playbooks/babysit.md"
+    "skills/poteto-mode/playbooks/babysit.md",
+    "skills/poteto-mode/scripts/watch-pr/README.md"
    ]
   },
   "babysit-conflict-holds-pushes-not-triage": {
@@ -1064,7 +1065,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/references/delegation.md",
-     "quote": "Every brief names the original task text, spec, or issue by path and tells the delegate to read it in full."
+     "quote": "Write text that exists only in the conversation verbatim to a file, and pass it as `--source`."
     }
    ],
    "harness_sensitive": false,
@@ -1290,10 +1291,6 @@
     },
     {
      "file": "skills/poteto-mode/references/task-triggers.md",
-     "quote": "If the recheck does not return `pass`, report completion as pending with its open findings instead of starting another round."
-    },
-    {
-     "file": "skills/poteto-mode/references/task-triggers.md",
      "quote": "Repair the findings in one round, then recheck that repair. Rerun the full review instead when the repair changes behavior or contract claims."
     },
     {
@@ -1302,7 +1299,7 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/babysit.md",
-     "quote": "Send findings to the author for the one repair round that documentation-impact allows, then refresh the author result and, when required, the independent review verdict. If the recheck does not return `pass`, report its open findings as pending instead of starting another round."
+     "quote": "Repair findings under documentation-impact's round limit, then refresh both results."
     },
     {
      "file": "skills/poteto-mode/playbooks/babysit.md",
@@ -1521,17 +1518,18 @@
      "quote": "Use the lightweight route only when those facts support an understood, low-risk change. Material uncertainty, consequential failures, or contested design require the standard or intensive route."
     },
     {
-     "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "Keep `spec-probes`, preservation, real-surface proof, and independent scrutiny."
+     "file": "skills/poteto-mode/references/routes.md",
+     "quote": "Keep preservation, real-surface proof, and independent scrutiny."
     },
     {
-     "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "Implement directly without arena or implementation delegation."
+     "file": "skills/poteto-mode/references/routes.md",
+     "quote": "Spawn no investigation or implementation delegate and no panel."
     }
    ],
    "harness_sensitive": false,
    "owners": [
-    "skills/poteto-mode/playbooks/feature.md"
+    "skills/poteto-mode/playbooks/feature.md",
+    "skills/poteto-mode/references/routes.md"
    ]
   },
   "feature-settles-acceptance-tests-and-edges": {
@@ -2656,11 +2654,11 @@
   },
   "opening-a-pr-gated-unattended-continues-review-coverage": {
    "check": "static",
-   "claim": "In an unattended run, the agent answers a Review gate that parked only for incomplete coverage with the coverage continuation, without `--yes`, and reports the run as blocked only when Review parks again for incomplete coverage alone on the same head. Findings the continuation returns follow the ordinary gate rules.",
+   "claim": "In an unattended run, the agent answers a Review gate that parked only for incomplete coverage with the coverage continuation and reports the run as blocked only when Review parks again for incomplete coverage alone on the same head.",
    "evidence": [
     {
      "file": "skills/poteto-mode/references/gated-publish.md",
-     "quote": "Answer it with `no-mistakes axi respond --step review --action complete-coverage` and without `--yes`, which that action refuses."
+     "quote": "Answer it with `no-mistakes axi respond --step review --action complete-coverage`."
     },
     {
      "file": "skills/poteto-mode/references/gated-publish.md",
@@ -3370,10 +3368,6 @@
     },
     {
      "file": "skills/poteto-mode/playbooks/feature.md",
-     "quote": "The current code's behavior is the spec for everything the task does not explicitly change."
-    },
-    {
-     "file": "skills/poteto-mode/playbooks/feature.md",
      "quote": "Call the Skill tool with `principle-redesign-from-first-principles`."
     },
     {
@@ -3551,11 +3545,11 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/references/routes.md",
-     "quote": "The plan script maps the facts to a route. It needs no model, and the same facts give the same route on every CLI."
+     "quote": "The plan script maps the facts to a route."
     },
     {
      "file": "skills/poteto-mode/references/routes.md",
-     "quote": "A `low` with no evidence counts as `unknown`."
+     "quote": "Do not commission a model to classify the risk."
     }
    ],
    "harness_sensitive": false,

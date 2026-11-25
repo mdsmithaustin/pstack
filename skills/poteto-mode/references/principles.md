@@ -1,6 +1,6 @@
 # Principles
 
-Read this reference for a design or scope decision that no playbook step covers. Each entry names when its leaf applies. Before you apply one, call the Skill tool with its leaf skill's bare name. Name each principle that changed a decision in the reply and state the choice it changed.
+Read this reference for a design or scope decision that no playbook step covers. Each entry names when its leaf applies.
 
 **Core**
 

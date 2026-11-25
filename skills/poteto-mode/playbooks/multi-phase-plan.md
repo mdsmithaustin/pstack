@@ -38,7 +38,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 
 - [ ] State the protocol and this plan to the operator, then stop. Start execution only on the operator's explicit go.
 - [ ] In private, untracked run state, record the absolute `PSTACK_SKILLS_ROOT`, `PSTACK_SOURCE_ROOT`, and `PROJECT_ROOT` bindings. Call the Skill tool with `pstack-harness`, which defines them. Record whether this program owns `PSTACK_TEMP_ROOT`. Keep concrete host paths out of this plan and other shared files.
-- [ ] Read these from trunk at program start. Re-read them at every tick. If a fetch fails at a tick, skip that tick's drift fix, run the rest of the tick, and record the failed fetch in the trail.
+- [ ] Read these from trunk at program start. Re-read them at every tick.
   - [ ] `git -C "${PSTACK_SOURCE_ROOT:?}" fetch origin '+refs/heads/main:refs/remotes/origin/main' && git -C "$PSTACK_SOURCE_ROOT" show 'origin/main:skills/poteto-mode/playbooks/<execution playbook>.md'`
   - [ ] `git -C "${PSTACK_SOURCE_ROOT:?}" fetch origin '+refs/heads/main:refs/remotes/origin/main' && git -C "$PSTACK_SOURCE_ROOT" show 'origin/main:skills/swarm/SKILL.md'`
   - [ ] `git -C "${PROJECT_ROOT:?}" show "origin/main:$CONTROL_SKILL_PATH"`
@@ -70,7 +70,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 ### Verdict and merge, for every PR
 
 - [ ] Verify the round per `playbooks/autopilot-full.md` step 4, which defines when to run a full swarm, what a single verifier re-runs, and that a wording-only change gets no verifier. For a full swarm, run the lanes below. Call the Skill tool with `swarm`. One gates lane. The ten live lanes from the PR's **Verify, live** block. The perf lane from its **Verify, perf** block. Two or more audit lanes, each with its own focus, that read the diff and the receipts and distrust the PR body. The root audits the receipts in the merge-ready report before the verdict.
-- [ ] Clean only when every lane is `PASS`, or when every remaining finding went to a follow-up issue (`PASS+NOTES`). Judge every finding by the blocking rule and finding bar in `playbooks/autopilot-full.md` step 4, notes included. Blocking findings go back to the owner, and its third-`FAIL` stop applies. A failure on trunk behavior in a lane marked `Regression lane against trunk.` is recorded against trunk and does not block the PR. Other true findings become follow-up issues, except security, privacy, auth, data, and permission-boundary findings, which go to the operator directly. A new head gets a fresh verdict, except for results that stay valid under the patch-id rule in `playbooks/shipping.md`.
+- [ ] Clean only when every lane is `PASS`, or when every remaining finding went to a follow-up issue (`PASS+NOTES`). Judge every finding by the blocking rule and finding bar in `playbooks/autopilot-full.md` step 4, notes included. A failure on trunk behavior in a lane marked `Regression lane against trunk.` is recorded against trunk and does not block the PR. Other true findings become follow-up issues, except security, privacy, auth, data, and permission-boundary findings, which go to the operator directly. A new head gets a fresh verdict, except for results that stay valid under the patch-id rule in `playbooks/shipping.md`.
 - [ ] <The merge or handoff rule from the execution playbook, with the patch-id rule from `playbooks/shipping.md`.>
 
 ### Boot recipe, for every live lane
@@ -105,7 +105,7 @@ Each live lane runs in its own isolated worktree at the PR head. Drive through t
 
 - [ ] <Test file and the case it gains.> Run `<command>`.
 
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `<swarm workers model>` at the PR head, per the boot recipe, for each full swarm. For later rounds, follow the single-verifier rule in `playbooks/autopilot-full.md` step 4.
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `<swarm workers model>` at the PR head, per the boot recipe.
 
 - [ ] Lane 1. Regression lane against trunk. Run <the same load-bearing scenario> at trunk and head. If trunk lacks the feature, record that and gate <the behavior the diff adds plus the end state the user waits for>. Save `<slug>.png`. Pass when <predicate>.
 - [ ] Lane 2. <Scenario.> Save `<slug>.png`. Pass when <predicate>.
