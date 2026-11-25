@@ -51,7 +51,6 @@ SCRATCH_ROOTS = {
 BOOTSTRAP_MODULES = Path("poteto-mode/scripts/node_modules")
 # Grade refusals about the grader or its controller rather than the run: every later case would refuse the same way.
 BATCH_REFUSALS = ("boundary_unavailable", "unknown_authorization")
-# The shipped role defaults. The resolver ranks the project's `.agents/` copy above the user's own file.
 MODELS_EXAMPLE = Path("setup-pstack/examples/pstack-models.md")
 MEANINGS = ("eval", "evals", "evaluation", "judge", "experiment", "rubric", "score", "compare",
             "benchmark", "candidate", "arena", "promise", "promises", "oracle", "verdict")
