@@ -113,6 +113,7 @@ class PortableSkillPaths(unittest.TestCase):
         source: Path | None = None,
         env: dict[str, str] | None = None,
         needs_source: bool = False,
+        needs_project: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         values = (env or self.env).copy()
         values["PSTACK_HARNESS_SKILL"] = str(invoked)
@@ -123,6 +124,8 @@ class PortableSkillPaths(unittest.TestCase):
         blocks = ["set -eu", self._root_script()]
         if needs_source:
             blocks.append(shell_block(PORTABLE_PATHS, "## Resolve the pstack source root"))
+        if needs_project:
+            blocks.append(shell_block(PORTABLE_PATHS, "## Resolve the consumer project root"))
         blocks.append(extra)
         script = "\n".join(blocks) + "\n"
         return run(["sh", "-c", script], self.consumer, values)
@@ -166,6 +169,21 @@ class PortableSkillPaths(unittest.TestCase):
                 self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
                 self.assertIn("pstack-v2", second.stdout)
                 self.assertNotIn("pstack-v1", second.stdout)
+
+    def test_control_skill_read_uses_the_consumer_root(self) -> None:
+        command = f"CONTROL_SKILL_PATH=control.md\n{inline_command(PORTABLE_PATHS, 'CONTROL_SKILL_PATH')}"
+        result = self._run_contract(self.source / "skills/pstack-harness/SKILL.md", command, needs_project=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout.strip(), "consumer-only")
+
+        outside = self.base / "not a worktree"
+        outside.mkdir()
+        restored = self.env.copy()
+        restored["PROJECT_ROOT"] = str(outside)
+        stopped = self._run_contract(self.source / "skills/pstack-harness/SKILL.md", command, env=restored, needs_project=True)
+        self.assertNotEqual(stopped.returncode, 0)
+        self.assertIn("PROJECT_ROOT is not a Git worktree", stopped.stderr)
+        self.assertNotIn("consumer-only", stopped.stdout)
 
     def test_copied_install_clones_canonical_source_and_cleans_only_its_clone(self) -> None:
         copied = self._copied_install()

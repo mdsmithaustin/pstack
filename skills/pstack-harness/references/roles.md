@@ -7,13 +7,11 @@ Retain the exact raw `--work-model` argument from the final successful resolver 
 Build each spawn in this order.
 
 1. **Name the role and the persona** as the harness skill's **Spawn a role** step 1 says. Neither one picks the model or the effort.
-2. **Resolve the role** as the harness skill's **Spawn a role** step 2 says, adding `--work-model '<model>@<effort>'` or `--lead-model '<model>'` where the rules below call for them. Relay each note to the user in the reply. The rules, and the grammar for editing the files, live in setup-pstack's [models config reference](../../setup-pstack/references/models-config.md).
+2. **Resolve the role** as the harness skill's **Spawn a role** step 2 says, adding `--work-model '<model>@<effort>'` where the rules below call for it. Relay each note to the user in the reply. The rules, and the grammar for editing the files, live in setup-pstack's [models config reference](../../setup-pstack/references/models-config.md).
    - For `trail reviewer`:
      - When the exit 2 names `--work-model`, follow its message, drop any `[1m]` suffix, and rerun. If the work ran on another vendor's model, rerun without the flag: every Claude Code arm is a Claude model, so the printed arm is cross-model. Otherwise rerun without the flag and disclose the execution identity per step 5.
      - A `"step": "same-model"` field marks a same-model review, and its note says why. Report that resolution and disclose the execution identity per step 5.
    - If the resolver exits nonzero or cannot run, spawn as the harness skill's step 2 says. For `trail reviewer`, disclose the execution identity per step 5.
-
-   Run a design comparison despite `skip` only when the user asked for the comparison itself in this task: they invoked `arena` by name, asked for candidates, a panel, or a count, or named models. A playbook step, a trigger, or a skill that loads `arena` or `architect` for a design comparison is not that request. Say in the reply that the panel ran at the user's request, and name the model each arm ran on.
 3. **Build the spawn call** as the harness skill's step 3 says.
 4. **Brief the persona** per the [persona contract](named-roles.md).
 5. **Report execution without dropping an arm.** Apply this step to every spawn, including a `trail reviewer` that normally resolves to `inherit-parent` without a fallback or `step` marker.

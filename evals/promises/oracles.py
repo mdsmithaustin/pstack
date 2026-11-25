@@ -1642,14 +1642,13 @@ DESIGN_BRIEF = re.compile(r"design candidate|candidate design|design sketch|arch
 SPAWN_TOOL_NAMES = {"Agent", "Task", "spawn_agent", "delegate_task", "spawn_subagent"}
 
 
-def design_fan_out(view, read_alone=True):
+def design_fan_out(view):
     runners = runner_spawns(view)
-    briefed = [r for r in view.all_reads() if r == "architect/references/runner-prompt.md"]
-    answered = read_answered(view, "architect/references/runner-prompt.md")
+    answered = read_answered(view, "arena/SKILL.md")
     briefs_after = [spawn for spawn in view.spawns if answered is not None and (spawn.get("seq") or 0) > answered]
     signals = []
-    if briefed and (read_alone or (view.encrypted() and len(briefs_after) >= 2)):
-        signals.append("read architect/references/runner-prompt.md to brief runners")
+    if view.encrypted() and len(briefs_after) >= 2:
+        signals.append(f"read arena/SKILL.md, then {len(briefs_after)} sealed spawns")
     if len(runners) >= 2:
         signals.append(f"{len(runners)} design runner spawns")
     attempted = sum(len(DESIGN_BRIEF.findall(json.dumps(c.get("input") or {}))) for c in view.tool_calls
@@ -1675,7 +1674,7 @@ def design_ladder(view):
 
 @oracle("poteto-mode-triggers-architect-on-boundary-crossing")
 def architect_on_boundary(view):
-    signals = design_fan_out(view, read_alone=False)
+    signals = design_fan_out(view)
     evidence = [f"fan-out signals: {signals}"]
     if signals:
         return passed(*evidence)
@@ -1788,8 +1787,6 @@ def compact_implements_directly(view):
         return failed("compact case dispatched design alternatives", evidence)
     if any(role in WRITER_ROLES for role in roles):
         return failed("compact case delegated implementation", evidence)
-    if "architect/references/runner-prompt.md" in view.all_reads():
-        return failed("compact case read the architect runner instructions", evidence)
     base = view.base_shas()
     paths = (view.case.get("expect") or {}).get("implementation_paths")
     if not base or not paths:
@@ -1806,7 +1803,7 @@ def compact_implements_directly(view):
     if any(role not in READER_ROLES and role not in NO_CODE_AGENTS for role in roles):
         return inconclusive("a spawn assignment has no recognized original structured role", evidence)
     return passed("Feature record and changed case implementation paths in the supplied checkout",
-                  evidence, "no observed implementation role, named design role or architect runner instruction read",
+                  evidence, "no observed implementation role or named design role",
                   "no full-step worklist observed; equivalent expanded plans may not be recognized",
                   "correctness, acceptance, preservation, review status and risk grounds are not graded")
 
@@ -3715,7 +3712,7 @@ def runner_spawns(view):
     return [s for s in view.spawns_where(*needles, reply=False) if not view.supports(s)]
 
 
-COMPARISON_SKIP = re.compile(r'"comparison": "skip"|so skip the comparison per Spawn a role step 2')
+COMPARISON_SKIP = re.compile(r'"comparison": "skip"|so skip the comparison per arena Phase A step 3')
 
 
 def architect_skip_marked(view):

@@ -30,7 +30,7 @@ optional() {
 }
 
 optional bun "Stops: the GitHub PR watcher, and the merge gate. Babysit can poll with gh, PR recap can run bun through npx, and node can run its attachment helper."
-optional node "The statechart launcher can use bun or Deno 2.0 or newer."
+optional node "Stops: the statechart skill on native Windows. Elsewhere its launcher can use bun or Deno 2.0 or newer."
 optional gh "Stops: opening, watching, and landing GitHub pull requests, unless the Origin CLI can resolve the repository."
 
 exit "$status"

@@ -56,7 +56,7 @@ class CheckRuntimes(unittest.TestCase):
         code, lines = self.run_script()
         self.assertEqual(code, 0)
         self.assertEqual(lines["python3"], "3.9.0")
-        self.assertEqual(lines["node"], "missing. The statechart launcher can use bun or Deno 2.0 or newer.")
+        self.assertEqual(lines["node"], "missing. Stops: the statechart skill on native Windows. Elsewhere its launcher can use bun or Deno 2.0 or newer.")
         for name in ("bun", "gh"):
             self.assertTrue(lines[name].startswith("missing. Stops: "), lines[name])
 

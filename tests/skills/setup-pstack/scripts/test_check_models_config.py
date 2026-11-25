@@ -1823,10 +1823,10 @@ class PanelDiversityNote(ResolveRunner, unittest.TestCase):
 
 SKIP_ACTIONS = {
     "arena runners": (
-        "so skip a design comparison per Spawn a role step 2, "
+        "so skip a design comparison per arena Phase A step 3, "
         "and still run every arm of a review or second opinion, labeled same-model"
     ),
-    "architect runners": "so skip the comparison per Spawn a role step 2",
+    "architect runners": "so skip the comparison per arena Phase A step 3",
 }
 
 

@@ -33,8 +33,6 @@ class SameModelComparisonPromise(ResolverSandbox):
         self.assertEqual(
             marks(self.resolve("hermes", *ROLES)), {"arena runners": "skip", "architect runners": "skip"},
         )
-        roles_md = (SKILLS / "pstack-harness/references/roles.md").read_text(encoding="utf-8")
-        self.assertIn("Run a design comparison despite `skip` only when the user asked for the comparison itself in this task", roles_md)
         self.assertIn('`"comparison": "skip"`', (SKILLS / "arena/SKILL.md").read_text(encoding="utf-8"))
 
     def test_a_review_that_runs_through_arena_keeps_its_arms_on_a_marked_row(self):
@@ -55,7 +53,7 @@ class SameModelComparisonPromise(ResolverSandbox):
             (SKILLS / "blast-radius/SKILL.md").read_text(encoding="utf-8"),
         )
 
-    def test_the_one_model_note_without_the_field_is_what_triggers_the_rerun(self):
+    def test_a_one_model_panel_gets_a_note_and_is_marked_only_with_the_lead_model(self):
         self.write_user("arena runners, architect runners, arena cross-judge pool: opus, opus\n")
         first = self.resolve("claude-code", "architect runners")[0]
         self.assertNotIn("comparison", first)

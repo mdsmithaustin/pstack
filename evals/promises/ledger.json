@@ -3434,13 +3434,12 @@
   },
   "same-model-design-comparison-skipped": {
    "check": "script",
-   "claim": "When the resolver marks an arena or architect design comparison `skip`, the lead spawns no runner and no judge, produces the artifact itself, and says so. The resolver marks it when every runner arm and every cross-judge arm inherits the lead's model or resolves to the model passed as `--lead-model`, at any effort. A panel that mixes a named model with inheriting arms and is resolved without `--lead-model` is not marked and runs as configured. A user request for the comparison itself still runs the panel. An arena run that reviews finished work still runs every arm on a marked row, labeled `same-model`, and delegation that protects the lead's context and required reviews are unaffected.",
+   "claim": "When the resolver marks an arena or architect design comparison `skip`, the lead spawns no runner and no judge, produces the artifact itself, and says so. The resolver marks it when every runner arm and every cross-judge arm inherits the lead's model or resolves to the model passed as `--lead-model`, at any effort. A panel whose arms name models is resolved without `--lead-model`, so it is not marked and runs as configured. An arena run that reviews finished work still runs every arm on a marked row, labeled `same-model`, and delegation that protects the lead's context and required reviews are unaffected.",
    "harness_sensitive": true,
    "owners": [
     "skills/setup-pstack/scripts/check-models-config.py",
-    "skills/pstack-harness/references/roles.md",
+    "skills/setup-pstack/references/models-config.md",
     "skills/arena/SKILL.md",
-    "skills/architect/SKILL.md",
     "skills/blast-radius/SKILL.md"
    ]
   },
@@ -4121,7 +4120,7 @@
     },
     {
      "file": "skills/pstack-harness/references/roles.md",
-     "quote": "adding `--work-model '<model>@<effort>'` or `--lead-model '<model>'` where the rules below call for them"
+     "quote": "adding `--work-model '<model>@<effort>'` where the rules below call for it"
     }
    ],
    "harness_sensitive": false,
@@ -9086,15 +9085,6 @@
    ],
    "text": "You give it a goal, it matches one of twenty-two playbooks, copies that playbook's steps into the todo list, and calls the other skills as the steps need them."
   },
-  "757df0d53347": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "same-model-design-comparison-skipped",
-   "sources": [
-    "port"
-   ],
-   "text": "It marks a panel whose arms all name the coordinator's model once the coordinator passes that model, which it does when the resolver notes that the panel runs on one model."
-  },
   "75bc08340d22": {
    "class": "promise",
    "file": "04-design.md",
@@ -9207,6 +9197,15 @@
     "port"
    ],
    "text": "Until then, including after an update from a version that gated those skills in their frontmatter, Claude Code shows their descriptions and can load them on its own."
+  },
+  "79911ecddb8d": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "A panel whose arms name models runs as configured."
   },
   "79ade876d091": {
    "also": [
@@ -10928,15 +10927,6 @@
     "port"
    ],
    "text": "Prompt plainly, watch where agents fail, and add a skill or a check when the same failure shows up twice."
-  },
-  "a9d8fa2c2b61": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "same-model-design-comparison-skipped",
-   "sources": [
-    "port"
-   ],
-   "text": "Ask for `/arena` or for candidates yourself and the panel still runs."
   },
   "a9e537532361": {
    "class": "cursor-only",
@@ -12996,15 +12986,6 @@
     "port"
    ],
    "text": "If you ran `/setup-pstack` before the `## claude-code` section shipped, your file holds the old shipped table as flat lines."
-  },
-  "de22177b43c1": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "same-model-design-comparison-skipped",
-   "sources": [
-    "port"
-   ],
-   "text": "A panel that mixes a named model with inheriting arms prints no such note, so when it is resolved without the coordinator's model it runs as configured."
   },
   "de373bcfdb7b": {
    "class": "substituted",

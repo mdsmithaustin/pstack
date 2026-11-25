@@ -4,7 +4,7 @@
 The scan covers tracked markdown under skills/ that is still present on disk, so deleted
 files, an installed node_modules, or another untracked file never fail it. Root agents/*.md
 is out of scope because PORTING.md keeps it as upstream text, including Comment Sicko's
-/how and /why and poteto-agent's /poteto-mode.
+/why and poteto-agent's /poteto-mode.
 """
 from __future__ import annotations
 
