@@ -11,20 +11,11 @@ Every candidate gets the same prompt, so the prompt is the contract.
 
 1. Name the requested artifact.
 2. Derive the rubric, 3-6 concrete gradeable criteria for what success looks like on *this* task. For subjective criteria, use [Eval's criterion and calibration guidance](../poteto-mode/playbooks/eval.md). It is the picker's tool in Phase D. Candidates only see the task.
-3. Call the Skill tool with `pstack-harness` and resolve `arena runners` using **Spawn a role**. Open a worklist with one entry per phase before launching anything. Use the first arm's `comparison` field and the requested artifact to choose the worklist for the entire run.
+3. Call the Skill tool with `pstack-harness` and resolve `arena runners` using **Spawn a role**. Before launch, list each phase on the worklist. If the first arm has `"comparison": "skip"`:
+   - For a design comparison, skip Phases B through E. Write the artifact yourself.
+   - For a review or second opinion, run every arm, label each `same-model` per blast-radius step 6, and skip only Phase C.
 
-   When `"comparison": "skip"` and the task is a **new design**, there are zero runners and one artifact. Use this worklist:
-   - A. Frame the design. The lead writes it directly.
-   - B. Fan out, C. Cross-judge, D. Pick, E. Graft: all skipped.
-   - F. Verify the lead's design.
-
-   When `"comparison": "skip"` and the task is a **review or second opinion**, only the cross-judge is skipped. Use this worklist:
-   - A. Frame the review.
-   - B. Fan out to every configured reviewer. Label each review `same-model` per blast-radius step 6.
-   - C. Cross-judge: skipped.
-   - D. Pick the base review. E. Graft findings from the others. F. Verify the synthesis.
-
-   Otherwise list all six phases, with one runner per entry (defaults: `fable`, `opus`, `sonnet`). Add runners when the arena covers more design directions.
+   Otherwise run all phases with one runner per entry (default: `fable`, `opus`, `sonnet`). Add runners for more designs.
 4. For routes with runners, give each candidate its own output location (a git worktree where possible, otherwise `candidate-<n>/` inside a fresh `mktemp -d "${TMPDIR:-/tmp}/arena-<slug>.XXXXXX"` made for this run). Call the Skill tool with `principle-separate-before-serializing-shared-state`. Never reuse an earlier run's directory.
    - A native isolation option counts only when it makes a git worktree, where `git -C <its path> rev-parse --path-format=absolute --git-common-dir` prints the project's. Grok Build's `isolation: worktree` can make a standalone clone, so spawn there with `isolation: none`. If you omit the field, a Grok role or persona default can still turn isolation on.
    - Make every other candidate worktree yourself, one at a time, with `git worktree add --detach <run dir>/candidate-<n>`, where `<run dir>` is that fresh `mktemp -d`, and name the path in the candidate's brief. If an add fails, remove the worktrees already made and give every candidate a plain directory there instead, so all candidates start alike.
