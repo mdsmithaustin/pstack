@@ -1645,10 +1645,13 @@ SPAWN_TOOL_NAMES = {"Agent", "Task", "spawn_agent", "delegate_task", "spawn_suba
 def design_fan_out(view):
     runners = runner_spawns(view)
     answered = read_answered(view, "arena/SKILL.md")
-    briefs_after = [spawn for spawn in view.spawns if answered is not None and (spawn.get("seq") or 0) > answered]
+    all_briefs_hidden = all(not spawn.get("prompt_head") for spawn in view.spawns)
+    sealed_after = [spawn for spawn in view.spawns
+                    if answered is not None and (spawn.get("seq") or 0) > answered
+                    and spawn.get("x_prompt_encrypted", all_briefs_hidden)]
     signals = []
-    if view.encrypted() and len(briefs_after) >= 2:
-        signals.append(f"read arena/SKILL.md, then {len(briefs_after)} sealed spawns")
+    if len(sealed_after) >= 2:
+        signals.append(f"read arena/SKILL.md, then {len(sealed_after)} sealed spawns")
     if len(runners) >= 2:
         signals.append(f"{len(runners)} design runner spawns")
     attempted = sum(len(DESIGN_BRIEF.findall(json.dumps(c.get("input") or {}))) for c in view.tool_calls

@@ -5300,6 +5300,18 @@ class Issue133WritesAndReruns(unittest.TestCase):
         late = [read(0, "poteto-mode/playbooks/feature.md"), read(5, "arena/SKILL.md")]
         self.assertEqual(grade(pid, minimal(events=late, spawns=sealed, harness="codex", final_reply="done"), case)["verdict"], FAIL)
 
+    def test_sealed_design_evidence_counts_only_sealed_spawns_after_arena(self):
+        case = load_case("feature-boundary-run")
+        events = [read(4, "arena/SKILL.md")]
+        unrelated = {"seq": 6, "tool": "spawn_agent", "prompt_head": "Read the license."}
+        for sealed_seq in (2, 5):
+            with self.subTest(sealed_seq=sealed_seq):
+                spawns = [{"seq": sealed_seq, "tool": "spawn_agent", "x_prompt_encrypted": True},
+                          unrelated, {**unrelated, "seq": 7}]
+                trace = minimal(events=events, spawns=spawns, harness="codex", final_reply="done")
+                result = grade("poteto-mode-triggers-architect-on-boundary-crossing", trace, case)
+                self.assertEqual(result["verdict"], FAIL, result)
+
     def test_hermes_audit_the_keeps_going_count_names_its_turn(self):
         events = in_turn(0, [{"seq": 0, "kind": "user", "text": "going to bed"}] + bash(1, "ls")) + in_turn(1, [{"seq": 5, "kind": "user", "text": "catch up"}] + bash(6, "ls"))
         result = grade("session-override-keeps-going", minimal(events=events), load_case("overnight-run"))
