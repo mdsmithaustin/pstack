@@ -863,13 +863,14 @@ class RepositoryEndpoint(unittest.TestCase):
     def test_a_git_call_that_hangs_counts_as_its_failure(self):
         real = shutil.which("git")
         project = self.repo("https://github.com/o/r.git")
-        for call, expected in (("rev-parse --local-env-vars", "once Git is available"), ("rev-parse --git-dir", "git init"),
-                               ("remote -v", "local branch")):
+        for call, expected in (("rev-parse --local-env-vars", "commits on a local branch once Git is available"),
+                               ("rev-parse --git-dir", "commits on a first local branch after `git init`"),
+                               ("remote -v", "commits on a local branch, with the branch and its diff command in the reply")):
             with self.subTest(call=call):
                 (self.bin / "git").unlink()
                 self.tool("git", f'case "$*" in *"{call}"*) exec /bin/sleep 30;; esac\nexec "{real}" "$@"')
                 endpoint, seconds = self.timed_endpoint(project)
-                self.assertIn(expected, endpoint)
+                self.assertEqual(endpoint, expected)
                 self.assertLess(seconds, 9)
 
     def test_ssh_lookups_share_one_deadline_and_leave_no_process_behind(self):
