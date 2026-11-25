@@ -3434,7 +3434,7 @@
   },
   "same-model-design-comparison-skipped": {
    "check": "script",
-   "claim": "On a resolver row marked `skip`, Arena's lead writes and verifies a new design alone. For a review or second opinion, it runs every configured reviewer with the `same-model` label, skips the cross-judge, and verifies the combined findings.",
+   "claim": "On a resolver row marked `skip`, Arena's lead writes and verifies a new design alone, unless the user explicitly asked for candidates, which then run labeled `same-model`. For a review or second opinion, it runs every configured reviewer with the `same-model` label, skips the cross-judge, and verifies the combined findings.",
    "harness_sensitive": true,
    "owners": [
     "skills/setup-pstack/scripts/check-models-config.py",
@@ -7160,15 +7160,6 @@
    ],
    "text": "Read the pages in order the first time."
   },
-  "4402ebf366a0": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "same-model-design-comparison-skipped",
-   "sources": [
-    "port"
-   ],
-   "text": "When the [model resolver](../../skills/setup-pstack/references/models-config.md#resolution) marks a comparison `skip`, the coordinator writes and verifies a new design itself, even if you ask for candidates."
-  },
   "44819d121894": {
    "class": "context",
    "file": "09-make-it-yours.md",
@@ -9841,6 +9832,15 @@
     "port"
    ],
    "text": "When you change subjects, say so:"
+  },
+  "89a5e75de3f0": {
+   "class": "promise",
+   "file": "04-design.md",
+   "promise": "same-model-design-comparison-skipped",
+   "sources": [
+    "port"
+   ],
+   "text": "When the [model resolver](../../skills/setup-pstack/references/models-config.md#resolution) marks a comparison `skip`, the coordinator writes and verifies a new design itself, unless you ask for candidates, which then run labeled `same-model`."
   },
   "89c6f6957bf6": {
    "class": "context",

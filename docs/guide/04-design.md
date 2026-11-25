@@ -38,7 +38,7 @@ flowchart LR
     H --> I[Verify]
 ```
 
-When the [model resolver](../../skills/setup-pstack/references/models-config.md#resolution) marks a comparison `skip`, the coordinator writes and verifies a new design itself, even if you ask for candidates. For a review or second opinion with that marker, every configured reviewer runs with the `same-model` label. The coordinator skips the cross-judge, picks a base review, combines the findings, and verifies the result.
+When the [model resolver](../../skills/setup-pstack/references/models-config.md#resolution) marks a comparison `skip`, the coordinator writes and verifies a new design itself, unless you ask for candidates, which then run labeled `same-model`. For a review or second opinion with that marker, every configured reviewer runs with the `same-model` label. The coordinator skips the cross-judge, picks a base review, combines the findings, and verifies the result.
 
 The panel comes from your [`/setup-pstack`](../../skills/setup-pstack/SKILL.md) configuration, and you can adjust it per task. Ask for more candidates when the decision matters, fewer when it doesn't:
 

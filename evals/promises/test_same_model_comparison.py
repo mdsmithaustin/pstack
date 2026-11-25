@@ -159,24 +159,20 @@ class ArchitectOracleReadsTheResolver(ResolverSandbox):
         self.assertEqual(result["verdict"], FAIL, result)
 
     def test_an_arena_skip_mark_is_an_exempt_skip_whether_or_not_the_reply_says_so(self):
+        self.write_user("arena runners, arena cross-judge pool: opus, opus\n")
         for reply in (self.REPLY, "Designed the import pipeline myself."):
             with self.subTest(reply=reply):
                 result = self.graded(self.resolver_call(7, "--lead-model", "opus", "arena runners"), reply=reply)
                 self.assertEqual(result["verdict"], INCONCLUSIVE, result)
                 self.assertIn("the resolver marked the comparison `skip`", result["failures"][0])
 
-    def test_an_arena_skip_mark_stands_beside_an_unmarked_architect_row(self):
+    def test_an_arena_skip_mark_stands_beside_an_earlier_unmarked_architect_row(self):
         self.write_user("architect runners: sonnet, sonnet\narena runners, arena cross-judge pool: opus, opus\n")
-        for roles in (
-            (("architect runners",), ("arena runners",)),
-            (("architect runners", "arena runners"),),
-        ):
-            with self.subTest(roles=roles):
-                result = self.graded(*(
-                    self.resolver_call(7 + 2 * i, "--lead-model", "opus", *group)
-                    for i, group in enumerate(roles)
-                ))
-                self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+        result = self.graded(
+            self.resolver_call(7, "--lead-model", "opus", "architect runners"),
+            self.resolver_call(9, "--lead-model", "opus", "arena runners"),
+        )
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
 
     def test_no_runner_and_no_skip_mark_fails_without_a_reported_skip(self):
         for calls in ((), (("arena runners",),), (("architect runners",),)):

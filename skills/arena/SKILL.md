@@ -12,7 +12,7 @@ Every candidate gets the same prompt, so the prompt is the contract.
 1. Name the requested artifact.
 2. Derive the rubric, 3-6 concrete gradeable criteria for what success looks like on *this* task. For subjective criteria, use [Eval's criterion and calibration guidance](../poteto-mode/playbooks/eval.md). It is the picker's tool in Phase D. Candidates only see the task.
 3. Call the Skill tool with `pstack-harness` and resolve `arena runners` using **Spawn a role**. Before launch, list each phase on the worklist. If the first arm has `"comparison": "skip"`:
-   - For a design comparison, skip Phases B through E. Write the artifact yourself.
+   - For a design comparison, skip Phases B through E and write the artifact yourself. If the user explicitly asked for candidates, run them anyway, labeled `same-model`.
    - For a review or second opinion, run every arm, label each `same-model` per blast-radius step 6, and skip only Phase C.
 
    Otherwise run all phases with one runner per entry (default: `fable`, `opus`, `sonnet`). Add runners for more designs.
