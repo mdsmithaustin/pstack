@@ -9,6 +9,10 @@ and the flags of code-changing playbooks come from routes.json beside the mode e
 
 A plan inspects the current directory for its default endpoint. Pass --project DIR
 to inspect another directory. DIR must exist and need not be in a Git repository.
+Each Git lookup has five seconds. If the first lookup times out, the plan treats
+Git as unavailable. A timeout checking for a repository gives "no Git repository".
+A timeout listing remotes gives "no remote". SSH alias lookups across all remotes
+share five seconds. The plan uses each unresolved alias as written.
 
 Use --step N to print the step's full text and the route's gates without inspecting
 a repository. For a routed playbook, include --route with the route the plan
