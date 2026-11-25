@@ -2929,7 +2929,7 @@
   },
   "poteto-mode-subagents-carry-poteto-agent": {
    "check": "static",
-   "claim": "Subagents that /poteto-mode spawns inside a playbook step carry the poteto-agent persona, which reads poteto-mode before work unless its brief names a narrow role.",
+   "claim": "Subagents that /poteto-mode spawns inside a playbook step carry the poteto-agent persona, which reads poteto-mode before work.",
    "evidence": [
     {
      "file": "skills/poteto-mode/references/delegation.md",
@@ -2938,10 +2938,6 @@
     {
      "file": "agents/poteto-agent.md",
      "quote": "Read the `poteto-mode` skill's `SKILL.md` in full before you start."
-    },
-    {
-     "file": "skills/poteto-mode/references/delegation.md",
-     "quote": "That delegate skips this skill's entry."
     }
    ],
    "harness_sensitive": false,
