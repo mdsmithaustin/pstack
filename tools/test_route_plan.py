@@ -873,17 +873,54 @@ class RepositoryEndpoint(unittest.TestCase):
                 self.assertEqual(endpoint, expected)
                 self.assertLess(seconds, 9)
 
-    def test_ssh_lookups_share_one_deadline_and_leave_no_process_behind(self):
+    def hanging_ssh(self):
         self.tool("gh")
         self.tool("ssh", '/bin/sleep 30 &\necho $! >> "$HOME/ssh-pids"\necho $$ >> "$HOME/ssh-pids"\nwait')
-        endpoint, seconds = self.timed_endpoint(self.repo("work:o/a.git", "home:o/b.git"))
-        pids = [int(pid) for pid in (self.root / "ssh-pids").read_text(encoding="utf-8").split()]
+        return self.root / "ssh-pids"
+
+    def assert_all_stopped(self, pid_file):
+        pids = [int(pid) for pid in pid_file.read_text(encoding="utf-8").split()]
         survivors = [pid for pid in pids if alive(pid)]
         for pid in survivors:
             os.kill(pid, signal.SIGKILL)
         self.assertEqual(survivors, [])
+
+    def test_ssh_lookups_share_one_deadline_and_leave_no_process_behind(self):
+        pid_file = self.hanging_ssh()
+        endpoint, seconds = self.timed_endpoint(self.repo("work:o/a.git", "home:o/b.git"))
+        self.assert_all_stopped(pid_file)
         self.assertEqual(endpoint, self.PUSHED)
         self.assertLess(seconds, 9, "two hanging lookups share one budget")
+
+    def test_a_lookup_timeout_without_process_groups_still_falls_back(self):
+        self.tool("gh")
+        self.tool("ssh", 'echo $$ > "$HOME/ssh-pids"\nexec /bin/sleep 30')
+        start = time.monotonic()
+        done = subprocess.run([sys.executable, "-c", "import os, runpy, sys; del os.killpg; sys.argv = sys.argv[1:]; "
+                               "runpy.run_path(sys.argv[0], run_name='__main__')", str(SCRIPT), "feature", *LOW,
+                               "--project", str(self.repo("work:o/r.git")), "--json"],
+                              capture_output=True, text=True, timeout=20, env={"PATH": str(self.bin), "HOME": str(self.root)})
+        self.assert_all_stopped(self.root / "ssh-pids")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads(done.stdout)["default_endpoint"], self.PUSHED)
+        self.assertLess(time.monotonic() - start, 9)
+
+    def test_an_interrupted_lookup_leaves_no_process_behind(self):
+        pid_file = self.hanging_ssh()
+        project = self.repo("work:o/r.git")
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            with self.subTest(signal=signum.name):
+                pid_file.unlink(missing_ok=True)
+                planner = subprocess.Popen([sys.executable, str(SCRIPT), "feature", *LOW, "--project", str(project)],
+                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
+                                           env={"PATH": str(self.bin), "HOME": str(self.root)})
+                deadline = time.monotonic() + 4
+                while not (pid_file.exists() and len(pid_file.read_text(encoding="utf-8").split()) == 2):
+                    self.assertLess(time.monotonic(), deadline, "the ssh stub never started")
+                    time.sleep(0.05)
+                os.killpg(planner.pid, signum)
+                planner.wait(timeout=10)
+                self.assert_all_stopped(pid_file)
 
     def test_the_project_decides_under_git_environment_variables(self):
         self.tool("gh")
