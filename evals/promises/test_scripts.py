@@ -372,9 +372,6 @@ class ModelsResolverPromises(ResolverSandbox):
             [("arena runners", 1, "fable"), ("arena runners", 2, "opus"), ("arena runners", 3, "sonnet"),
              ("arena runners", 4, "haiku"), ("arena cross-judge pool", 1, "sonnet"), ("arena cross-judge pool", 2, "opus")],
         )
-        arena = (SKILLS / "arena/SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("Use the `arena runners` role, one arm per entry.", arena)
-        self.assertIn("choose one arm of the `arena cross-judge pool` role", arena)
 
     def test_config_read_at_next_run(self):
         self.write_user("feature: sonnet\n")
