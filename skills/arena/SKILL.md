@@ -5,20 +5,27 @@ description: "Spawn N parallel candidates at the same task, pick a base, graft t
 
 # Arena
 
-Open a worklist with one entry per phase (Frame, Fan out, Cross-judge, Pick, Graft, Verify) before launching anything.
-
 ## Phase A: Frame
 
 Every candidate gets the same prompt, so the prompt is the contract.
 
-1. State the artifact each candidate is producing.
+1. Name the requested artifact.
 2. Derive the rubric, 3-6 concrete gradeable criteria for what success looks like on *this* task. For subjective criteria, use [Eval's criterion and calibration guidance](../poteto-mode/playbooks/eval.md). It is the picker's tool in Phase D. Candidates only see the task.
-3. Call the Skill tool with `pstack-harness` and resolve `arena runners` using **Spawn a role**. The first arm's `comparison` field applies to the whole runner and judge pool. Choose the route before preparing any candidates.
-   - **Design with `"comparison": "skip"`.** Mark Fan out, Cross-judge, Pick, and Graft skipped in the worklist. Produce the design yourself and continue at Phase F. This route has zero runners.
-   - **Review or second opinion with the same `"comparison": "skip"` marker.** Have every runner review the existing artifact in Phase B. Label their reviews `same-model` per blast-radius step 6. Every judge also resolves to the lead model, so skip the judge and proceed to Phase D.
-   - **Otherwise.** Run one arm per entry (defaults: `fable`, `opus`, `sonnet`). Add runners when the arena covers more design directions.
+3. Call the Skill tool with `pstack-harness` and resolve `arena runners` using **Spawn a role**. Open a worklist with one entry per phase before launching anything. Use the first arm's `comparison` field and the requested artifact to choose the worklist for the entire run.
 
-4. Give each candidate its own output location (a git worktree where possible, otherwise `candidate-<n>/` inside a fresh `mktemp -d "${TMPDIR:-/tmp}/arena-<slug>.XXXXXX"` made for this run). Call the Skill tool with `principle-separate-before-serializing-shared-state`. Never reuse an earlier run's directory.
+   When `"comparison": "skip"` and the task is a **new design**, there are zero runners and one artifact. Use this worklist:
+   - A. Frame the design. The lead writes it directly.
+   - B. Fan out, C. Cross-judge, D. Pick, E. Graft: all skipped.
+   - F. Verify the lead's design.
+
+   When `"comparison": "skip"` and the task is a **review or second opinion**, only the cross-judge is skipped. Use this worklist:
+   - A. Frame the review.
+   - B. Fan out to every configured reviewer. Label each review `same-model` per blast-radius step 6.
+   - C. Cross-judge: skipped.
+   - D. Pick the base review. E. Graft findings from the others. F. Verify the synthesis.
+
+   Otherwise list all six phases, with one runner per entry (defaults: `fable`, `opus`, `sonnet`). Add runners when the arena covers more design directions.
+4. For routes with runners, give each candidate its own output location (a git worktree where possible, otherwise `candidate-<n>/` inside a fresh `mktemp -d "${TMPDIR:-/tmp}/arena-<slug>.XXXXXX"` made for this run). Call the Skill tool with `principle-separate-before-serializing-shared-state`. Never reuse an earlier run's directory.
    - A native isolation option counts only when it makes a git worktree, where `git -C <its path> rev-parse --path-format=absolute --git-common-dir` prints the project's. Grok Build's `isolation: worktree` can make a standalone clone, so spawn there with `isolation: none`. If you omit the field, a Grok role or persona default can still turn isolation on.
    - Make every other candidate worktree yourself, one at a time, with `git worktree add --detach <run dir>/candidate-<n>`, where `<run dir>` is that fresh `mktemp -d`, and name the path in the candidate's brief. If an add fails, remove the worktrees already made and give every candidate a plain directory there instead, so all candidates start alike.
    - When the project has no commit, make each plain directory a clone of a snapshot repository. The fallback in the [delegation procedure](../pstack-harness/references/delegation.md) says how to make the snapshot and how to seed and brief each plain directory.
