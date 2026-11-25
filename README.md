@@ -44,7 +44,7 @@ a full `/setup-pstack` run checks these commands on your `PATH`. only `python3` 
 
 - **python3, 3.9 or newer.** runs the plan script, the model resolver, and the preserve gate.
 - **bun.** runs the GitHub PR watcher, and the merge gate. without bun on your `PATH`, babysit can poll with `gh`, PR recap can [run bun through npx](./skills/pr-recap/references/sketch.md#setup) to draw sketches, and node can run the attachment helper.
-- **node.** runs the multi-PR plan check. the [statechart launcher](./skills/statechart/scripts/statechart) accepts a node version with built-in TypeScript support, a supported bun version, or deno 2.0 or newer.
+- **node.** the [statechart launcher](./skills/statechart/scripts/statechart) accepts a node version with built-in TypeScript support, a supported bun version, or deno 2.0 or newer.
 - **gh.** the default CLI for opening, watching, and landing GitHub pull requests. the playbooks use the Origin CLI when it can resolve the repository.
 
 notes by CLI. confirm discovery in your installed version:
@@ -103,7 +103,7 @@ morning.
 | [babysit](./skills/poteto-mode/playbooks/babysit.md) | drive a pr or a stack to merge-ready: conflicts, review threads, ci. |
 | [shipping](./skills/poteto-mode/playbooks/shipping.md) | independently verify a green stack, then land the contiguous verified run bottom-up through github by default or origin when available. |
 | [autonomous run](./skills/poteto-mode/playbooks/autonomous-run.md) | drive a long task to completion without stopping. |
-| [autopilot-full](./skills/poteto-mode/playbooks/autopilot-full.md) | run independent prs to merged with one owner per pr. a swarm verifies each code-ready head, and every later change to the patch gets a fresh check. |
+| [autopilot-full](./skills/poteto-mode/playbooks/autopilot-full.md) | run independent prs to merged with one owner per pr. a swarm verifies each code-ready head. the playbook defines when later changes need another check. |
 | [autopilot-stack](./skills/poteto-mode/playbooks/autopilot-stack.md) | autopilot-full without the merge. build and verify prs for the operator to review and land, stacking a pr only on a pr it builds on. |
 | [session pickup](./skills/poteto-mode/playbooks/session-pickup.md) | resume or take over a prior agent's in-flight work. |
 | [pause safely](./skills/poteto-mode/playbooks/pause-safely.md) | suspend in-flight work cleanly so it can be resumed later. |

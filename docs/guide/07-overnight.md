@@ -97,7 +97,7 @@ A whole program, such as a migration across many packages, has no playbook of it
 
 ## Run a program from one coordinator chat
 
-One long-running chat can coordinate a whole body of work, such as a feature, a migration, a perf push, or a tech-debt cleanup. The coordinator doesn't write code. It directs subagents, which run on your machine. Start your prompts to the coordinator with `/poteto-mode`, and the subagents it spawns follow the playbooks.
+One long-running chat can coordinate a whole body of work, such as a feature, a migration, a perf push, or a tech-debt cleanup. If you want the coordinator to delegate all implementation to local subagents, say so in your prompt. Start your prompts to the coordinator with `/poteto-mode`, and the subagents it spawns follow the playbooks.
 
 A few habits help:
 

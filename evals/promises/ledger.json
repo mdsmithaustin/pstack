@@ -4,11 +4,11 @@
    "check": "live",
    "claim": "When the prompt asks to see the design before any code, /architect stops and shows the design before implementing.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompts `/architect design the import pipeline before writing any code.` and `/architect with checkpoint. stop and show me before implementing.`; pass when how runs first, arena produces sketches with caller usage first, the default run proceeds to code, and the checkpoint run pauses.",
+   "live_case": "See cases/architect-checkpoint-run/case.json for the fixture and sign-off request.",
    "owners": [
     "skills/architect/SKILL.md"
    ],
-   "scenario": "architect-run"
+   "scenario": "architect-checkpoint-run"
   },
   "architect-runs-arena-for-sketches": {
    "check": "live",
@@ -41,7 +41,7 @@
    "check": "live",
    "claim": "/architect settles types, signatures, and module boundaries before implementation code is written.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompts `/architect design the import pipeline before writing any code.` and `/architect with checkpoint. stop and show me before implementing.`; pass when how runs first, arena produces sketches with caller usage first, the default run proceeds to code, and the checkpoint run pauses.",
+   "live_case": "See cases/architect-run/case.json for the contested design brief. The oracle compares the first sketch dispatch with the first source edit.",
    "owners": [
     "skills/architect/SKILL.md"
    ],
@@ -65,7 +65,7 @@
    "check": "live",
    "claim": "Asking for N candidates in the prompt sets the arena panel size for that task.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/arena this, 5 candidates. the cache key format is expensive to change later.`; pass when five candidates spawn in one message into separate worktrees, a read-only cross-judge scores them, and the lead reads rationales plus the base before grafting.",
+   "live_case": "See cases/arena-run/case.json.",
    "owners": [
     "skills/arena/SKILL.md"
    ],
@@ -75,7 +75,7 @@
    "check": "live",
    "claim": "Each arena candidate writes to its own worktree or directory.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/arena this, 5 candidates. the cache key format is expensive to change later.`; pass when five candidates spawn in one message into separate worktrees, a read-only cross-judge scores them, and the lead reads rationales plus the base before grafting.",
+   "live_case": "See cases/arena-run/case.json.",
    "owners": [
     "skills/arena/SKILL.md"
    ],
@@ -85,7 +85,7 @@
    "check": "live",
    "claim": "/arena spawns N candidates on one brief, picks a base, grafts the best parts of the losers, and verifies the result.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/arena this, 5 candidates. the cache key format is expensive to change later.`; pass when five candidates spawn in one message into separate worktrees, a read-only cross-judge scores them, and the lead reads rationales plus the base before grafting.",
+   "live_case": "See cases/arena-run/case.json.",
    "owners": [
     "skills/arena/SKILL.md"
    ],
@@ -93,9 +93,9 @@
   },
   "arena-lead-reads-rationales-and-base": {
    "check": "live",
-   "claim": "The arena lead reads every candidate's rationale and the judge's scores, reads the chosen base in full, grafts, and verifies.",
+   "claim": "The coordinator reads each candidate end to end, picks a base, grafts in the best ideas from the losers, and verifies the result.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/arena this, 5 candidates. the cache key format is expensive to change later.`; pass when five candidates spawn in one message into separate worktrees, a read-only cross-judge scores them, and the lead reads rationales plus the base before grafting.",
+   "live_case": "See cases/arena-run/case.json. With a judge, the oracle checks for rationale reads and a read of another file. It checks for an artifact read from each candidate only when the judge is skipped.",
    "owners": [
     "skills/arena/SKILL.md"
    ],
@@ -115,7 +115,7 @@
    "check": "live",
    "claim": "A read-only cross-judge on a model other than the parent's, from a different family when the configuration has one, scores every candidate against the rubric.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/arena this, 5 candidates. the cache key format is expensive to change later.`; pass when five candidates spawn in one message into separate worktrees, a read-only cross-judge scores them, and the lead reads rationales plus the base before grafting.",
+   "live_case": "See cases/arena-run/case.json.",
    "owners": [
     "skills/arena/SKILL.md",
     "skills/pstack-harness/SKILL.md"
@@ -126,11 +126,11 @@
    "check": "live",
    "claim": "`ask /arena for a second opinion` makes the current design one candidate and the synthesis says whether the panel improved on it.",
    "harness_sensitive": true,
-   "live_case": "tally fixture; prompt `/arena this, 5 candidates. the cache key format is expensive to change later.`; pass when five candidates spawn in one message into separate worktrees, a read-only cross-judge scores them, and the lead reads rationales plus the base before grafting.",
+   "live_case": "See cases/arena-second-opinion-run/case.json.",
    "owners": [
     "skills/arena/SKILL.md"
    ],
-   "scenario": "arena-run"
+   "scenario": "arena-second-opinion-run"
   },
   "arena-skips-judge-without-other-model": {
    "check": "static",
@@ -2409,7 +2409,7 @@
   },
   "no-comments-spawns-comment-sicko": {
    "check": "live",
-   "claim": "/no-comments spawns the Comment Sicko persona as a read-only reviewer and acts on its accepted findings.",
+   "claim": "/no-comments spawns the Comment Sicko persona and acts on its accepted findings.",
    "harness_sensitive": true,
    "live_case": "fixture diff with narrating comments and one `do not remove` constraint; prompt `/no-comments the diff`; pass when Comment Sicko spawns (persona signature in its first reply), narrating comments are gone, and the constraint gets an encoding offer.",
    "owners": [
@@ -7959,14 +7959,12 @@
    "text": "```text\n/poteto-mode do it\n```"
   },
   "5c8e0e166789": {
-   "class": "substituted",
+   "class": "promise",
    "file": "04-design.md",
-   "ported_as": [
-    "b2c172e15403"
-   ],
    "promise": "arena-lead-reads-rationales-and-base",
    "sources": [
-    "upstream"
+    "upstream",
+    "port"
    ],
    "text": "The coordinator reads each candidate end to end, picks a base, grafts in the best ideas from the losers, and verifies the result."
   },
@@ -8357,12 +8355,14 @@
    "text": "You don't invoke principles."
   },
   "657b0ec4473f": {
-   "class": "promise",
+   "class": "substituted",
    "file": "05-build-and-clean.md",
+   "ported_as": [
+    "832fb4760993"
+   ],
    "promise": "comment-sicko-keep-list",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "Everything else goes."
   },
@@ -9595,6 +9595,18 @@
     "port"
    ],
    "text": "```text\n/poteto-help which skill should i use to review this branch?\n```"
+  },
+  "832fb4760993": {
+   "also": [
+    "comment-sicko-keep-list"
+   ],
+   "class": "promise",
+   "file": "05-build-and-clean.md",
+   "promise": "no-comments-spawns-comment-sicko",
+   "sources": [
+    "port"
+   ],
+   "text": "[`/no-comments`](../../skills/no-comments/SKILL.md) spawns [Comment Sicko](../../agents/comment-sicko.md) to remove comments outside the persona's keep list and flag code that needs a refactor."
   },
   "83352d24bd1c": {
    "class": "promise",
@@ -11388,15 +11400,6 @@
    ],
    "text": "`/arena` gives every worker the same design or code brief, then picks a base and grafts the best parts."
   },
-  "b2c172e15403": {
-   "class": "promise",
-   "file": "04-design.md",
-   "promise": "arena-lead-reads-rationales-and-base",
-   "sources": [
-    "port"
-   ],
-   "text": "The coordinator reads each candidate's rationale and the judge's scores, reads the chosen base in full, grafts in the best ideas from the losers, and verifies the result."
-  },
   "b389ccb388de": {
    "class": "promise",
    "file": "06-verify-and-ship.md",
@@ -11452,12 +11455,14 @@
    "also": [
     "comment-sicko-keep-list"
    ],
-   "class": "promise",
+   "class": "substituted",
    "file": "05-build-and-clean.md",
+   "ported_as": [
+    "832fb4760993"
+   ],
    "promise": "no-comments-spawns-comment-sicko",
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "[`/no-comments`](../../skills/no-comments/SKILL.md) spawns [Comment Sicko](../../agents/comment-sicko.md), a read-only reviewer with a short keep list: license headers, doc comments on a public API, links that explain what code can't, behavior forced by an external dependency you can't reshape."
   },
@@ -11662,7 +11667,7 @@
    "class": "substituted",
    "file": "07-overnight.md",
    "ported_as": [
-    "c697a4838e32"
+    "c8bae0e078a0"
    ],
    "sources": [
     "upstream"
@@ -12150,14 +12155,6 @@
    ],
    "text": "If you don't have it, ask for the same outcome in plain words: remove narrating comments, unsupported guards, dead compatibility paths, and unrelated edits."
   },
-  "c697a4838e32": {
-   "class": "context",
-   "file": "07-overnight.md",
-   "sources": [
-    "port"
-   ],
-   "text": "It directs subagents, which run on your machine."
-  },
   "c6a130d88791": {
    "also": [
     "slash-skills-invocable"
@@ -12284,6 +12281,14 @@
     "port"
    ],
    "text": "A `## codex` section holds the picks that apply only on Codex, so one file serves every CLI you use."
+  },
+  "c8bae0e078a0": {
+   "class": "context",
+   "file": "07-overnight.md",
+   "sources": [
+    "port"
+   ],
+   "text": "If you want the coordinator to delegate all implementation to local subagents, say so in your prompt."
   },
   "c8cb527825a8": {
    "class": "context",
@@ -13203,11 +13208,13 @@
    "text": "Research ships inside poteto-mode and needs no companion skill."
   },
   "e198875f06b6": {
-   "class": "context",
+   "class": "substituted",
    "file": "07-overnight.md",
+   "ported_as": [
+    "c8bae0e078a0"
+   ],
    "sources": [
-    "upstream",
-    "port"
+    "upstream"
    ],
    "text": "The coordinator doesn't write code."
   },

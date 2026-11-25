@@ -74,7 +74,7 @@ Claude's `NativeFilesystem` tests skip off macOS or without `sandbox-exec`. `Nat
 ## Run live cases
 
 ```sh
-python3 evals/promises/live.py run --harness <claude-code|codex|hermes|grok> --case <id> [--case <id>...] [--model <m> --effort <e>] --out <dir>
+python3 evals/promises/live.py run --harness <claude-code|codex|hermes|grok> --case <id> [--case <id>...] [--model <m> --effort <e>] [--workspace-models] --out <dir>
 python3 evals/promises/live.py report <dir> --upstream-ref upstream/main
 ```
 
@@ -91,6 +91,8 @@ For a fixture at `<run-root>/w/<project>`, `View.classify` treats absolute paths
 The Codex adapter records each patch a Codex lead applies as a `FileChange` call whose `changes` keys are the changed paths. A Grok lead edits a file in place with `search_replace`. `View.edits` counts both. It skips a `FileChange` whose `status` is not `completed`.
 
 `--model` and `--effort` set the model and reasoning effort for every turn of every case in one `run` invocation, on Claude Code and Codex. Each turn's recorded argv carries both values. The sealed run metadata records them as `lead_model` and `lead_effort`, or as `harness default` when a flag is absent, so a later report can show which lead verified a promise. Other adapters refuse the flags.
+
+Use `--workspace-models` to compare the role defaults shipped by different skill revisions. After applying overlays, the runner copies the installed revision's `setup-pstack/examples/pstack-models.md` to the fixture's `.agents/pstack-models.md` and excludes the copy from Git. The resolver applies its usual [configuration precedence](../../skills/setup-pstack/references/models-config.md#resolution).
 
 A case's `skill_overlays` lists `{file, old, new}` replacements, with `file` relative to the installed skills root. `live.py` applies them after it installs the skill tree and before trusted setup captures the run, and refuses the run when an `old` does not occur exactly once. An overlay can also carry `sha256`, the digest of the whole file after that overlay applies, and `live.py` refuses the run when the overlaid file differs, so an arm runs a branch's exact text. Arm cases use overlays to run one skill sentence several ways while the branch keeps its own text. A case's `skills_at` names the commit whose skill tree `live.py run` installs when `--skills-at` is not given, so an arm keeps running on the text its overlay was written against after that text changes on `main`. `test_static.py` fails when an overlay's `old` does not occur exactly once at the case's `skills_at`, or at `HEAD` for a case with no pin. A case's `references` names another case directory whose reference files its oracles read, such as a held-out script. The grader copies that directory beside the case's own, so arm cases and spec variants share one set of held-out checks. Every trace also gets `x_implicit_off`, the installed pstack skills whose `agents/openai.yaml` sets `policy.allow_implicit_invocation: false`, computed by `managed_skills` from the evaluator's own listing script even when the installed tree predates that script.
 
