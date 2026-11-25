@@ -26,7 +26,7 @@ Present the framing and tradeoffs before committing to a long run. Reversible wo
 Decompose into atomic, independently-landable units. Sequence riskiest-unknown-first. Scaffold and verification come before features. Call the Skill tool with `principle-foundational-thinking`.
 
 - Build the verification harness before the work, with the baseline captured from the pre-change state, so the check reads as "old value vs new value".
-- For one-way-door design decisions, call the Skill tool with `architect` (it runs **arena**). Skip it for mechanical work whose shape is already concrete. A second arena over a settled design is over-engineering. Call the Skill tool with `principle-laziness-protocol`.
+- For one-way design decisions, call the Skill tool with `architect`. It sketches both shapes itself and uses arena only for a large or contested design. Skip architect for mechanical work with a known shape. Skip a second arena on a settled design. Call the Skill tool with `principle-laziness-protocol`.
 - Decide what fans out. Parallelize only across seams, and give each worker its own worktree or branch. Call the Skill tool with `principle-separate-before-serializing-shared-state`. Don't over-fan.
 - Write the designed phase list down. That list is what the human reviews.
 

@@ -1,7 +1,6 @@
 ### Opening a PR
 
-Invoked at the end of every other playbook. Short of a pull request, stop at the endpoint: always commit, push only for a pushed branch, and name the branch in the reply.
-
+Use when the matched playbook produces a PR. Short of a pull request, stop at the endpoint: always commit, push only for a pushed branch, and name the branch in the reply.
 Read this playbook in full.
 
 Work from a git worktree off trunk, and keep unrelated work out of it. If `git worktree add` fails and the checkout holds no unrelated changes, branch off trunk there. Otherwise, or if that fails, stop and report. Never commit to trunk. Rebase into small, landable commits. Before each push or published head, call the Skill tool with `deslop`. On the intensive route, in a machine-consumed playbook, or when a brief says so, do it before every commit or amend instead. Complete its [Before each commit](../../deslop/SKILL.md#before-each-commit) check over that scope's commits and keep the evidence.
