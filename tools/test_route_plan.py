@@ -5,9 +5,11 @@ import os
 import re
 import runpy
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -29,6 +31,19 @@ def plan(*args, cwd=None):
     done = run(*args, "--json", cwd=cwd)
     assert done.returncode == 0, done.stderr
     return json.loads(done.stdout)
+
+
+def alive(pid):
+    """Whether pid still runs, after a short grace for the system to reap an orphan."""
+    deadline = time.monotonic() + 2
+    while True:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        if time.monotonic() > deadline:
+            return True
+        time.sleep(0.05)
 
 
 def facts(**levels):
@@ -739,7 +754,7 @@ class RepositoryEndpoint(unittest.TestCase):
     def run_plan(self, project, *args, **env):
         env = {"PATH": str(self.bin), "HOME": str(self.root), **env}
         done = subprocess.run([sys.executable, str(SCRIPT), "feature", *LOW, "--project", str(project), *args],
-                              capture_output=True, text=True, env=env)
+                              capture_output=True, text=True, env=env, timeout=20)
         self.assertEqual(done.returncode, 0, done.stderr)
         return done
 
@@ -834,6 +849,40 @@ class RepositoryEndpoint(unittest.TestCase):
             with self.subTest(url=url):
                 self.assertEqual(self.endpoint(self.repo(url))[0], self.PUSHED)
                 self.assertFalse((self.root / "ssh-called").exists())
+
+    def test_ssh_reads_the_host_after_an_end_of_options_marker(self):
+        self.tool("gh")
+        self.tool("ssh", 'printf "%s\\n" "$@" > "$HOME/ssh-argv"; echo "hostname github.com"')
+        self.assertEqual(self.endpoint(self.repo("work:o/r.git"))[0], "reviewable PR")
+        self.assertEqual((self.root / "ssh-argv").read_text(encoding="utf-8").splitlines(), ["-G", "--", "work"])
+
+    def timed_endpoint(self, project):
+        start = time.monotonic()
+        return self.endpoint(project)[0], time.monotonic() - start
+
+    def test_a_git_call_that_hangs_counts_as_its_failure(self):
+        real = shutil.which("git")
+        project = self.repo("https://github.com/o/r.git")
+        for call, expected in (("rev-parse --local-env-vars", "once Git is available"), ("rev-parse --git-dir", "git init"),
+                               ("remote -v", "local branch")):
+            with self.subTest(call=call):
+                (self.bin / "git").unlink()
+                self.tool("git", f'case "$*" in *"{call}"*) exec /bin/sleep 30;; esac\nexec "{real}" "$@"')
+                endpoint, seconds = self.timed_endpoint(project)
+                self.assertIn(expected, endpoint)
+                self.assertLess(seconds, 9)
+
+    def test_ssh_lookups_share_one_deadline_and_leave_no_process_behind(self):
+        self.tool("gh")
+        self.tool("ssh", '/bin/sleep 30 &\necho $! >> "$HOME/ssh-pids"\necho $$ >> "$HOME/ssh-pids"\nwait')
+        endpoint, seconds = self.timed_endpoint(self.repo("work:o/a.git", "home:o/b.git"))
+        pids = [int(pid) for pid in (self.root / "ssh-pids").read_text(encoding="utf-8").split()]
+        survivors = [pid for pid in pids if alive(pid)]
+        for pid in survivors:
+            os.kill(pid, signal.SIGKILL)
+        self.assertEqual(survivors, [])
+        self.assertEqual(endpoint, self.PUSHED)
+        self.assertLess(seconds, 9, "two hanging lookups share one budget")
 
     def test_the_project_decides_under_git_environment_variables(self):
         self.tool("gh")
