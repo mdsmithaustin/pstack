@@ -45,7 +45,7 @@ class SameModelComparisonPromise(ResolverSandbox):
                 self.assertEqual([review in note for note in arena["notes"]].count(True), 1)
                 self.assertNotIn(review, " ".join(architect["notes"]))
         self.assertIn(
-            "a design comparison skips Phases B through E, and a review still runs them",
+            "For a review or second opinion, run every arm, label each `same-model` per blast-radius step 6",
             (SKILLS / "arena/SKILL.md").read_text(encoding="utf-8"),
         )
         self.assertIn(
