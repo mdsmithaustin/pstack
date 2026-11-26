@@ -3135,7 +3135,7 @@
    "evidence": [
     {
      "file": "skills/poteto-mode/SKILL.md",
-     "quote": "For a large or cross-cutting effort (a migration across many call sites or packages, a multi-day program, an ambitious multi-part change), or work the user steps away from to trust later, call the Skill tool with `figure-it-out` even when a narrower playbook like Feature fits."
+     "quote": "- **Step-away or program-scale work.** The user steps away to review the work later (\"going to bed\", \"stepping away\", \"overnight\"), or a migration across many call sites, a multi-day program, or an ambitious multi-part change. Call the Skill tool with `figure-it-out`, even when Refactoring, Feature, or Autonomous run fits."
     }
    ],
    "harness_sensitive": false,
