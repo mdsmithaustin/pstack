@@ -64,7 +64,18 @@ A hand read of the trace checked every FAIL and every run the sweeps flagged. Si
 - When one tool call or one parallel batch reads figure-it-out together with a playbook or runs `plan.py`, the order inside the batch is not a routing decision. Three Codex runs, one FAIL and two PASSes, became inconclusive this way. The rule for PASSes and ties was added before the counts were unsealed.
 - Eight FAILs stand. The four on Claude Code ran `plan.py` for another playbook, or stopped without routing, and never loaded figure-it-out. The four on Codex read a playbook file in an earlier batch than figure-it-out.
 
-The routing oracles graded these runs differently. `in-conversation-run-skips-figure-it-out` failed 9 guard runs, with 3 on base, because they routed through `plan.py` without a playbook read or a worklist. Issue #590 tracks that oracle gap. None of the 9 loaded figure-it-out.
+The routing oracles graded the same runs as follows. `step-away-routes-to-figure-it-out` grades bed and overnight, and `in-conversation-run-skips-figure-it-out` grades the guard. Neither credits `plan.py` routing (#590), and neither applies the trace checks above.
+
+| Cell | Lead | base | a | b |
+|---|---|---|---|---|
+| bed | Claude Code | 2 FAIL, 1 PASS | 3 PASS | 3 PASS |
+| bed | Codex | 1 FAIL, 2 PASS | 1 FAIL, 2 PASS | 2 FAIL, 1 PASS |
+| overnight | Claude Code | 2 FAIL, 1 PASS | 3 PASS | 3 PASS |
+| overnight | Codex | 1 FAIL, 2 PASS | 1 FAIL, 2 PASS | 3 PASS |
+| guard | Claude Code | 3 FAIL | 3 FAIL | 2 FAIL, 1 PASS |
+| guard | Codex | 3 PASS | 3 PASS | 1 FAIL, 2 PASS |
+
+All 9 guard FAILs routed through `plan.py` without a playbook read or a worklist, and none of them loaded figure-it-out.
 
 ### Run ids
 
