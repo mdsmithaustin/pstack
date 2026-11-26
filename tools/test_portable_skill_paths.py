@@ -180,6 +180,7 @@ class PortableSkillPaths(unittest.TestCase):
         outside.mkdir()
         restored = self.env.copy()
         restored["PROJECT_ROOT"] = str(outside)
+        restored["GIT_CEILING_DIRECTORIES"] = str(self.base)
         stopped = self._run_contract(self.source / "skills/pstack-harness/SKILL.md", command, env=restored, needs_project=True)
         self.assertNotEqual(stopped.returncode, 0)
         self.assertIn("PROJECT_ROOT is not a Git worktree", stopped.stderr)

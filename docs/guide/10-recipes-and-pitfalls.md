@@ -42,7 +42,7 @@ You pick from things that run, not from descriptions. The agent answers its own 
 /poteto-mode turn this design into a plan. small verifiable PRs, each with its own proof.
 ```
 
-Ask only after the design settles. The plan is the deliverable, and execution starts only when you say go.
+Ask only after the design settles. See [Plan after the design settles](04-design.md#plan-after-the-design-settles) for what the playbook hands back.
 
 ## Get a second opinion on a design
 

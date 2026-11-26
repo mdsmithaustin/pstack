@@ -22,7 +22,7 @@ The design isn't sacred once code starts. If the same workaround keeps coming ba
 /arena take my prompt to the arena verbatim. i want to compare their proposals with yours.
 ```
 
-[`/arena`](../../skills/arena/SKILL.md) is the general tool underneath. N subagents attempt the same design or code brief in parallel, each writing to its own worktree or directory. A read-only judge on a model other than the parent's, from a different model family when your configuration has one, scores every candidate against a rubric. When no such model can run, the coordinator skips the judge, reads every candidate in full, and picks the base itself. The coordinator reads each candidate end to end, picks a base, grafts in the best ideas from the losers, and verifies the result.
+[`/arena`](../../skills/arena/SKILL.md) runs the same design or code brief in parallel, with one worktree or directory per candidate. A read-only judge scores every candidate against a rubric. Arena tries a judge from a different model family first, then a different tier of the parent's family. When no other model can run, the coordinator skips the judge. The coordinator reads each candidate end to end, picks a base, grafts in the best ideas from the other candidates, and verifies the result.
 
 ```mermaid
 flowchart LR

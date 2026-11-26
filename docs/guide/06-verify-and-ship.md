@@ -154,7 +154,7 @@ When a repository gates pushes through [no-mistakes](https://kunchenguid.github.
 
 Unless you or a repository template sets the format, Poteto uses the default sections in [Opening a PR](../../skills/poteto-mode/playbooks/opening-a-pr.md). A full `/setup-pstack` in a repository installs the default template only when there is no existing template or custom format. For a repository using no-mistakes, setup also fills a missing `pr.template` selection. Existing templates and explicit selections stay in place.
 
-No-mistakes reads that template and its configuration from the trusted default branch, so both must land before template mode activates. Until then, generic pipeline runs can replace the author sections. After publication, the opening playbook restores the selected format and preserves generated evidence. It repeats this check after later updates. See the [template setup instructions](../../skills/setup-pstack/references/pr-template.md).
+For template activation, see the [no-mistakes setup instructions](../../skills/setup-pstack/references/pr-template.md#connect-no-mistakes-when-configured). The [gated publish reference](../../skills/poteto-mode/references/gated-publish.md) covers how Poteto checks the live PR body and preserves generated evidence after publication.
 
 ## Drive the PR to merge-ready with Babysit
 

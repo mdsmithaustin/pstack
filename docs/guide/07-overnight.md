@@ -73,7 +73,7 @@ For a quick status instead of an audit, run [`/ketchup`](../../skills/ketchup/SK
 
 The contract above drives one task to one finish condition. Some nights hold more, a queue of independent changes or a whole program. Two playbooks and one skill scale the same trust up.
 
-[Autopilot-full](../../skills/poteto-mode/playbooks/autopilot-full.md) runs a queue of independent PRs to merged. Each PR gets one owner agent that carries it from build through merge, and no owner merges on its own verdict. A swarm of fresh verifiers checks the owner's code-ready head. A later rebase or minor fix gets one fresh verifier, and only new behavior or a large new diff calls the full swarm again. Only a clean verdict on the patch that merges authorizes the merge:
+[Autopilot-full](../../skills/poteto-mode/playbooks/autopilot-full.md) runs a queue of independent PRs to merged. Each PR gets one owner agent that carries it from build through merge. A swarm of fresh verifiers checks the owner's code-ready head. Step 4 defines when later changes need another check. The owner needs a clean verdict from the coordinator on the patch that will merge.
 
 ```text
 /poteto-mode full autopilot on this queue. each item is independent. i want them merged by morning.
