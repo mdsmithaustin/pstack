@@ -373,7 +373,8 @@ class ModelsResolverPromises(ResolverSandbox):
              ("arena runners", 4, "haiku"), ("arena cross-judge pool", 1, "sonnet"), ("arena cross-judge pool", 2, "opus")],
         )
         arena = (SKILLS / "arena/SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("Use the `arena runners` role, one arm per entry.", arena)
+        self.assertIn("resolve `arena runners` using **Spawn a role**", arena)
+        self.assertIn("one runner per entry", arena)
         self.assertIn("choose one arm of the `arena cross-judge pool` role", arena)
 
     def test_config_read_at_next_run(self):
@@ -385,7 +386,7 @@ class ModelsResolverPromises(ResolverSandbox):
         self.assertEqual(self.resolve("claude-code", "feature"), [arm("feature", 1, "haiku", "medium", "workspace flat")])
         (self.project / ".agents" / "pstack-models.md").unlink()
         self.assertEqual(self.resolve("claude-code", "feature"), [arm("feature", 1, "opus", "high", "user flat")])
-        guide = (SKILLS / "pstack-harness/references/roles.md").read_text(encoding="utf-8")
+        guide = (SKILLS / "pstack-harness/SKILL.md").read_text(encoding="utf-8")
         self.assertIn("Do not read the config files to pick values.", guide)
 
     def test_inherit_parent_omits_model_field(self):
@@ -400,7 +401,7 @@ class ModelsResolverPromises(ResolverSandbox):
             with self.subTest(harness=harness, role="default ships inherit-parent"):
                 (self.home / ".agents" / "pstack-models.md").unlink()
                 self.assertEqual(self.resolve(harness, "default"), [arm("default", 1, INHERIT, INHERIT, "skill default")])
-        harness_skill = (SKILLS / "pstack-harness/references/roles.md").read_text(encoding="utf-8")
+        harness_skill = (SKILLS / "pstack-harness/SKILL.md").read_text(encoding="utf-8")
         self.assertIn("`inherit-parent` in a field means omit that field.", harness_skill)
 
     def test_models_config_grammar_model_at_effort(self):

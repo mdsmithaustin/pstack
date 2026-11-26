@@ -1281,7 +1281,7 @@ ROUTING_PROMISES = (
     "refactoring-prompt-routes-to-refactoring", "research-prompt-routes-to-research-playbook",
     "review-prompt-routes-to-code-review", "babysit-prompt-routes-to-babysit-drive", "land-prompt-routes-to-shipping",
     "autopilot-prompt-routes-to-autopilot-full", "stack-prompt-routes-to-autopilot-stack",
-    "orchestrate-prompt-routes-to-orchestrate", "takeover-prompt-routes-to-session-pickup",
+    "takeover-prompt-routes-to-session-pickup",
     "disk-prompt-routes-to-worktree-cleanup", "skill-prompt-routes-to-authoring-playbook",
     "eval-prompt-routes-to-eval-playbook", "open-pr-prompt-routes-to-opening-a-pr",
 )
@@ -1642,14 +1642,16 @@ DESIGN_BRIEF = re.compile(r"design candidate|candidate design|design sketch|arch
 SPAWN_TOOL_NAMES = {"Agent", "Task", "spawn_agent", "delegate_task", "spawn_subagent"}
 
 
-def design_fan_out(view, read_alone=True):
+def design_fan_out(view):
     runners = runner_spawns(view)
-    briefed = [r for r in view.all_reads() if r == "architect/references/runner-prompt.md"]
-    answered = read_answered(view, "architect/references/runner-prompt.md")
-    briefs_after = [spawn for spawn in view.spawns if answered is not None and (spawn.get("seq") or 0) > answered]
+    answered = read_answered(view, "arena/SKILL.md")
+    all_briefs_hidden = all(not spawn.get("prompt_head") for spawn in view.spawns)
+    sealed_after = [spawn for spawn in view.spawns
+                    if answered is not None and (spawn.get("seq") or 0) > answered
+                    and spawn.get("x_prompt_encrypted", all_briefs_hidden)]
     signals = []
-    if briefed and (read_alone or (view.encrypted() and len(briefs_after) >= 2)):
-        signals.append("read architect/references/runner-prompt.md to brief runners")
+    if len(sealed_after) >= 2:
+        signals.append(f"read arena/SKILL.md, then {len(sealed_after)} sealed spawns")
     if len(runners) >= 2:
         signals.append(f"{len(runners)} design runner spawns")
     attempted = sum(len(DESIGN_BRIEF.findall(json.dumps(c.get("input") or {}))) for c in view.tool_calls
@@ -1675,7 +1677,7 @@ def design_ladder(view):
 
 @oracle("poteto-mode-triggers-architect-on-boundary-crossing")
 def architect_on_boundary(view):
-    signals = design_fan_out(view, read_alone=False)
+    signals = design_fan_out(view)
     evidence = [f"fan-out signals: {signals}"]
     if signals:
         return passed(*evidence)
@@ -1788,8 +1790,6 @@ def compact_implements_directly(view):
         return failed("compact case dispatched design alternatives", evidence)
     if any(role in WRITER_ROLES for role in roles):
         return failed("compact case delegated implementation", evidence)
-    if "architect/references/runner-prompt.md" in view.all_reads():
-        return failed("compact case read the architect runner instructions", evidence)
     base = view.base_shas()
     paths = (view.case.get("expect") or {}).get("implementation_paths")
     if not base or not paths:
@@ -1806,7 +1806,7 @@ def compact_implements_directly(view):
     if any(role not in READER_ROLES and role not in NO_CODE_AGENTS for role in roles):
         return inconclusive("a spawn assignment has no recognized original structured role", evidence)
     return passed("Feature record and changed case implementation paths in the supplied checkout",
-                  evidence, "no observed implementation role, named design role or architect runner instruction read",
+                  evidence, "no observed implementation role or named design role",
                   "no full-step worklist observed; equivalent expanded plans may not be recognized",
                   "correctness, acceptance, preservation, review status and risk grounds are not graded")
 
@@ -3715,20 +3715,7 @@ def runner_spawns(view):
     return [s for s in view.spawns_where(*needles, reply=False) if not view.supports(s)]
 
 
-@oracle("architect-grounds-with-how-and-why")
-def architect_grounds(view):
-    how, why = how_evidence(view), why_evidence(view)
-    runners = runner_spawns(view)
-    first_runner = min((s.get("seq", 0) for s in runners), default=None)
-    evidence = [f"how evidence at seq {how}", f"why evidence at seq {why}", f"first runner at seq {first_runner}"]
-    if how is None:
-        return inconclusive("run killed before grounding", *evidence) if view.killed and not runners else failed("architect did not run how first", *evidence)
-    if first_runner is not None and how > first_runner:
-        return failed("runners spawned before how", *evidence)
-    return passed(*evidence)
-
-
-COMPARISON_SKIP = re.compile(r'"comparison": "skip"|so skip the comparison per Spawn a role step 2')
+COMPARISON_SKIP = re.compile(r'"comparison": "skip"|so skip (?:the|a design) comparison per arena Phase A step 3')
 
 
 def architect_skip_marked(view):
@@ -3738,7 +3725,7 @@ def architect_skip_marked(view):
             continue
         unmarked = False
         for line in head.splitlines():
-            if re.match(r'\{"role": "architect runners", "arm": 1,', line) and COMPARISON_SKIP.search(line):
+            if re.match(r'\{"role": "(?:arena|architect) runners", "arm": 1,', line) and COMPARISON_SKIP.search(line):
                 return True
             try:
                 row = json.loads(line)
@@ -3770,14 +3757,15 @@ def architect_arena(view):
     if len(runners) < 2:
         if len(runners) + len(sealed) >= 2:
             return inconclusive("sealed briefs hide which spawns were the runners; two sketches cannot be ruled out", *evidence)
-        if not runners and affirmed(r"same-model, comparison skipped", view.final_reply.lower()):
+        if not runners:
             marked = architect_skip_marked(view)
-            evidence.append(f"resolver marked the comparison skip: {marked}")
-            if marked is False:
-                return failed("the reply reports a same-model comparison skip, but the resolver's `architect runners` row in the trace has no skip mark", *evidence)
-            if marked is None:
-                return inconclusive("the reply reports a same-model comparison skip, and no resolver output in the trace shows whether `architect runners` was marked", *evidence)
-            return inconclusive("the resolver marked the comparison `skip`, so no sketch fan-out was due", *evidence)
+            if marked or affirmed(r"same-model, comparison skipped", view.final_reply.lower()):
+                evidence.append(f"resolver marked the comparison skip: {marked}")
+                if marked is False:
+                    return failed("the reply reports a same-model comparison skip, but the resolver's `architect runners` row in the trace has no skip mark", *evidence)
+                if marked is None:
+                    return inconclusive("the reply reports a same-model comparison skip, and no resolver output in the trace shows whether `architect runners` was marked", *evidence)
+                return inconclusive("the resolver marked the comparison `skip`, so no sketch fan-out was due", *evidence)
         return inconclusive("run killed before the sketch fan-out", *evidence) if view.killed else failed("fewer than two runner sketches", *evidence)
     if len(wave) < 2:
         return failed("runners spawned sequentially", *evidence)

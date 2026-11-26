@@ -34,7 +34,6 @@ PLAYBOOK_FILES = [
     "investigation",
     "multi-phase-plan",
     "opening-a-pr",
-    "orchestrate",
     "pause-safely",
     "perf-issue",
     "prototype",

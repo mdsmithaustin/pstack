@@ -43,8 +43,8 @@ pick the targets you use at the prompt, including `hermes-agent` for hermes. `-g
 a full `/setup-pstack` run checks these commands on your `PATH`. only `python3` is required to continue past this check.
 
 - **python3, 3.9 or newer.** runs the plan script, the model resolver, and the preserve gate.
-- **bun.** runs the GitHub PR watcher, the merge gate, and the orchestrate store. without bun on your `PATH`, babysit can poll with `gh`, PR recap can [run bun through npx](./skills/pr-recap/references/sketch.md#setup) to draw sketches, and node can run the attachment helper.
-- **node.** runs the multi-PR plan check. the [statechart launcher](./skills/statechart/scripts/statechart) accepts a node version with built-in TypeScript support, a supported bun version, or deno 2.0 or newer.
+- **bun.** runs the GitHub PR watcher, and the merge gate. without bun on your `PATH`, babysit can poll with `gh`, PR recap can [run bun through npx](./skills/pr-recap/references/sketch.md#setup) to draw sketches, and node can run the attachment helper.
+- **node.** on native Windows, follow the [statechart instructions for Node](./skills/statechart/SKILL.md#run). on POSIX systems, the [statechart launcher](./skills/statechart/scripts/statechart) accepts a supported version of Node or Bun, or Deno 2.0 or newer.
 - **gh.** the default CLI for opening, watching, and landing GitHub pull requests. the playbooks use the Origin CLI when it can resolve the repository.
 
 notes by CLI. confirm discovery in your installed version:
@@ -69,7 +69,7 @@ use [`/poteto-mode`](./skills/poteto-mode/SKILL.md) at the start of a task. it r
 
 ### just use [`/poteto-mode`](./skills/poteto-mode/SKILL.md)
 
-this skill is the main shortcut. i use it whenever i need the agent to do rigorous engineering work. it comes with twenty-five playbooks:
+this skill is the main shortcut. i use it whenever i need the agent to do rigorous engineering work. it comes with twenty-four playbooks:
 
 ```
 /poteto-mode this pr has a subtle bug where the scroll drifts every 750ms even when idle. repro
@@ -82,7 +82,7 @@ morning.
 ```
 
 <details>
-<summary>the twenty-five playbooks</summary>
+<summary>the twenty-four playbooks</summary>
 
 | playbook | for |
 |---|---|
@@ -103,8 +103,7 @@ morning.
 | [babysit](./skills/poteto-mode/playbooks/babysit.md) | drive a pr or a stack to merge-ready: conflicts, review threads, ci. |
 | [shipping](./skills/poteto-mode/playbooks/shipping.md) | independently verify a green stack, then land the contiguous verified run bottom-up through github by default or origin when available. |
 | [autonomous run](./skills/poteto-mode/playbooks/autonomous-run.md) | drive a long task to completion without stopping. |
-| [orchestrate](./skills/poteto-mode/playbooks/orchestrate.md) | a standing project handed to one coordinator chat: multi-day, many stacked prs, fleets of subagents. |
-| [autopilot-full](./skills/poteto-mode/playbooks/autopilot-full.md) | run independent prs to merged with one owner per pr. a swarm verifies each code-ready head, and every later change to the patch gets a fresh check. |
+| [autopilot-full](./skills/poteto-mode/playbooks/autopilot-full.md) | run independent prs to merged with one owner per pr. a swarm verifies each code-ready head. the playbook defines when later changes need another check. |
 | [autopilot-stack](./skills/poteto-mode/playbooks/autopilot-stack.md) | autopilot-full without the merge. build and verify prs for the operator to review and land, stacking a pr only on a pr it builds on. |
 | [session pickup](./skills/poteto-mode/playbooks/session-pickup.md) | resume or take over a prior agent's in-flight work. |
 | [pause safely](./skills/poteto-mode/playbooks/pause-safely.md) | suspend in-flight work cleanly so it can be resumed later. |
@@ -119,7 +118,7 @@ when invoked it:
 1. matches your task to a [playbook](./skills/poteto-mode/playbooks/) and tracks progress under the mode's [worklist and completion rules](./skills/poteto-mode/SKILL.md#playbooks).
 2. for bug fix, feature, refactoring, and perf work, records five risk facts and lets a [plan script](./skills/poteto-mode/scripts/plan.py) pick a lightweight, standard, or intensive [route](./skills/poteto-mode/references/routes.md). while the route is pending, the plan lists the lightweight gates and when they apply. say `keep this lightweight` or `be thorough` to set the route yourself.
 3. loads the skills and runs the gates its plan names. when lightweight work ends at local commits, the plan skips the separate cleanup, comment, commit-writing, and documentation passes. the [lightweight route](./skills/poteto-mode/references/routes.md#the-three-routes) requires cleanup before each push, even when the task ends at a pushed branch. [Opening a PR](./skills/poteto-mode/playbooks/opening-a-pr.md) adds the PR description check.
-4. writes unslopped replies framed for the consumer and the maintainer.
+4. leads each reply with what changes for you and follows the mode's [writing rules](./skills/poteto-mode/references/writing.md).
 
 the lead must run the [preservation check](./skills/poteto-mode/SKILL.md) before every commit and before finishing a code change, even without a worklist. if Python is unavailable, follow the fallback in [preservation modes](./skills/poteto-mode/references/delegation.md#preservation-modes). the task runs to the endpoint you state. if you leave it open, the plan shows the [default endpoint](./skills/poteto-mode/references/routes.md#endpoint) for your repository and available tools. the mode is designed to work with a mid-tier model in the lead, such as Sonnet 5.5, GPT-6.1 Sol, or Grok 4.7 at medium effort. that target is a design goal that no evaluation here has verified yet, as the [evaluation contract](./evals/framework.md#lead-model-floor-and-subtraction) records. the full rules and playbooks live in [`skills/poteto-mode/SKILL.md`](./skills/poteto-mode/SKILL.md).
 
@@ -147,14 +146,14 @@ the lead must run the [preservation check](./skills/poteto-mode/SKILL.md) before
 | [`/poteto-mode`](./skills/poteto-mode/SKILL.md) | default entry point for any non-trivial task. |
 | [`/poteto-help`](./skills/poteto-help/SKILL.md) | you're new to pstack, or unsure which skill, playbook, or principle fits. finds out what you're trying to do, answers that part, and hands you a prompt to type. it doesn't load from its description (on claude code, once `/setup-pstack` sets the skill listing), so type `/poteto-help`. |
 | [`/in-your-own-words`](./skills/in-your-own-words/SKILL.md) | you want the agent to play back your goal and the problem before it starts. |
-| [`/sharpen`](./skills/sharpen/SKILL.md) | you want a prompt made deeper, not bigger, before you send it. hands back the rewritten prompt and leaves your choices open. doesn't do the task. |
+| [`/sharpen`](./skills/sharpen/SKILL.md) | you want a prompt made deeper, not bigger, before you send it. hands back the rewritten prompt, which asks the agent to prototype any choice an experiment can settle and leaves product and preference choices to you. doesn't do the task. |
 | [`/how`](./skills/how/SKILL.md) | you want a walkthrough of how a subsystem works. |
 | [`/why`](./skills/why/SKILL.md) | you want to know why something was built this way. discovers available MCPs at run time and queries each evidence category in parallel (source control, issue tracker, long-form docs, real-time chat, infra observability, error tracking, analytics warehouse). |
 | [`/recall`](./skills/recall/SKILL.md) | you're starting or resuming work and want your recent context on a topic rebuilt from your own chat history and the shared record, handed back as a tight current-state brief. |
 | [`/ketchup`](./skills/ketchup/SKILL.md) | you want what changed in this chat since your last message, in plain words and small visuals, with every item waiting on you listed and decidable from the reply alone, even when that makes the reply long. |
 | [`/ketchup-video`](./skills/ketchup-video/SKILL.md) | you want the `/ketchup` catch-up as a short subtitled video of slides, with the calls waiting on you as text under it. |
 | [`/blast-radius`](./skills/blast-radius/SKILL.md) | you have a small-looking change and want to know what else it could break, with the one fact it's safe because of proven by running code, not asserted. |
-| [`/architect`](./skills/architect/SKILL.md) | you're about to write code that crosses a function boundary and want the caller's usage, types, and module shape settled first. |
+| [`/architect`](./skills/architect/SKILL.md) | you want to compare two designs for the types, signatures, and module boundaries before writing code. |
 | [`/arena`](./skills/arena/SKILL.md) | you want N parallel attempts at the same thing, then to grab the best parts of each. |
 | [`/swarm`](./skills/swarm/SKILL.md) | you want N parallel workers across different slices or races, then one aggregated report. |
 | [`/interrogate`](./skills/interrogate/SKILL.md) | you have a diff and want different models to try to break it, keeping only findings a run proves. |
@@ -240,7 +239,7 @@ help:              /poteto-help which skill should i use to review this branch?
 
 Two named helpers do delegated work. You rarely call them yourself.
 
-- [`poteto-agent`](./agents/poteto-agent.md) does one unit of a playbook step for the main conversation, which runs `/poteto-mode` and owns the plan. Its [persona](./agents/poteto-agent.md) defines what it reads for each role. It pushes a branch or opens a PR only when its brief says to, and is never resumed across phases.
+- [`poteto-agent`](./agents/poteto-agent.md) does one unit of a playbook step for the main conversation, which runs `/poteto-mode` and owns the plan. It pushes a branch or opens a PR only when its brief says to, and is never resumed across phases.
 - [Comment Sicko](./agents/comment-sicko.md) reviews comments, usually through [`/no-comments`](./skills/no-comments/SKILL.md). It edits scoped comments and reports code that should be refactored. It does not write application code.
 
 Both ship inside the installed `pstack-harness` skill, so they work without registration. [`/setup-pstack`](./skills/setup-pstack/SKILL.md) can also register them as native agents on Claude Code and Codex. The [persona contract](./skills/pstack-harness/references/named-roles.md) says which form a spawn uses, and the [registration reference](./skills/pstack-harness/references/registration.md) covers the files and their states.

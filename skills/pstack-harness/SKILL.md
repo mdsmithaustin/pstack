@@ -7,15 +7,11 @@ description: Maps pstack's delegation and portable resource primitives to the cu
 
 **A cut-off read is no read.** A return that is shortened, warns that it was cut, or that you capped with `head`, `tail`, or a line limit leaves the file or diff unread. Read the missing part before you act. This file too. On Codex, follow [Read files](references/codex.md#read-files).
 
-Use this skill when a pstack workflow names a delegation action, worklist, question, loop, transcript, portable resource, shell command, or process inspection.
-
-Your tool inventory and CLI help are authoritative. Never invent a tool. Report the mechanism when it affects execution or evidence. For worklists, report item state rather than the carrier.
-
-Before executing shell commands or answering what is running, read [shell commands and running processes](references/shell-and-processes.md). This applies to every action and runtime.
+Your tool inventory and CLI help are authoritative. Never invent a tool. Report the mechanism when it affects execution or evidence.
 
 ## Select the action
 
-Read each selected reference in full before its action. Select only the actions the next step needs. Read a link inside a reference only when its described operation applies. Do not read every reference.
+Read each selected reference in full before its action. Select only the actions the next step needs. Read a link inside a reference only when its described operation applies.
 
 | Action | Required references |
 |---|---|
@@ -29,8 +25,6 @@ Read each selected reference in full before its action. Select only the actions 
 | `portable-paths` | [Portable resource path contract](references/portable-paths.md) when a command uses `PSTACK_SKILLS_ROOT`, `PSTACK_SOURCE_ROOT`, or `PROJECT_ROOT` |
 
 ## Runtime adapters
-
-When context compaction, shortened skill content, or skill restoration affects the next action, read [skill retention evidence](references/skill-retention.md). Keep documented limits, runtime observations, and unknown behavior separate.
 
 For spawn or transcript, read only the current runtime column for that action. Other actions need no runtime adapter.
 
@@ -52,7 +46,7 @@ Read the role resolution and handoffs reference selected above before a role han
 
 ## Spawn a role
 
-Every pstack spawn runs a role from the models config, such as `feature` or `how explorer`, sometimes under a persona. Keep the caller's role and panel arm count.
+Every pstack spawn runs a role from the models config, such as `feature` or `how explorer`, sometimes under a persona.
 
 1. Take the role from the skill or playbook step. A step that names none uses `default`. A `subagent_type` of `poteto-agent` or `comment-sicko` names a persona, and `general-purpose` names none.
 2. Resolve it once per task, and again after the harness or config changes. Run the resolver from the project root, or pass `--project <root>`, since it reads that directory's `.agents/pstack-models.md`. Do not read the config files to pick values.
@@ -70,7 +64,6 @@ Every pstack spawn runs a role from the models config, such as `feature` or `how
 
 - **Use named sibling skills yourself.** "Call the Skill tool with `architect`" tells you to load the pstack skill `architect` and follow it. A following "follow its" or "use its" names the part of that skill the step needs, after the whole skill loads. The name is a sibling directory under the installed skills root, the directory that holds this skill's own directory. Any other pstack mention of a skill by name, such as "the leaf skill" or "the **arena** skill", names one the same way.
   - On Claude Code, call the Skill tool with the bare name, such as `architect`. The call works when the listing shows the name only, with no description, and a name-only listing never means the skill is missing.
-  - Codex, Grok Build, and any other harness have no tool named Skill for these skills. There, the same phrase means read `<installed skills root>/<name>/SKILL.md` in full, then read the files it references when its steps need them. On Hermes, use `skill_view(name)` instead when the index lists the name, because compression marks only that load for reload. On Codex, a `$name` mention in a user prompt [injects](references/codex.md#injected-skills) that skill's `SKILL.md`, so do not read that file again unless the injected copy was cut.
+  - Codex, Grok Build, and any other harness have no tool named Skill for these skills. There, the same phrase means read `<installed skills root>/<name>/SKILL.md` in full, then read the files it references when its steps need them. On Hermes, use `skill_view(name)` instead when the index lists the name, because compression marks only that load for reload. On Codex, a `$name` mention in a user prompt injects that skill's `SKILL.md`, so do not read that file again unless the injected copy was cut.
   - Never ask the user to type a skill that a pstack skill names. Never edit a skill's files or the listing settings to change how it loads.
-- **Load only skills that someone named.** Never read or load a pstack skill that you found by listing or searching a skills directory, unless the user or a loaded skill named it. A skill that the harness lists with its description can still load from that description.
-- **Tool names in skill text describe intent, never a required tool.** `Task`, `Glob`, `Grep`, `Read`, a worklist, and Cursor-era parameters like `readonly` name capabilities: realize each with whatever your session provides (a search tool, a shell command, a read-only brief). Capability selection follows live descriptions, not recalled names. A missing optional tool never cancels the step and needs no announcement. A `subagent_type` in skill text names a persona or none, and **Spawn a role** turns it into the concrete type.
+- **Tool names in skill text describe intent, never a required tool.** `Task`, `Glob`, `Grep`, `Read`, a worklist, and Cursor-era parameters like `readonly` name capabilities: realize each with whatever your session provides (a search tool, a shell command, a read-only brief). A missing optional tool never cancels the step and needs no announcement. A `subagent_type` in skill text names a persona or none, and **Spawn a role** turns it into the concrete type.

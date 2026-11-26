@@ -1,6 +1,6 @@
 ---
 name: show-me-your-work
-description: "Keep a reviewable decision trail for explicit requests, unattended work, or loop runs: a TSV log with one row per decision (what, why, evidence, result). Local by default; commit it when a reviewer needs the trail to trust the result. Use for /show-me-your-work, unattended or loop runs, or work a human reviews after stepping away. Multiple phases alone do not require a trail."
+description: "Keep a reviewable decision trail for explicit requests, unattended work, or loop runs: a TSV log with one row per decision (what, why, evidence, result). Local by default; commit it when a reviewer needs the trail to trust the result. Use for /show-me-your-work, unattended or loop runs, or work a human reviews after stepping away."
 ---
 
 # Show me your work
@@ -38,7 +38,7 @@ Use the helper `scripts/log.sh <logfile> <phase> <decision> <why> <evidence> <re
 
 For evidence that must survive checkout cleanup, use the [evidence capture helper](references/evidence-capture.md). Put its completed manifest path in the existing `evidence` cell. Verify that artifact before removing its source checkout. Keep the chosen absolute store in handoffs.
 
-Log every verdict, including failed review rounds, every change to the definition of done, and every constraint. Mark each constraint as `user-given`, `self-imposed`, or `unknown` in the decision cell, with a supporting pointer. A late row uses its actual append time and names the earlier event time when known. Log other decision points and checkpoints, not every action: a fork chosen, a unit completed with its verification result, a pivot or revert with its trigger, a blocker surfaced, a gate fixed. For loop runs, one row per iteration. Skip the trivial and self-evident.
+Log decision points and checkpoints, not every action: a fork chosen, a unit completed with its verification result, a pivot or revert with its trigger, a blocker surfaced, a gate fixed. For loop runs, one row per iteration. Skip the trivial and self-evident.
 
 A run is one agent conversation, including its later turns and any summary of it. A pickup, a replacement agent, or a new chat starts a new run. When a run adds to a log that already has rows, its first row has phase `start`, and so does its first row after another run's `start` row. So a run that comes back to a log in a later turn first reads the log's last rows to see whether another run wrote since. A `start` row names the `ts` range of the rows before it that this run did not write, and its evidence names this run, such as its agent id. Use phase `start` for nothing else.
 
@@ -46,7 +46,7 @@ A run is one agent conversation, including its later turns and any summary of it
 
 By default the log is a working artifact, not committed. Keep it at `decisions.tsv` in the work dir, or `.audit/<task-slug>.tsv` when several efforts run at once, and leave it out of git.
 
-Commit it only when the work is ambitious enough that a reviewer needs the trail to trust the result. A trail intended for commit must use durable evidence accessible to its intended post-merge reader from its first row. Every evidence pointer in a committed trail must resolve after merge and checkout cleanup. Use commits, PRs, checked-in files, or an artifact whose published location and retention contract work for the intended reader. A private absolute path alone does not qualify. Keep a trail with scratch-only history local, preserving its append-only rows. When a reader needs durable review, publish a separate summary with durable evidence. Local trails can cite local artifacts, but retain evidence needed for later review with the capture helper.
+Commit it only when the work is ambitious enough that a reviewer needs the trail to trust the result.
 
 ## Rules
 
@@ -55,7 +55,7 @@ Commit it only when the work is ambitious enough that a reviewer needs the trail
 
 ## Audit the log against the transcript
 
-At the end of the run, before handing back, check the log told the truth. Read this run's transcript from this workspace's session store. Call the Skill tool with `pstack-harness` to locate it. Don't read other workspaces' stores. That reads unrelated private chats. If you cannot find or read this run's transcript, do not walk the rows. Say in the Attention section that the audit did not run, so the log is unchecked against the transcript. Otherwise, walk this run's rows against what actually happened. Each stretch of them begins at one of this run's `start` rows, or at the first row if this run created the log, and ends at the next `start` row of another run:
+At the end of the run, before handing back, check the log told the truth. Read this run's transcript from this workspace's session store. Call the Skill tool with `pstack-harness` to locate it. Don't read other workspaces' stores. That reads unrelated private chats. Walk this run's rows against what actually happened. Each stretch of them begins at one of this run's `start` rows, or at the first row if this run created the log, and ends at the next `start` row of another run:
 
 - Check that every row maps to a real decision or action.
 - Check that each row's evidence resolves and shows what the row claims.
@@ -65,14 +65,14 @@ Correct the log, not the story. The audit never edits or removes a row, even an 
 
 ## Cross-model review of the trail
 
-Before handing back, spawn a reviewer subagent on the `trail reviewer` role. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section to resolve the role. Follow that section for the spawn call and for execution-identity disclosure in the verdict and reply. Never pick a model that the resolver's output does not name. Self-review is not a substitute. The subagent reads the audit trail and the run's transcript, then flags what the user should pay attention to. Not a redo of the work, a scan for what's suboptimal or risky.
+Before handing back, spawn a reviewer subagent on another vendor's model than the one that did the work, through the `trail reviewer` role. Call the Skill tool with `pstack-harness`, then follow its **Spawn a role** section to resolve the role. Follow that section for the spawn call and for execution-identity disclosure in the verdict and reply. Never pick a model that the resolver's output does not name. When it names no other vendor's model, run the role as resolved and say the review is same-vendor. Self-review is not a substitute. The subagent reads the audit trail and the run's transcript, then flags what the user should pay attention to. Not a redo of the work, a scan for what's suboptimal or risky.
 
 - Decisions logged with weak or absent evidence.
 - Verification steps skipped or claimed without proof in the transcript.
 - Choices that look risky in hindsight (premature, scope-creeping, papering over a symptom).
 - Gaps the user would otherwise miss on a casual skim.
 
-Every reply for a run that produced a trail ends with an "Attention" section. Lead with the reviewer's model and effort on its own line (`reviewed by <model>@<effort>`, and the role it came from when it was not `trail reviewer`), then list unresolved material flags with pointers to specific rows or moments. Keep previously reported flags concise while they still apply, with their identity, current consequence, and evidence. Acknowledgment alone does not resolve a flag. Omit resolved flags and repeated history that adds no current risk or action. "No flags" is a valid value. The model name is not.
+Every reply for a run that produced a trail ends with an "Attention" section. Lead with the reviewer's model and effort on its own line (`reviewed by <model>@<effort>`, and the role it came from when it was not `trail reviewer`), then list unresolved material flags with pointers to specific rows or moments. "No flags" is a valid value. The model name is not.
 
 ## Reviewing the trail
 

@@ -108,7 +108,7 @@ class SkillReferenceSpelling(unittest.TestCase):
 
     def test_every_exempt_passage_still_matches(self):
         self.assertEqual(skill_references.stale_exemptions(), [],
-                         "remove USER_FACING or MODE_REMINDERS passages in tools/skill-references.py that no "
+                         "remove USER_FACING passages in tools/skill-references.py that no "
                          "longer hold a /name or $name spelling")
 
     def test_a_skill_may_spell_itself_only_on_its_description_line(self):
@@ -157,7 +157,7 @@ class SkillReferenceSpelling(unittest.TestCase):
             })
             table = {"skills/demo/SKILL.md": ["Say /demo to start.", "Say /demo to pause."],
                      "skills/other/SKILL.md": ["Run /other."]}
-            with mock.patch.object(skill_references, "EXEMPT", table), mock.patch.object(skill_references, "NOT_LOADS", {}):
+            with mock.patch.object(skill_references, "USER_FACING", table), mock.patch.object(skill_references, "NOT_LOADS", {}):
                 self.assertEqual(skill_references.stale_exemptions(root),
                                  ["skills/demo/SKILL.md: Say /demo to pause.", "skills/other/SKILL.md: Run /other."])
 

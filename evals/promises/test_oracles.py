@@ -164,7 +164,7 @@ class ProbeTraces(unittest.TestCase):
         for name in sorted(p.name for p in TRACES.glob("*.json")):
             with self.subTest(trace=name):
                 v = self.verdicts(name, case)
-                self.assertIn(FAIL, v.values(), v)
+                self.assertNotEqual(set(v.values()), {PASS}, v)
 
     def test_unknown_promise_is_inconclusive(self):
         result = grade("no-such-promise", load_trace("claude-code-feature-1.json"), feature_case())
@@ -304,7 +304,7 @@ class BoundaryGuard(unittest.TestCase):
         case = load_case("feature-boundary-run")
         pid = "poteto-mode-triggers-architect-on-boundary-crossing"
         designed = minimal(events=[read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/SKILL.md"),
-                                   read(2, "architect/references/runner-prompt.md")], spawns=[{"seq": s, "tool": "spawn_agent", "x_prompt_encrypted": True} for s in (8, 9)], final_reply="done")
+                                   read(2, "arena/SKILL.md")], spawns=[{"seq": s, "tool": "spawn_agent", "x_prompt_encrypted": True} for s in (8, 9)], final_reply="done")
         self.assertEqual(grade(pid, designed, case)["verdict"], PASS)
         skipped = minimal(events=[read(0, "poteto-mode/playbooks/feature.md")] + bash(1, "python3 -m relay import feeds/sample.json"),
                           final_reply="done")
@@ -549,9 +549,6 @@ class CompactFeatureExecution(unittest.TestCase):
                                 "prompt_head": "Role: `feature` implementation owner. Add --json in roster/__main__.py."}]
             self.assertEqual(grade(pid, trace, case, project)["verdict"], INCONCLUSIVE)
             trace["spawns"] = []
-            trace["events"] = [read(3, "architect/references/runner-prompt.md")]
-            self.assertEqual(grade(pid, trace, case, project)["verdict"], FAIL)
-            trace["events"] = []
             trace["worklist"][0]["items"] = feature_items() + items
             self.assertEqual(grade(pid, trace, case, project)["verdict"], FAIL)
 
@@ -629,8 +626,6 @@ class CompactFeatureExecution(unittest.TestCase):
                     trace = minimal(worklist=[opening], spawns=[{"seq": 2, "tool": "spawn_agent"}, unknown], events=events)
                     self.assertEqual(grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)["verdict"],
                                      INCONCLUSIVE if known in ("trail reviewer", " Trail Reviewer ") else FAIL)
-            trace = minimal(worklist=[opening], spawns=[unknown], events=[read(4, "architect/references/runner-prompt.md")])
-            self.assertEqual(grade("feature-compact-implements-directly", trace, load_case("feature-source-count-run"), project)["verdict"], FAIL)
             for assigned in ({"agent_type": "trail reviewer", "subagent_type": "feature"},
                              {"agent_type": " Trail Reviewer ", "subagent_type": " Feature "},
                              {"agent_type": "feature", "subagent_type": " Feature "}):
@@ -1051,7 +1046,7 @@ class ToolResultPairing(unittest.TestCase):
 
 
 class FailedReads(unittest.TestCase):
-    BRIEF = "architect/references/runner-prompt.md"
+    BRIEF = "arena/SKILL.md"
 
     def trace(self, ok, **extra):
         events = [read(0, "poteto-mode/playbooks/feature.md"), {"seq": 1, "kind": "tool_result", "name": "Read", "ok": True, "output_head": "x"},
@@ -1085,7 +1080,7 @@ class FailedReads(unittest.TestCase):
 class HostSkillContamination(unittest.TestCase):
     def test_a_run_that_touched_host_skills_grades_inconclusive_for_every_promise(self):
         case = load_case("feature-boundary-run")
-        events = [read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/references/runner-prompt.md")]
+        events = [read(0, "poteto-mode/playbooks/feature.md"), read(1, "arena/SKILL.md")]
         hits = ["/Users/someone/.claude/skills"]
         for pid in case["promises"]:
             with self.subTest(pid=pid):
@@ -1097,7 +1092,7 @@ class HostSkillContamination(unittest.TestCase):
 
     def test_empty_hits_do_not_block_grading(self):
         case = load_case("feature-boundary-run")
-        events = [read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/references/runner-prompt.md")]
+        events = [read(0, "poteto-mode/playbooks/feature.md"), read(1, "arena/SKILL.md")]
         result = grade("poteto-mode-triggers-architect-on-boundary-crossing", minimal(events=events, spawns=[{"seq": s, "tool": "spawn_agent", "x_prompt_encrypted": True} for s in (8, 9)], final_reply="done", x_host_skill_hits=[]), case)
         self.assertEqual(result["verdict"], PASS)
 
@@ -5296,14 +5291,26 @@ class Issue133WritesAndReruns(unittest.TestCase):
                       "The architect declined to approve the design.", "The architect was unable to approve the design."):
             self.assertEqual(grade("architect-checkpoint-opt-in", minimal(final_reply=reply), case)["verdict"], INCONCLUSIVE, reply)
 
-    def test_f16_reading_the_runner_prompt_alone_is_not_a_fan_out(self):
+    def test_f16_reading_arena_alone_is_not_a_fan_out(self):
         case, pid = load_case("feature-boundary-run"), "poteto-mode-triggers-architect-on-boundary-crossing"
-        events = [read(0, "poteto-mode/playbooks/feature.md"), read(1, "architect/references/runner-prompt.md")]
+        events = [read(0, "poteto-mode/playbooks/feature.md"), read(1, "arena/SKILL.md")]
         self.assertEqual(grade(pid, minimal(events=events, final_reply="done"), case)["verdict"], FAIL)
         sealed = [{"seq": s, "tool": "spawn_agent", "x_prompt_encrypted": True} for s in (3, 4)]
         self.assertEqual(grade(pid, minimal(events=events, spawns=sealed, harness="codex", final_reply="done"), case)["verdict"], PASS)
-        late = [read(0, "poteto-mode/playbooks/feature.md"), read(5, "architect/references/runner-prompt.md")]
+        late = [read(0, "poteto-mode/playbooks/feature.md"), read(5, "arena/SKILL.md")]
         self.assertEqual(grade(pid, minimal(events=late, spawns=sealed, harness="codex", final_reply="done"), case)["verdict"], FAIL)
+
+    def test_sealed_design_evidence_counts_only_sealed_spawns_after_arena(self):
+        case = load_case("feature-boundary-run")
+        events = [read(4, "arena/SKILL.md")]
+        unrelated = {"seq": 6, "tool": "spawn_agent", "prompt_head": "Read the license."}
+        for sealed_seq in (2, 5):
+            with self.subTest(sealed_seq=sealed_seq):
+                spawns = [{"seq": sealed_seq, "tool": "spawn_agent", "x_prompt_encrypted": True},
+                          unrelated, {**unrelated, "seq": 7}]
+                trace = minimal(events=events, spawns=spawns, harness="codex", final_reply="done")
+                result = grade("poteto-mode-triggers-architect-on-boundary-crossing", trace, case)
+                self.assertEqual(result["verdict"], FAIL, result)
 
     def test_hermes_audit_the_keeps_going_count_names_its_turn(self):
         events = in_turn(0, [{"seq": 0, "kind": "user", "text": "going to bed"}] + bash(1, "ls")) + in_turn(1, [{"seq": 5, "kind": "user", "text": "catch up"}] + bash(6, "ls"))

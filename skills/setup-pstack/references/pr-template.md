@@ -11,7 +11,7 @@ Read the repository's PR instructions and discover its existing templates. Check
 - When a documented custom format exists without a template, create a template for that format within the authorized setup scope. Resolve an ambiguous format with the user before writing it.
 - When no repository template or custom format exists, copy [the bundled poteto template](../assets/pull_request_template.md) to `.github/pull_request_template.md`. Create the directory if needed. Create the file only if absent. On reruns, preserve the repository's copy and any local edits.
 
-The [Opening a PR playbook](../../poteto-mode/playbooks/opening-a-pr.md) owns body format precedence and finalization. A separately installed PR-writing skill is optional and does not select the repository format.
+See the Body format section of [Opening a PR](../../poteto-mode/playbooks/opening-a-pr.md). A separately installed PR-writing skill is optional and does not select the repository format.
 
 ## Connect no-mistakes when configured
 

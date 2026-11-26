@@ -12,15 +12,9 @@ The two most common design mistakes are taking the agent's first design and poli
 /architect design the import pipeline before writing any code. i care most about how callers use it.
 ```
 
-[`/architect`](../../skills/architect/SKILL.md) grounds itself first, running `/how` over the code the design touches and `/why` when it moves ownership or layers. Then it runs `/arena` to produce competing design sketches, with the caller's usage written first in each, followed by types, signatures, and a module map. When the model resolver marks the comparison as same-model, it sketches the candidates itself, as described under `/arena` below.
+[`/architect`](../../skills/architect/SKILL.md) traces every system the change touches first. Then it sketches two different shapes, each with types, signatures, and module boundaries, and picks the one where each piece of state has one owner, each task has one way to do it, and callers need to know least. For a large or contested design, it runs `/arena` instead of sketching alone. If you want to see the design before any code, say so in the prompt.
 
-By default it proceeds straight from the synthesized design into implementation. If you want to see the design first, say so:
-
-```text
-/architect with checkpoint. stop and show me before implementing.
-```
-
-The design isn't sacred once code starts. If implementation shows the same workaround in unrelated places, or types that only compile with `any` or forced casts, `/architect` treats that as proof the design is wrong. It scraps the sketch and starts over instead of patching around it.
+The design isn't sacred once code starts. If the same workaround keeps coming back, `/architect` redesigns instead of patching around it.
 
 ## Fan out attempts with `/arena`
 
@@ -28,7 +22,7 @@ The design isn't sacred once code starts. If implementation shows the same worka
 /arena take my prompt to the arena verbatim. i want to compare their proposals with yours.
 ```
 
-[`/arena`](../../skills/arena/SKILL.md) is the general tool underneath. N subagents attempt the same design or code brief in parallel, each writing to its own worktree or directory. A read-only judge on a model other than the parent's, from a different model family when your configuration has one, scores every candidate against a rubric. When no such model can run, the coordinator skips the judge, reads every candidate in full, and picks the base itself. When a playbook or `/architect` calls for a design comparison and the model resolver marks every runner and judge as the coordinator's own model, at any reasoning effort, the coordinator skips the comparison, produces the design itself, and says so. The resolver marks a panel whose every arm inherits the chat model without being told that model. It marks a panel whose arms all name the coordinator's model once the coordinator passes that model, which it does when the resolver notes that the panel runs on one model. A panel that mixes a named model with inheriting arms prints no such note, so when it is resolved without the coordinator's model it runs as configured. Ask for `/arena` or for candidates yourself and the panel still runs. A review that runs through `/arena`, such as `/blast-radius` on a wide change, always runs its arms, and is labeled `same-model` when the resolver marks them as the coordinator's own model. The coordinator reads each candidate's rationale and the judge's scores, reads the chosen base in full, grafts in the best ideas from the losers, and verifies the result.
+[`/arena`](../../skills/arena/SKILL.md) runs the same design or code brief in parallel, with one worktree or directory per candidate. A read-only judge scores every candidate against a rubric. Arena tries a judge from a different model family first, then a different tier of the parent's family. When no other model can run, the coordinator skips the judge. The coordinator reads each candidate end to end, picks a base, grafts in the best ideas from the other candidates, and verifies the result.
 
 ```mermaid
 flowchart LR
@@ -43,6 +37,8 @@ flowchart LR
     G --> H[Graft the best parts]
     H --> I[Verify]
 ```
+
+When the [model resolver](../../skills/setup-pstack/references/models-config.md#resolution) marks a comparison `skip`, the coordinator writes and verifies a new design itself, unless you ask for candidates, which then run labeled `same-model`. For a review or second opinion with that marker, every configured reviewer runs with the `same-model` label. The coordinator skips the cross-judge, picks a base review, combines the findings, and verifies the result.
 
 The panel comes from your [`/setup-pstack`](../../skills/setup-pstack/SKILL.md) configuration, and you can adjust it per task. Ask for more candidates when the decision matters, fewer when it doesn't:
 
@@ -106,7 +102,7 @@ pstack has no planning skill, on purpose. When you do want a written plan, ask f
 /poteto-mode turn this design into a plan. small verifiable PRs, each with its own verification steps.
 ```
 
-The [Multi-phase plan playbook](../../skills/poteto-mode/playbooks/multi-phase-plan.md) settles any remaining open questions by prototype, then writes one section per PR, each ending in proof that the change works. A passing test suite alone doesn't count as that proof. The plan is the deliverable. The playbook doesn't implement it, and it names which execution playbook should run it next.
+The [Multi-phase plan playbook](../../skills/poteto-mode/playbooks/multi-phase-plan.md) settles any remaining open questions by prototype, then writes one section per PR, each ending in proof that the change works. A passing test suite alone doesn't count as that proof. The plan is the deliverable. The playbook doesn't implement it, and execution starts only when you say go.
 
 For a migration, state the bar in the prompt:
 
@@ -121,7 +117,7 @@ For a migration, state the bar in the prompt:
 You might be wondering whether every change needs this. No. Most changes need none of it. A rough ladder:
 
 - A small, finished change you're unsure about needs `/interrogate` alone.
-- In Bug fix, Feature, Refactoring, and Perf issue, `/architect` runs on the intensive route only. A change that crosses two or more source files and admits several plausible shapes earns `/architect`, which brings `/arena` with it. On the standard route the lead compares the shapes itself. Every other playbook keeps `/architect` as written. Feature chooses its route from risk evidence, not module count. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary.
+- In Bug fix, Feature, Refactoring, and Perf issue, `/architect` runs on the intensive route only. A change that crosses two or more source files and admits several plausible shapes earns `/architect`, which brings `/arena` with it when the design is large or contested. On the standard route the lead compares the shapes itself. Every other playbook keeps `/architect` as written. Feature chooses its route from risk evidence, not module count. A confirmed bug with one localized repair goes straight to the failing reproducer and repair, even across a function boundary.
 - A standalone decision where independent attempts would help, like naming, formats, or an algorithm, is `/arena` directly.
 - A coverage matrix, set of parallel checks, or race with declared arms is `/swarm`.
 - An open question you could answer by running something, like a layout, a timing, or an approach, gets a prototype, not a debate.

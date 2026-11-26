@@ -1,68 +1,25 @@
 # Resolve roles and preserve handoffs
 
-Carry delegation roles into plans, checkpoints, and handoffs. Separate the role to resume, prior model history, and explicit human overrides. Record the following for each delegate, including builders and independent verifiers:
-
-| Field | Record |
-|---|---|
-| Role and panel arm | Exact configured role and one-based arm to resume. |
-| Previous resolution | Prior harness, model, and effort returned by the resolver. Label these as historical. |
-| Previous execution | Actual prior harness, model, and effort, with the observation or receipt that establishes them. Record unknown values explicitly. |
-| Human override | Original explicit human model request and its source, or that no such request is established. |
-
-Record the coordinator's previous execution separately when available. Keep resolver output separate from actual execution, including substitutions and inherited or unknown identities. A resolved model alone does not prove which model ran.
-
-Preserve a specific-model override with its original explicit human request. Model names in defaults, examples, past runs, or agent-written summaries do not establish such a request. If the source is unavailable, report the uncertainty instead of attributing the model choice to the human. A direct human model request still takes precedence.
-
-On pickup, resolve the saved role for the receiving harness and its current configuration, even when the previous harness differs. Keep previous resolutions and execution identities as history, not dispatch requirements. A recovered statement such as "builders require Sonnet" establishes no override without the original human request. When a legacy handoff omits the role, recover it from the original brief or matching playbook, not the prior model name. If the role remains unknown, report that gap. Record the replacement's resolution and observed execution without overwriting the prior history.
-
-For durable recovery, preserve the exact role and one-based panel arm, brief, standing orders, checkout, resolved identity, and any observed native task id or CLI receipt. A missing observation leaves the child's liveness unknown. It does not prove that the child stopped. To recover, spawn the saved role per **Spawn a role** like any other spawn, and use the printed arm whose `arm` matches the saved arm. Do not choose `default`, another panel arm, or a guessed model. Record the harness, model, and effort that the replacement runs on. Recovery keeps the workflow's existing retry allowance.
-
-Retain the exact raw `--work-model` argument from the final successful resolver invocation and its complete printed arm. Keep this pair separate from observed execution identity. In an orch attempt, save it as `resolutionContext: {workModel, resolvedArm}` per the [orch reference](../../poteto-mode/scripts/orch/README.md#optional-durable-attempts). A successful invocation without the flag records `workModel: null`. An unsuccessful resolver invocation supplies no successful context. Keep legacy absence unknown. Later model substitution or effort inheritance does not rewrite the saved arm. To recover a `trail reviewer`, pass a saved string `workModel` as `--work-model`. For a saved null, omit the flag. Without saved context, pass the model the work ran on, as for a new review.
+Retain the exact raw `--work-model` argument from the final successful resolver invocation and its complete printed arm. Keep this pair separate from observed execution identity. A successful invocation without the flag records `workModel: null`. An unsuccessful resolver invocation supplies no successful context. Keep legacy absence unknown. Later model substitution or effort inheritance does not rewrite the saved arm. To recover a `trail reviewer`, pass a saved string `workModel` as `--work-model`. For a saved null, omit the flag. Without saved context, pass the model the work ran on, as for a new review.
 
 ## Spawn a role
 
-Every pstack spawn runs a role from the models config, such as `feature` or `how explorer`, sometimes under a persona. Build each spawn in this order.
+Build each spawn in this order.
 
-1. **Name the role and the persona.** The skill or playbook step names the role. A spawn whose skill names no role uses `default`. A `subagent_type` of `poteto-agent` or `comment-sicko` in skill text names a persona, and `general-purpose` names none. Neither one picks the model or the effort.
-2. **Resolve the role.** Run the resolver once per task, and again after the harness or config changes:
-
-   ```sh
-   python3 "${PSTACK_SKILLS_ROOT:?}/setup-pstack/scripts/check-models-config.py" --resolve --harness <claude-code|codex|grok|hermes> [--work-model '<model>@<effort>'] [--lead-model '<model>'] [<role>...]
-   ```
-
-   Failure signal: nonzero exit. It prints one JSON line per arm with `model`, `effort`, and `source`, and a `notes` list when the resolver has a warning. Relay each note to the user in the reply. Pass the roles the skill names, or none to print every role.
-   - Run it from the project root or pass `--project <root>`. Do not read the config files to pick values. The rules, and the grammar for editing the files, live in setup-pstack's [models config reference](../../setup-pstack/references/models-config.md).
-   - When you resolve `trail reviewer`, pass `--work-model '<model>@<effort>'` with the model and effort that did the work, and use the printed arm. Follow the shared [shell guidance](shell-and-processes.md#write-shell-commands) for quoted model arguments.
-     - When the work's role resolved to `inherit-parent`, pass the session model.
-     - When this session did the work and your system prompt or this CLI's config names no exact model ID for it, omit the flag. The resolver reads the session model where the runtime records it, and says so in a note. The current runtime adapter says whether it does. Pass the flag for a delegate's work, with the model and effort that delegate resolved to.
-     - When an arm's note says to pass the session model, you passed `auto` or `inherit-parent`, which name no model. Rerun with the session model, the model ID your system prompt or this CLI's config names, and use that run's arm. If you cannot tell the session model, keep the printed arm and disclose the execution identity per step 5.
-     - Pass the model the work ran on, as the role's resolved value or the CLI's own model ID. A full Claude ID such as `claude-opus-5-5` maps to its alias on a CLI that takes aliases, and stays a literal slug on Hermes.
-     - On Claude Code, a work model that is not a Claude alias, a Claude ID, `auto`, or `inherit-parent` exits 2.
-     - On another CLI, a work model that CLI cannot use adds a note and applies no step.
-     - When the exit 2 names `--work-model`, correct the value and rerun. Drop a `[1m]` suffix from a Claude alias, or the provider prefix and tag from a slug such as `anthropic/claude-opus-4.7`. If the work ran on another vendor's model, rerun without the flag: every Claude Code arm is a Claude model, so the printed arm is cross-model. Otherwise rerun without the flag and disclose the execution identity per step 5.
-     - With the reviewer unpinned, the resolver prefers a different model in the work model's family that the user's config allows, a higher tier first, and adjusts the effort.
-     - A `"step": "same-model"` field means the config allows no other model in the work model's family, or the user pinned the reviewer with `trail reviewer step: off`. Report that resolution and disclose the execution identity per step 5.
-   - Every model you pass comes from this output or an explicit request in the task. Never improvise one, and say which role each model came from.
-   - If the resolver exits nonzero or cannot run, still spawn the role. Omit the model and effort so the child inherits the session's. For `trail reviewer`, disclose the execution identity per step 5. For a panel role, keep the arm count that the panel's skill names as its default, and brief each arm the way that skill says. Report the resolver error and the values the child ran on. Never drop a spawn because the resolver failed.
-
-   **Same-model design comparison.** A design comparison is a panel whose candidates you choose between: architect's sketches, or an `arena` run that produces candidate designs or implementations for your own pick. It buys an independent opinion, and arms on your own model give none. The first `arena runners` or `architect runners` arm prints `"comparison": "skip"` when every runner arm and every `arena cross-judge pool` arm resolves to your model. For this check, effort is not a model: two arms, or an arm and you, that differ only in effort are one model. An `inherit-parent` arm is your model. When the arm has no `"comparison"` field and a note says that either role resolves to one distinct model, rerun with `--lead-model '<model>'`, passing your session model the way `--work-model` takes it. If you cannot tell your session model, run the panel and say that the model check did not run.
-
-   On `skip` in a design comparison, spawn no runner and no cross-judge. Produce the one artifact yourself, and state in the reply `same-model, comparison skipped` with the model. The skip covers the comparison only. Keep spawning for the other reasons to delegate: an explorer for bulk reading or an implementer briefed with the design keeps that work out of your context on any model, and every review or verdict the task requires still runs under its own role and rules. Without the field, run every arm. No other role prints it, so `interrogate reviewers` and every other panel keep their arms on one model.
-
-   A review always runs. When a skill loads `arena` to review, judge, or get a second opinion on finished work, as `blast-radius` step 6 does, and the arm prints `skip`, ignore the field: run every runner arm, let arena's Phase C choose or skip the judge, and label the result `same-model` in the verdict and the reply. Count agreement between those arms as one opinion. Without the field, a review follows arena as written.
-
-   Run a design comparison despite `skip` only when the user asked for the comparison itself in this task: they invoked `arena` by name, asked for candidates, a panel, or a count, or named models. A playbook step, a trigger, or a skill that loads `arena` or `architect` for a design comparison is not that request. Say in the reply that the panel ran at the user's request, and name the model each arm ran on.
-3. **Build the spawn call for this CLI.** Use the current runtime adapter selected in [pstack-harness](../SKILL.md#runtime-adapters). `inherit-parent` in a field means omit that field.
-4. **Brief the persona.** A persona that runs as a briefing gets its complete text from the [persona contract](named-roles.md). Never summarize it.
+1. **Name the role and the persona** as the harness skill's **Spawn a role** step 1 says. Neither one picks the model or the effort.
+2. **Resolve the role** as the harness skill's **Spawn a role** step 2 says, adding `--work-model '<model>@<effort>'` where the rules below call for it. Relay each note to the user in the reply. The rules, and the grammar for editing the files, live in setup-pstack's [models config reference](../../setup-pstack/references/models-config.md).
+   - For `trail reviewer`:
+     - When the exit 2 names `--work-model`, follow its message, drop any `[1m]` suffix, and rerun. If the work ran on another vendor's model, rerun without the flag: every Claude Code arm is a Claude model, so the printed arm is cross-model. Otherwise rerun without the flag and disclose the execution identity per step 5.
+     - A `"step": "same-model"` field marks a same-model review, and its note says why. Report that resolution and disclose the execution identity per step 5.
+   - If the resolver exits nonzero or cannot run, spawn as the harness skill's step 2 says. For `trail reviewer`, disclose the execution identity per step 5.
+3. **Build the spawn call** as the harness skill's step 3 says.
+4. **Brief the persona** per the [persona contract](named-roles.md).
 5. **Report execution without dropping an arm.** Apply this step to every spawn, including a `trail reviewer` that normally resolves to `inherit-parent` without a fallback or `step` marker.
    - If the spawn rejects a model, or a spawned arm fails on model availability such as exhausted usage credits, omit the model, let the arm inherit the session model, and report the substitution.
-   - Label the verdict and reply `same-model` when the observed reviewer and work models match. When either identity is unknown, say the review may be same-model. For explicitly requested models, call the Skill tool with `arena`, then follow its [required-arm rule](../../arena/SKILL.md#required-arms).
+   - When either identity is unknown, say the review may be same-model.
    - If no field or agent can carry the effort, the effort alone becomes `inherit-parent`. Keep the model and the arm. Say in the reply which role's effort was inherited and why, such as "`how explainer` ran at the session effort because the spawn tool takes no effort and `pstack-effort-xhigh` is not loaded. Run `/setup-pstack` to register it."
-   - When a persona ran as a briefing in an effort agent's prompt instead of under its native name, say that too.
-   - Delegates return resolver notes and actual or inherited model and effort observations to the parent, including substitutions, limitations, and unknown values. The parent relays them in its reply.
 
 ## Fork restrictions
 
 A fork, such as Claude Code's `fork` agent type or a Codex full-history fork, inherits the lead's whole context and runs on the lead's model and effort, ignoring any override. Fork only when the role resolves to `inherit-parent` for both, as `default` ships, and the brief would otherwise restate context the lead already holds, such as drafting from files the lead just read or writing a resume note. Never fork a verdict, a review, a fresh-perspective role, or a role that resolves to a model or an effort.
 - Every other spawn starts with a fresh context. Where the spawn tool forks unless told otherwise, as Codex's current one does, the spawn call says which one it wants.
-- A fork returns the same thin report as any spawn. Call the Skill tool with `principle-guard-the-context-window`.

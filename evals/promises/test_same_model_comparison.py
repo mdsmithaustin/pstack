@@ -33,17 +33,13 @@ class SameModelComparisonPromise(ResolverSandbox):
         self.assertEqual(
             marks(self.resolve("hermes", *ROLES)), {"arena runners": "skip", "architect runners": "skip"},
         )
-        roles_md = (SKILLS / "pstack-harness/references/roles.md").read_text(encoding="utf-8")
-        for rule in (
-            "On `skip` in a design comparison, spawn no runner and no cross-judge.",
-            "state in the reply `same-model, comparison skipped` with the model",
-            "For this check, effort is not a model: two arms, or an arm and you, that differ only in effort are one model",
-            "The skip covers the comparison only.",
-            "Run a design comparison despite `skip` only when the user asked for the comparison itself in this task",
-        ):
-            self.assertIn(rule, roles_md)
-        for skill in ("arena", "architect"):
-            self.assertIn('`"comparison": "skip"`', (SKILLS / skill / "SKILL.md").read_text(encoding="utf-8"))
+        self.assertIn('`"comparison": "skip"`', (SKILLS / "arena/SKILL.md").read_text(encoding="utf-8"))
+
+    def test_a_design_comparison_the_user_asked_for_still_runs_on_a_marked_row(self):
+        self.assertIn(
+            "If the user explicitly asked for candidates, run them anyway, labeled `same-model`.",
+            (SKILLS / "arena/SKILL.md").read_text(encoding="utf-8"),
+        )
 
     def test_a_review_that_runs_through_arena_keeps_its_arms_on_a_marked_row(self):
         review = "still run every arm of a review or second opinion, labeled same-model"
@@ -54,15 +50,8 @@ class SameModelComparisonPromise(ResolverSandbox):
                 self.assertEqual((arena["comparison"], architect["comparison"]), ("skip", "skip"))
                 self.assertEqual([review in note for note in arena["notes"]].count(True), 1)
                 self.assertNotIn(review, " ".join(architect["notes"]))
-        roles_md = (SKILLS / "pstack-harness/references/roles.md").read_text(encoding="utf-8")
         self.assertIn(
-            "ignore the field: run every runner arm, let arena's Phase C choose or skip the judge, "
-            "and label the result `same-model` in the verdict and the reply",
-            roles_md,
-        )
-        self.assertNotIn("every rule that compares models", roles_md)
-        self.assertIn(
-            "a design comparison skips Phases B through E, and a review still runs them",
+            "For a review or second opinion, run every arm, label each `same-model` per blast-radius step 6",
             (SKILLS / "arena/SKILL.md").read_text(encoding="utf-8"),
         )
         self.assertIn(
@@ -70,16 +59,11 @@ class SameModelComparisonPromise(ResolverSandbox):
             (SKILLS / "blast-radius/SKILL.md").read_text(encoding="utf-8"),
         )
 
-    def test_the_one_model_note_without_the_field_is_what_triggers_the_rerun(self):
+    def test_a_one_model_panel_gets_a_note_and_is_marked_only_with_the_lead_model(self):
         self.write_user("arena runners, architect runners, arena cross-judge pool: opus, opus\n")
         first = self.resolve("claude-code", "architect runners")[0]
         self.assertNotIn("comparison", first)
         self.assertIn("architect runners resolves to one distinct model (opus)", first["notes"][0])
-        self.assertIn(
-            'When the arm has no `"comparison"` field and a note says that either role resolves to one distinct model, '
-            "rerun with `--lead-model '<model>'`",
-            (SKILLS / "pstack-harness/references/roles.md").read_text(encoding="utf-8"),
-        )
         self.assertEqual(
             marks(self.resolve("claude-code", "--lead-model", "opus", "architect runners")),
             {"architect runners": "skip"},
@@ -119,9 +103,9 @@ class ArchitectOracleReadsTheResolver(ResolverSandbox):
         head = self.run_cmd(argv, expect=0).stdout[:oracles.RESULT_HEAD]
         return bash(seq, "python3 check-models-config.py --resolve --harness claude-code " + " ".join(args), ok, head)
 
-    def graded(self, *calls):
+    def graded(self, *calls, reply=REPLY):
         events = [read(5, "arena/SKILL.md"), *(event for call in calls for event in call)]
-        trace = minimal(events=events, final_reply=self.REPLY)
+        trace = minimal(events=events, final_reply=reply)
         return grade("architect-runs-arena-for-sketches", trace, load_case("architect-run"))
 
     def test_a_reported_skip_the_resolver_marked_is_inconclusive(self):
@@ -174,18 +158,29 @@ class ArchitectOracleReadsTheResolver(ResolverSandbox):
         result = self.graded(marked, self.resolver_call(9, "--lead-model", "opus", "architect runners"))
         self.assertEqual(result["verdict"], FAIL, result)
 
-    def test_an_arena_skip_does_not_excuse_an_unmarked_architect_skip(self):
+    def test_an_arena_skip_mark_is_an_exempt_skip_whether_or_not_the_reply_says_so(self):
+        self.write_user("arena runners, arena cross-judge pool: opus, opus\n")
+        for reply in (self.REPLY, "Designed the import pipeline myself."):
+            with self.subTest(reply=reply):
+                result = self.graded(self.resolver_call(7, "--lead-model", "opus", "arena runners"), reply=reply)
+                self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+                self.assertIn("the resolver marked the comparison `skip`", result["failures"][0])
+
+    def test_an_arena_skip_mark_stands_beside_an_earlier_unmarked_architect_row(self):
         self.write_user("architect runners: sonnet, sonnet\narena runners, arena cross-judge pool: opus, opus\n")
-        for roles in (
-            (("architect runners",), ("arena runners",)),
-            (("arena runners",), ("architect runners",)),
-            (("architect runners", "arena runners"),),
-        ):
-            with self.subTest(roles=roles):
-                result = self.graded(*(
-                    self.resolver_call(7 + 2 * i, "--lead-model", "opus", *group)
-                    for i, group in enumerate(roles)
-                ))
+        result = self.graded(
+            self.resolver_call(7, "--lead-model", "opus", "architect runners"),
+            self.resolver_call(9, "--lead-model", "opus", "arena runners"),
+        )
+        self.assertEqual(result["verdict"], INCONCLUSIVE, result)
+
+    def test_no_runner_and_no_skip_mark_fails_without_a_reported_skip(self):
+        for calls in ((), (("arena runners",),), (("architect runners",),)):
+            with self.subTest(calls=calls):
+                result = self.graded(
+                    *(self.resolver_call(7 + 2 * i, "--lead-model", "sonnet", *group) for i, group in enumerate(calls)),
+                    reply="Designed the import pipeline myself.",
+                )
                 self.assertEqual(result["verdict"], FAIL, result)
 
     def test_a_reported_skip_with_no_readable_resolver_row_is_inconclusive(self):

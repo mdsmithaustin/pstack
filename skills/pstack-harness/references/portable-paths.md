@@ -2,11 +2,11 @@
 
 pstack playbooks use three independent absolute paths. `PSTACK_SKILLS_ROOT` contains the loaded `pstack-harness`, `poteto-mode`, `unslop`, and other installed sibling skills. `PSTACK_SOURCE_ROOT` is a verified checkout of `mdsmithaustin/pstack` for fresh pstack trunk reads. `PROJECT_ROOT` is the consumer repository for consumer-owned control skill reads. Never substitute one root for another. Resolve only the roots that the next command needs.
 
-Keep concrete root values and whether `PSTACK_TEMP_ROOT` is set only in the program's private, untracked run state. A tracked or shared plan records the variable names and this setup contract, never machine-local absolute values. Run each resolver once per program or new execution environment. Later ticks and resumes restore both the source and ownership bindings, then run the fetch and read directly. They do not rerun source initialization because it resets `PSTACK_TEMP_ROOT`. Quote every expansion.
+Keep concrete root values and whether `PSTACK_TEMP_ROOT` is set only in the program's private, untracked run state. A tracked or shared plan records the variable names and this setup contract, never machine-local absolute values. Quote every expansion.
 
 ## Resolve the installed skills root
 
-Set `PSTACK_HARNESS_SKILL` to the absolute logical path of this `pstack-harness/SKILL.md` as the session loaded or read it. Preserve that logical path even when the directory is a symlink. This block does not require a Git repository or network access. Use it for installed sibling files and local tools. Run the plan check with `node "${PSTACK_SKILLS_ROOT:?}/poteto-mode/scripts/check-plan.mjs" "$PLAN_PATH"`.
+Set `PSTACK_HARNESS_SKILL` to the absolute logical path of this `pstack-harness/SKILL.md` as the session loaded or read it. Preserve that logical path even when the directory is a symlink. This block does not require a Git repository or network access. Use it for installed sibling files and local tools.
 
 ```sh
 case "${PSTACK_HARNESS_SKILL:-}" in

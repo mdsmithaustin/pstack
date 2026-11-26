@@ -11,5 +11,5 @@
   "default": 2400,
   "codex": 3000
  },
- "note": "04-design.md gives `/architect with checkpoint. stop and show me before implementing.`; the task is appended"
+ "note": "04-design.md says to ask in the prompt to see the design before any code; the task is appended"
 }

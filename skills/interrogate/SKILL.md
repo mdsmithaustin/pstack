@@ -31,5 +31,5 @@ Skip arena Phases C, D, and E. Adversaries find different failures, so the verdi
 
 - **Intent**: the restatement.
 - **Findings**: for each verified finding, the command, its output, how it breaks the intent, and the adversaries that found it. Say "no verified findings" when none survive.
-- **Threats**: when the context declares threats, reconcile each with mitigation evidence or an explicit disposition per [Prove It Works](../principle-prove-it-works/SKILL.md).
+- **Threats**: when the context declares threats, reconcile each with mitigation evidence or an explicit disposition.
 - **Dropped**: for each adversary, the count of dropped findings and why.

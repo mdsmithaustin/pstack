@@ -424,7 +424,7 @@ class Resolve(ResolveRunner, unittest.TestCase):
                 arm("architect runners", "opus", "xhigh", "user flat", 2),
                 arm("architect runners", "sonnet", "high", "user flat", 3),
                 arm("default", "inherit-parent", "inherit-parent", "user flat"),
-                arm("swarm workers", "sonnet", "high", "skill default ## claude-code"),
+                arm("swarm workers", "opus", "high", "skill default ## claude-code"),
             ],
         )
 
@@ -1701,7 +1701,7 @@ class ShippedDefaultLeak(ResolveRunner, unittest.TestCase):
         )
 
     def test_a_default_whose_model_the_config_uses_elsewhere_gets_no_note(self):
-        self.assertEqual(self.notes("claude-code", "swarm workers", user="feature, refactoring: sonnet\n"), [[]])
+        self.assertEqual(self.notes("claude-code", "swarm workers", user="feature, refactoring: opus\n"), [[]])
 
     def test_a_workspace_file_alone_makes_the_config_partial(self):
         [arm] = self.resolve("claude-code", "hardest tasks", workspace="feature, refactoring: sonnet\n")
@@ -1823,10 +1823,10 @@ class PanelDiversityNote(ResolveRunner, unittest.TestCase):
 
 SKIP_ACTIONS = {
     "arena runners": (
-        "so skip a design comparison per Spawn a role step 2, "
+        "so skip a design comparison per arena Phase A step 3, "
         "and still run every arm of a review or second opinion, labeled same-model"
     ),
-    "architect runners": "so skip the comparison per Spawn a role step 2",
+    "architect runners": "so skip the comparison per arena Phase A step 3",
 }
 
 
