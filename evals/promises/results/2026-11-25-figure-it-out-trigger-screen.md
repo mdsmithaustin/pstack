@@ -37,7 +37,7 @@ A routing event is a playbook file read, a `plan.py <stem>` call that returned w
 - The adjudicator checks every FAIL's cited event against the trace before counting. A FAIL the trace does not support becomes inconclusive. Inconclusive runs never count.
 - A candidate beats base when, on one lead and one step-away cell, it fails at least 2 fewer of 3 runs than base. It regresses when, on any lead and any cell, the guard included, it fails at least 2 more.
 - A candidate ships only when it beats base and regresses nowhere. When both qualify, the one with fewer step-away failures ships. With no winner, the entry keeps its current text.
-- The rule filed before the first run broke a remaining tie by fewer guard failures, then by fewer entry bytes. The first version of this file left out those two tie-breaks.
+- The original rule broke a remaining tie by fewer guard failures, then by fewer entry bytes. The first version of this file left out those two tie-breaks.
 
 ## Results
 
