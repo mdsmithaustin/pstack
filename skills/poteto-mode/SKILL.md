@@ -17,6 +17,10 @@ When your context holds a summary of earlier work or a truncation notice, follow
 
 ## Playbooks
 
+Before you match a playbook, call the Skill tool with `figure-it-out` in these cases, even when Refactoring, Feature, or Autonomous run fits:
+- The user steps away to review the work later ("going to bed", "stepping away", "overnight").
+- A migration across many call sites, a multi-day program, or an ambitious multi-part change.
+
 Match the task to a playbook below. Before task-specific work, print its plan:
 
 ```sh
@@ -33,7 +37,7 @@ The endpoint the user or host states governs. Without one, the plan prints the d
 - Skip a step only where its own text allows it, the user says no, it lies past the endpoint, or the project lacks what it needs, such as a git remote. A skip waives only the actions its reason rules out.
 - Another review pass needs a named unresolved concern.
 
-For a large or cross-cutting effort (a migration across many call sites or packages, a multi-day program, an ambitious multi-part change), or work the user steps away from to trust later, call the Skill tool with `figure-it-out` even when a narrower playbook like Feature fits. Call the Skill tool with `figure-it-out` whenever no bundled playbook fits. It designs a bespoke, rigorous playbook for the task.
+Call the Skill tool with `figure-it-out` whenever no bundled playbook fits.
 
 - **Investigation.** Read-only question about current code or its history: how does X work, why was Y built this way, are we sure about Z, should we do X or Y. A pull request review starts in Code review. `playbooks/investigation.md`.
 - **Code review.** Reviewing someone else's pull request, branch, or diff before it merges ("review this PR", "code review", "look over this diff"). `playbooks/code-review.md`.
