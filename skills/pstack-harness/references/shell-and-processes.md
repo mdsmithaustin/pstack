@@ -35,6 +35,18 @@ Each return from a wait makes you reread your whole context, so a wait costs abo
 - Never sleep between your own checks, and never wait in short steps that each wake you to find nothing changed.
 - On Claude Code, apply this with [its wait tools](claude-code.md#wait-for-a-change). On Codex, apply it with [its wait tools](codex.md#wait-on-a-command-with-one-long-wait). On another runtime, use the longest wait its tools offer that still returns when the command exits.
 
+## Hand a PR watch to a child
+
+Use this for Babysit `drive` and the Shipping queue wait on GitHub. A `routine` child holds the watch, so the lead's context is reread once, for the report, not at every watcher return.
+
+- Resolve `routine` with **Spawn a role**. When it resolves to `inherit-parent`, or the runtime cannot pin a model (Grok Build, Hermes), hold the watch yourself under the rule above, because the handoff exists to spend a cheaper model.
+- Brief the child to run `watch-pr` in the foreground, never to end its turn while the watch is open, and to report once. A child that ends its turn finishes, and each stop wakes you. It reruns the watcher without a report on exit 5, which only a nonzero `--timeout` produces, and on a first exit 7. Any other exit ends the watch.
+- Give the child a format for its entire final reply, with at most five lines total. Use one plain-text line each for the exit code, the verdict (`READY`, `COMPLETE`, or the blocker kind), the head SHA, and a review URL when exit 8 names one. Start with the exit code and end the reply after the last field. Take the head SHA from the terminal `watch-pr` JSON, and on exit 8 use `blocker.reviews[].commitOid` and the URL from the same review. Leave out a field the JSON does not carry.
+- The child reads, and it never changes state. It never merges, runs `merge-gate`, answers a review thread, or posts a comment. It writes no security, privacy, auth, or data finding. You do those. After each report you read the review bodies yourself, and in a gated repository `no-mistakes axi status`. On exit 7 the child has already retried, so report the query failure.
+- After each report, act, then start a fresh child to watch the next head. Never resume one across pushes.
+- On Claude Code, set `run_in_background: true` on the `Agent` call and end your turn after launch. The child runs the watcher in a foreground Bash call with `timeout: 600000` and `--timeout 540`, and reruns on exit 5. The Bash tool caps a call at 600000 ms, and the Claude Code docs set a ten-minute stall timeout for subagents.
+- On Codex, the child follows [its wait tools](codex.md#wait-on-a-command-with-one-long-wait), and each poll rereads the child's context, not yours. Wait for the child with `wait_agent` and `timeout_ms: 3600000`, so its timeout is the only empty wake. With `close_agent` in your tools, pass the child's ID, and close the child after you read its report. The wait returns when the child reaches a final status and lowers a larger value to its maximum. Without `close_agent`, the wait takes no ID, returns on any mailbox message, and fails a value above its configured maximum, 3600000 by default at 0.170.0. Read the live schema.
+
 ## Inspect running processes
 
 Process discovery grants inspection, not permission to terminate unrelated processes. Keep command lines private when they contain credentials or user data.
