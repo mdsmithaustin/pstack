@@ -1,6 +1,6 @@
 # Shell commands and running processes
 
-Use this reference in every runtime when you read a diff or answer what is running.
+Use this reference in every runtime when you read a diff, wait on a command or outside state, or answer what is running.
 
 ## Read a diff
 
@@ -24,6 +24,16 @@ Read without a cap any diff, test file, or code that you will judge. A cap on se
 2. Read every saved file, one at a time. On Codex, read each as [Read files](codex.md#read-files) says.
 3. Check the last line. `<n>` must equal the count of rows and the count of saved files that you read to the end. A file that came back cut off is unread, so read its missing part before you judge the change. For each row marked `not shown`, read the file itself or report that file as unread. Read the working tree file for an `unmerged` row, `git show :<name>` for any other `staged` or `--cached` row, and `git show <revision>:<name>` when the range ends at a commit. If the command exits with an error, the change is unread and the script has already removed its directory. Report the error line and stop.
 4. Remove the directory that holds the index file once you have judged the change.
+
+## Wait for a change, not a tick
+
+Each return from a wait makes you reread your whole context, so a wait costs about as much as the session so far. Make each wait return only when the state you need changes or a deadline passes.
+
+- To wait on a long command, such as a test run, start it once under a deadline and wait for it to exit. Use the command's own timeout flag, or wrap it in a timeout. Never check its output again and again while it runs. When the deadline passes, read its output once to see why.
+- To wait on a GitHub PR, use the `watch-pr` watcher that Babysit names, because it already exits on every blocker, review findings included.
+- To wait on other outside state, such as CI or a gate run, run one command that checks in a loop, and give it a deadline. It prints nothing until the state changes or its deadline passes, then prints one line and exits.
+- Never sleep between your own checks, and never wait in short steps that each wake you to find nothing changed.
+- On Claude Code, apply this with [its wait tools](claude-code.md#wait-for-a-change). On Codex, apply it with [its wait tools](codex.md#wait-on-a-command-with-one-long-wait). On another runtime, use the longest wait its tools offer that still returns when the command exits.
 
 ## Inspect running processes
 

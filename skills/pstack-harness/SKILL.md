@@ -21,12 +21,13 @@ Read each selected reference in full before its action. Select only the actions 
 | `role-handoff` | [Role resolution and handoffs](references/roles.md) |
 | `persona` | [Persona contract](references/named-roles.md) when the spawn names a persona |
 | `loop` | [Loops and wake-ups](references/loops.md) |
+| `wait` | [Wait for a change](references/shell-and-processes.md#wait-for-a-change-not-a-tick) |
 | `transcript` | [Workspace transcripts](references/transcripts.md) and the current runtime adapter below |
 | `portable-paths` | [Portable resource path contract](references/portable-paths.md) when a command uses `PSTACK_SKILLS_ROOT`, `PSTACK_SOURCE_ROOT`, or `PROJECT_ROOT` |
 
 ## Runtime adapters
 
-For spawn or transcript, read only the current runtime column for that action. Other actions need no runtime adapter.
+For spawn or transcript, read only the current runtime column for that action. Other actions need a runtime adapter only where their reference links one.
 
 | Runtime | Spawn adapter | Transcript location |
 |---|---|---|

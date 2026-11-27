@@ -27,6 +27,15 @@ Pass `model` and `reasoning_effort` on `spawn_agent`, and whenever you pass eith
 - Wait when each remaining task belongs either to a running child or to an arm that waits for a free slot. Spawn each waiting arm as soon as a slot frees.
 - After a child reports, spot-check its claims.
 
+## Wait on a command with one long wait
+
+Apply [wait for a change, not a tick](shell-and-processes.md#wait-for-a-change-not-a-tick) to these tools, as read in the Codex source at 0.170.0:
+- In code mode, `wait` on a running `exec` cell returns when the cell finishes, when it calls `yield_control()`, or when the yield time ends. While the `InstantInterrupt` feature is on, its default at 0.170.0, user input also ends it. Printed output does not end it. Its `yield_time_ms` defaults to `10000` and has no cap, so pass the time the command still needs.
+- With `exec_command` and `write_stdin`, an empty `write_stdin` poll accepts up to `300000` by default and returns when the process exits. No source read shows that user input ends it. In an [unattended run](../../poteto-mode/references/unattended.md), pass that cap. Otherwise keep each poll to `60000`, so that the user can reach you.
+- When a child is also running, wait with `wait_agent` as above instead, because a child's report does not end either command wait.
+- Never call `sleep` to wait on a command, because it cannot see the command.
+- The base instructions' 60-second limit on blocking waits exists so that the user can reach you. While `InstantInterrupt` is on, user input ends a code-mode `wait`, so this rule overrides that limit for it. With `InstantInterrupt` off, keep each code-mode `wait` to `60000` unless the run is unattended.
+
 ## Invocation and effort hints
 
 `spawn_agent` (the multi-agent feature, stable in 0.152) takes a model and a reasoning effort per spawn, with the [`fork_turns` rule above](#codex-adapter); custom agents use TOML in `~/.codex/agents/` or `.codex/agents/` with `name`, `description`, and `developer_instructions`; generated pstack personas leave model and effort unset; `codex exec` is the subprocess route

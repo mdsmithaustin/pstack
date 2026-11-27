@@ -21,6 +21,12 @@ A delegate's own spawns inherit the delegate's effort, so a nested spawn with an
 - Stop a child you no longer need with `TaskStop`.
 - The [shared wait rule](delegation.md) says what you may do while a child runs.
 
+## Wait for a change
+
+Apply [wait for a change, not a tick](shell-and-processes.md#wait-for-a-change-not-a-tick) to these tools:
+- Run a command that ends within the Bash tool's timeout in the foreground. Run a longer one in the background, because its completion notification starts your next turn. Never read its output file while it runs.
+- A Monitor wakes you on every line its command prints. Make that command print only state changes, failures, and the final result. When it wraps a watcher that prints progress, filter the progress out, keep every terminal and failure line, and end with a line that carries the watcher's exit code, because a filter such as `grep` replaces that code with its own.
+
 ## Invocation and effort hints
 
 `Task` tool (custom agents from `.claude/agents/` spawn by name); `model` takes short aliases
