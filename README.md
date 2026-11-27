@@ -43,7 +43,7 @@ pick the targets you use at the prompt, including `hermes-agent` for hermes. `-g
 a full `/setup-pstack` run checks these commands on your `PATH`. only `python3` is required to continue past this check.
 
 - **python3, 3.9 or newer.** runs the plan script, the model resolver, and the preserve gate.
-- **bun.** runs the GitHub PR watcher, and the merge gate. without bun on your `PATH`, babysit can poll with `gh`, PR recap can [run bun through npx](./skills/pr-recap/references/sketch.md#setup) to draw sketches, and node can run the attachment helper.
+- **bun.** runs the GitHub PR watcher and the merge gate. if the watcher cannot run, see the [`gh` status fallback in Babysit](./skills/poteto-mode/playbooks/babysit.md#babysit). PR recap can [run bun through npx](./skills/pr-recap/references/sketch.md#setup) to draw sketches, and node can run the attachment helper.
 - **node.** on native Windows, follow the [statechart instructions for Node](./skills/statechart/SKILL.md#run). on POSIX systems, the [statechart launcher](./skills/statechart/scripts/statechart) accepts a supported version of Node or Bun, or Deno 2.0 or newer.
 - **gh.** the default CLI for opening, watching, and landing GitHub pull requests. the playbooks use the Origin CLI when it can resolve the repository.
 
