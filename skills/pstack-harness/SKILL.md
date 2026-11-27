@@ -27,7 +27,7 @@ Read each selected reference in full before its action. Select only the actions 
 
 ## Runtime adapters
 
-For spawn or transcript, read only the current runtime column for that action. Other actions need no runtime adapter.
+For spawn or transcript, read only the current runtime column for that action. Other actions read only the adapter sections their reference links.
 
 | Runtime | Spawn adapter | Transcript location |
 |---|---|---|
