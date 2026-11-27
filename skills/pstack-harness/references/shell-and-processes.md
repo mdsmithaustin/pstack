@@ -35,6 +35,17 @@ Each return from a wait makes you reread your whole context, so a wait costs abo
 - Never sleep between your own checks, and never wait in short steps that each wake you to find nothing changed.
 - On Claude Code, apply this with [its wait tools](claude-code.md#wait-for-a-change). On Codex, apply it with [its wait tools](codex.md#wait-on-a-command-with-one-long-wait). On another runtime, use the longest wait its tools offer that still returns when the command exits.
 
+## Hand a PR watch to a child
+
+Use this for Babysit `drive` and the Shipping queue wait on GitHub. A `routine` child holds the watch, so the lead's context is reread once, for the report, not at every watcher return.
+
+- Resolve `routine` with **Spawn a role**. When it resolves to `inherit-parent`, or the runtime cannot pin a model (Grok Build, Hermes), hold the watch yourself under the rule above. A child on your own model saves nothing.
+- Brief the child to run `watch-pr` in the foreground, never to end its turn while the watch is open, and to report once. A child that ends its turn finishes, and each stop wakes you. It reruns the watcher without a report on exit 5, which only a nonzero `--timeout` produces, and on a first exit 7. Any other exit ends the watch.
+- The report is at most five lines: the exit code, the blocker kind or `READY`, the head SHA, and a review URL when exit 8 names one. The child reads, and it never changes state. It never merges, runs `merge-gate`, answers a review thread, or posts a comment. It writes no security, privacy, auth, or data finding. You do those, and you read the review bodies and `no-mistakes axi status` yourself after each report.
+- After each report, act, then start a fresh child to watch the next head. Never resume one across pushes.
+- On Claude Code, the child runs the watcher in a foreground Bash call with `timeout: 600000` and `--timeout 540`, and reruns on exit 5. The Bash tool caps a call at 600000 ms, and the Claude Code docs set a ten-minute stall timeout for subagents. After you spawn it, end your turn.
+- On Codex, the child follows [its wait tools](codex.md#wait-on-a-command-with-one-long-wait), and each poll rereads the child's context, not yours. Wait for the child with `wait_agent` and `timeout_ms: 3600000`, the version 0.170.0 maximum, because the wait returns on any mailbox message and its timeout is the only empty wake. Read the live schema for the maximum.
+
 ## Inspect running processes
 
 Process discovery grants inspection, not permission to terminate unrelated processes. Keep command lines private when they contain credentials or user data.
