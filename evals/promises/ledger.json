@@ -3250,6 +3250,56 @@
    ],
    "scenario": "reflect-run"
   },
+  "reframe-borrows-from-neighboring-fields": {
+   "check": "static",
+   "claim": "/reframe borrows terms from 2 or 3 neighboring fields that solved the same problem under other names and says where each analogy breaks.",
+   "evidence": [
+    {
+     "file": "skills/reframe/SKILL.md",
+     "quote": "Pick 2 or 3 neighboring fields that solved the same shape of problem under other names."
+    },
+    {
+     "file": "skills/reframe/SKILL.md",
+     "quote": "say what carries over, where the analogy breaks, and which terms come back."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/reframe/SKILL.md"
+   ]
+  },
+  "reframe-ranks-checked-expert-terms": {
+   "check": "static",
+   "claim": "/reframe gives 8 to 12 expert terms ranked by how much each would change what gets built, each tied to the part of the description it names and to a real project with a link, and opens every link to confirm it.",
+   "evidence": [
+    {
+     "file": "skills/reframe/SKILL.md",
+     "quote": "Give 8 to 12 terms, ranked by how much each would change what gets built."
+    },
+    {
+     "file": "skills/reframe/SKILL.md",
+     "quote": "Open every link and confirm it uses the term that way."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/reframe/SKILL.md"
+   ]
+  },
+  "reframe-rewrites-description": {
+   "check": "static",
+   "claim": "/reframe rewrites the user's description with the new words.",
+   "evidence": [
+    {
+     "file": "skills/reframe/SKILL.md",
+     "quote": "Rewrite their description with the new words."
+    }
+   ],
+   "harness_sensitive": false,
+   "owners": [
+    "skills/reframe/SKILL.md"
+   ]
+  },
   "reply-carries-commands-and-outputs": {
    "check": "live",
    "claim": "The reply to a verified task carries the exact commands run and their outputs.",
@@ -4944,10 +4994,10 @@
    "text": "For someone else's pull request, `/poteto-mode review this PR` runs the [Code review playbook](../../skills/poteto-mode/playbooks/code-review.md)."
   },
   "0de7333be3f2": {
-   "class": "cursor-only",
+   "class": "context",
    "file": "02-poteto-mode.md",
-   "reason": "Upstream added /reframe after 0b46ec39 (2dd5c0cc, 9e278fe4). PR 575 syncs c742dd61..0b46ec39, so the next sync decides whether to port it.",
    "sources": [
+    "port",
     "upstream"
    ],
    "text": "```text\n/reframe the settings page saves some fields right away and others only on submit, and people lose edits.\n```"
@@ -5401,10 +5451,11 @@
    "text": "It reads only, and tells you in plain words what changed since your last message, with the screenshots and small diagrams the work produced."
   },
   "188d370a3646": {
-   "class": "cursor-only",
+   "class": "promise",
    "file": "02-poteto-mode.md",
-   "reason": "Upstream added /reframe after 0b46ec39 (2dd5c0cc, 9e278fe4). PR 575 syncs c742dd61..0b46ec39, so the next sync decides whether to port it.",
+   "promise": "reframe-rewrites-description",
    "sources": [
+    "port",
     "upstream"
    ],
    "text": "Then it rewrites your description with the new words."
@@ -5467,10 +5518,11 @@
    "text": "```text\n/tdd implement\n```"
   },
   "19d4ef6d1599": {
-   "class": "cursor-only",
+   "class": "promise",
    "file": "02-poteto-mode.md",
-   "reason": "Upstream added /reframe after 0b46ec39 (2dd5c0cc, 9e278fe4). PR 575 syncs c742dd61..0b46ec39, so the next sync decides whether to port it.",
+   "promise": "reframe-ranks-checked-expert-terms",
    "sources": [
+    "port",
     "upstream"
    ],
    "text": "Each comes with the part of your description it names, a real project that uses it, with the link checked, and what it lets you ask an agent for."
@@ -8829,10 +8881,10 @@
    "text": "Playbooks such as Feature and Bug fix run the commit, push, and PR steps that the task's endpoint calls for."
   },
   "6ef23a12fa43": {
-   "class": "cursor-only",
+   "class": "context",
    "file": "02-poteto-mode.md",
-   "reason": "Upstream added /reframe after 0b46ec39 (2dd5c0cc, 9e278fe4). PR 575 syncs c742dd61..0b46ec39, so the next sync decides whether to port it.",
    "sources": [
+    "port",
     "upstream"
    ],
    "text": "Send the rewrite, or run `/sharpen` on it."
@@ -10220,10 +10272,11 @@
    "text": "Either way, the comment comes out."
   },
   "93dd7b6e2a9f": {
-   "class": "cursor-only",
+   "class": "promise",
    "file": "02-poteto-mode.md",
-   "reason": "Upstream added /reframe after 0b46ec39 (2dd5c0cc, 9e278fe4). PR 575 syncs c742dd61..0b46ec39, so the next sync decides whether to port it.",
+   "promise": "reframe-borrows-from-neighboring-fields",
    "sources": [
+    "port",
     "upstream"
    ],
    "text": "It also borrows terms from 2 or 3 neighboring fields that solved the same problem under other names, and says where each analogy breaks."
@@ -12931,10 +12984,10 @@
    "text": "```text\n/poteto-mode we need rate limiting for external webhooks. /architect it first, and answer open questions with prototypes. let me review before proceeding.\n```"
   },
   "dcde8b459660": {
-   "class": "cursor-only",
+   "class": "context",
    "file": "02-poteto-mode.md",
-   "reason": "Upstream added /reframe after 0b46ec39 (2dd5c0cc, 9e278fe4). PR 575 syncs c742dd61..0b46ec39, so the next sync decides whether to port it.",
    "sources": [
+    "port",
     "upstream"
    ],
    "text": "When you can't name what you're after, run [`/reframe`](../../skills/reframe/SKILL.md) on your own description and files first:"
@@ -14187,10 +14240,11 @@
    "text": "```text\n/poteto-mode add a --json flag. text output stays byte-identical. verify both forms.\n```"
   },
   "f73ad5fb6a77": {
-   "class": "cursor-only",
+   "class": "promise",
    "file": "02-poteto-mode.md",
-   "reason": "Upstream added /reframe after 0b46ec39 (2dd5c0cc, 9e278fe4). PR 575 syncs c742dd61..0b46ec39, so the next sync decides whether to port it.",
+   "promise": "reframe-ranks-checked-expert-terms",
    "sources": [
+    "port",
     "upstream"
    ],
    "text": "The agent gives 8 to 12 expert terms, ranked by how much each would change what you build."
